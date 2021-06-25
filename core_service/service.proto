@@ -230,6 +230,14 @@ message Enroll {
   Role          role    = 3;
 }
 
+message CoursesFilter {
+  User          user    = 1;  // courses available to specified user, no filter in case of User.id==0
+}
+
+message CoursesList {
+  repeated Course     courses = 1;
+}
+
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
   rpc EnrollUser(Enroll) returns (Course) {}
@@ -240,6 +248,7 @@ service CourseManagement {
   rpc UpdateCourseSections(Course) returns (Course) {}
   rpc CreateOrUpdateTextReading(TextReading) returns (TextReading) {}
   rpc CreateOrUpdateProblem(Problem) returns (Problem) {}
+  rpc GetCourses(CoursesFilter) returns (CoursesList) {}
 }
 
 message GraderProperties {

@@ -6,7 +6,11 @@ import (
 )
 
 type CourseManagementService struct {
-	DB		*sql.DB
+	DB *sql.DB
+}
+
+func (serice *CourseManagementService) GetCourses(ctx context.Context, filter *CoursesFilter) (*CoursesList, error) {
+	panic("implement me")
 }
 
 func (serice *CourseManagementService) CreateOrUpdateSection(ctx context.Context, section *Section) (*Section, error) {
@@ -37,7 +41,7 @@ func (serice *CourseManagementService) CreateOrUpdateProblem(ctx context.Context
 	panic("implement me")
 }
 
-func (serice * CourseManagementService) CreateOrUpdateCourse(ctx context.Context, course *Course) (res *Course, err error) {
+func (serice *CourseManagementService) CreateOrUpdateCourse(ctx context.Context, course *Course) (res *Course, err error) {
 	var query string
 	res = new(Course)
 	if course.Id > 0 {
