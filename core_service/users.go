@@ -3,7 +3,6 @@ package core_service
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/sha512"
 	"database/sql"
 	_ "embed"
 	"encoding/hex"
@@ -20,7 +19,8 @@ import (
 )
 
 type UserManagementService struct {
-	DB *sql.DB
+	Parent		*Services
+	DB 			*sql.DB
 }
 
 func (service *UserManagementService) ResetUserPassword(ctx context.Context, user *User) (*User, error) {
@@ -143,47 +143,10 @@ func (service *UserManagementService) CreateOrUpdateUser(ctx context.Context, us
 	return res, err
 }
 
-func SnakeCaseToCamelCase(s string) string {
-	parts := strings.Split(s, "_")
-	for i := 0; i < len(parts); i++ {
-		parts[i] = strings.ToTitle(parts[i])
-	}
-	return strings.Join(parts, "")
-}
-
-func RowToEntity(rows *sql.Rows, out interface{}) (err error) {
-	colNames, err := rows.Columns()
-	colTypes, err := rows.ColumnTypes()
-	//sqlVals := make([]interface{}, len(colNames))
-	for i := 0; i < len(colTypes); i++ {
-		//sqlVals[i] = colTypes[i].ScanType()
-	}
-	//err = rows.Scan(sqlVals...)
-	if err != nil {
-		return err
-	}
-	for _, name := range colNames {
-		_ = name
-	}
-	return err
-}
 
 func (service *UserManagementService) GetUsers(ctx context.Context, filter *UsersFilter) (*UsersList, error) {
 
 	// Important note: this might work slow because we will not use SQL-based filtering
-
-	checkStringMatch := func(partial bool, candidate, filter string) bool {
-		if !partial && filter != "" {
-			return candidate == filter
-		} else if partial && filter != "" {
-			normalizedCandidate := strings.ReplaceAll(strings.ToLower(candidate), "ё", "е")
-			normalizedFilter := strings.ReplaceAll(strings.ToLower(filter), "ё", "е")
-			return strings.Contains(normalizedCandidate, normalizedFilter)
-		} else {
-			return true
-		}
-	}
-
 	if filter.Role != nil && (filter.Role.Id > 0 || filter.Role.Name != "") {
 		if filter.Role.Id == 0 {
 			err := service.DB.QueryRow(`select id from roles where name=$1`, filter.Role.Name).Scan(&filter.Role.Id)
@@ -210,7 +173,6 @@ func (service *UserManagementService) GetUsers(ctx context.Context, filter *User
 	res := &UsersList{Users: make([]*User, 0, 1000)}
 	for q.Next() {
 		user := &User{}
-		RowToEntity(q, user)
 		var midName sql.NullString
 		var email sql.NullString
 		var groupName sql.NullString
@@ -242,19 +204,19 @@ func (service *UserManagementService) GetUsers(ctx context.Context, filter *User
 		if filter.User != nil {
 			// check for name matching
 			partial := filter.PartialStringMatch
-			if !checkStringMatch(partial, user.FirstName, filter.User.FirstName) {
+			if !PartialStringMatch(partial, user.FirstName, filter.User.FirstName) {
 				continue
 			}
-			if !checkStringMatch(partial, user.LastName, filter.User.LastName) {
+			if !PartialStringMatch(partial, user.LastName, filter.User.LastName) {
 				continue
 			}
-			if !checkStringMatch(partial, user.MidName, filter.User.MidName) {
+			if !PartialStringMatch(partial, user.MidName, filter.User.MidName) {
 				continue
 			}
-			if !checkStringMatch(partial, user.Email, filter.User.Email) {
+			if !PartialStringMatch(partial, user.Email, filter.User.Email) {
 				continue
 			}
-			if !checkStringMatch(partial, user.GroupName, filter.User.GroupName) {
+			if !PartialStringMatch(partial, user.GroupName, filter.User.GroupName) {
 				continue
 			}
 			if !filter.IncludeDisabled && user.Disabled {
@@ -371,13 +333,7 @@ func (service *UserManagementService) CreateOrUpdateRole(ctx context.Context, ro
 	return res, nil
 }
 
-func MakePasswordHash(src string) string {
-	sha512Hash := sha512.New()
-	sha512Hash.Write([]byte(src))
-	sha512Data := sha512Hash.Sum(nil)
-	hexString := strings.ToLower(hex.EncodeToString(sha512Data))
-	return hexString
-}
+
 
 func (service *UserManagementService) Authorize(ctx context.Context, user *User) (sess *Session, err error) {
 	if user.Id == 0 && user.Email == "" {
@@ -628,8 +584,45 @@ func (service UserManagementService) mustEmbedUnimplementedUserManagementServer(
 	panic("implement me")
 }
 
-func NewUserManagementService(db *sql.DB) *UserManagementService {
+func (service *UserManagementService) GetDefaultRole(user *User) (role *Role, err error) {
+	var roleId int64
+	role = new(Role)
+	if user.DefaultRole > 0 {
+		roleId = user.DefaultRole
+	} else {
+		roleQ, err := service.DB.Query(`select default_role from users where id=$1`, user.Id)
+		if err != nil {
+			return nil, err
+		}
+		defer roleQ.Close()
+		if roleQ.Next() {
+			var defauleRole sql.NullInt64
+			err = roleQ.Scan(&defauleRole)
+			if err != nil {
+				return nil, err
+			}
+			if defauleRole.Valid {
+				roleId = defauleRole.Int64
+			}
+		}
+	}
+	if roleId > 0 {
+		role.Id = roleId
+		role.Capabilities, err = service.GetRoleCapabilities(role)
+		if err != nil {
+			return nil, err
+		}
+		err = service.DB.QueryRow(`select name from roles where id=$1`, roleId).Scan(&role.Name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return role, nil
+}
+
+func NewUserManagementService(parent *Services) *UserManagementService {
 	result := new(UserManagementService)
-	result.DB = db
+	result.Parent = parent
+	result.DB = parent.DB
 	return result
 }

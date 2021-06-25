@@ -231,11 +231,17 @@ message Enroll {
 }
 
 message CoursesFilter {
-  User          user    = 1;  // courses available to specified user, no filter in case of User.id==0
+  User          user                  = 1;  // courses available to specified user, no filter in case of User.id==0
+  Course        course                = 2;  // filter by name, no filter in case of Course.id==0
+  bool          partial_string_match  = 3;
 }
 
 message CoursesList {
-  repeated Course     courses = 1;
+  message CourseListEntry {
+    Course  course  = 1;
+    Role    role    = 2;
+  }
+  repeated CourseListEntry  courses = 1;
 }
 
 service CourseManagement {

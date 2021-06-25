@@ -76,6 +76,3 @@ func TestAuth(t *testing.T) {
 	}
 }
 
-func TestUserAuthentication(t *testing.T) {
-
-}

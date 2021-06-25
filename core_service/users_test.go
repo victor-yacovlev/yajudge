@@ -2,7 +2,6 @@ package core_service
 
 import (
 	"context"
-	"google.golang.org/grpc/metadata"
 	"strings"
 	"testing"
 )
@@ -37,11 +36,6 @@ values
 	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 5}, Role: &Role{Name: "Студент"}})
 }
 
-func updateContextWithSession(ctx context.Context, session *Session) context.Context {
-	oldMd, _ := metadata.FromOutgoingContext(ctx)
-	md := metadata.Pairs("session", session.Cookie)
-	return metadata.NewOutgoingContext(ctx, metadata.Join(oldMd, md))
-}
 
 func TestUserAuthorization(t *testing.T) {
 	var err error
@@ -102,8 +96,8 @@ func TestUserAuthorization(t *testing.T) {
 		if test.Out != nil {
 			// check for session created propertly
 			res.UserId = 0  // to test find user_id by cookie
-			loggedCtx := updateContextWithSession(ctx, res)
-			user, err := client.GetProfile(updateContextWithSession(loggedCtx, test.Out), res)
+			loggedCtx := UpdateContextWithSession(ctx, res)
+			user, err := client.GetProfile(UpdateContextWithSession(loggedCtx, test.Out), res)
 			if err != nil {
 				t.Errorf("[Test case %d]: can't get profile for created session: '%v'", index, err)
 			} else if user.Id != test.In.Id && user.Email != test.In.Email {
@@ -139,7 +133,7 @@ func TestGetAllUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("[Test case 2]: can't authorize admin user")
 	}
-	adminCtx := updateContextWithSession(ctx, adminSession)
+	adminCtx := UpdateContextWithSession(ctx, adminSession)
 	res2, err := client.GetUsers(adminCtx, &UsersFilter{})
 	if err != nil {
 		t.Errorf("[Test case 2]: can't get users list by admin session")
@@ -164,7 +158,7 @@ func TestGetAllUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("[Test case 4]: can't authorize regular user")
 	}
-	regularCtx := updateContextWithSession(ctx, regularSession)
+	regularCtx := UpdateContextWithSession(ctx, regularSession)
 	res4, err := client.GetUsers(regularCtx, &UsersFilter{})
 	if err == nil {
 		t.Errorf("[Test case 4]: must be an error while getting all users by regular user")
@@ -223,7 +217,7 @@ func TestUserCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("can't authorize admin user: %v", err)
 	}
-	adminCtx := updateContextWithSession(ctx, adminSession)
+	adminCtx := UpdateContextWithSession(ctx, adminSession)
 	studentsBefore, err := client.GetUsers(adminCtx, &UsersFilter{Role: &Role{Name: "Студент"}})
 	if err != nil {
 		t.Fatalf("can't get initial data before manipulations: %v", err)
@@ -310,7 +304,7 @@ func TestChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("can't authorize admin user: %v", err)
 	}
-	adminCtx := updateContextWithSession(ctx, adminSession)
+	adminCtx := UpdateContextWithSession(ctx, adminSession)
 
 	// 1 change password by Administrator
 	usersList1, err := client.GetUsers(adminCtx, &UsersFilter{User: &User{Email: "vasya@lozkin.ru"}})
@@ -328,7 +322,7 @@ func TestChangePassword(t *testing.T) {
 		t.Fatalf("[Test case 1]: Can't authorize using new password: %v", err)
 	}
 
-	newUserContext := updateContextWithSession(ctx, newUserSession)
+	newUserContext := UpdateContextWithSession(ctx, newUserSession)
 	// 2 change password by user itself
 	_, err = client.ChangePassword(newUserContext, &User{Password: "qwerty456"})
 	if err != nil {

@@ -53,6 +53,10 @@ func (service *Services) CreateStandardRoles() {
 			{Subsystem: "UserManagement", Method: "SetUserDefaultRole"},
 			{Subsystem: "UserManagement", Method: "ResetUserPassword"},
 			{Subsystem: "UserManagement", Method: "ChangePassword"},
+			{Subsystem: "CourseManagement", Method: "CreateOrUpdateCourse"},
+			{Subsystem: "CourseManagement", Method: "CloneCourse"},
+			{Subsystem: "CourseManagement", Method: "GetCourses"},
+			{Subsystem: "CourseManagement", Method: "EnrollUser"},
 		}},
 		{Name: "Лектор", Capabilities: []*Capability{
 			{Subsystem: "UserManagement", Method: "Authorize"},
@@ -60,6 +64,8 @@ func (service *Services) CreateStandardRoles() {
 			{Subsystem: "UserManagement", Method: "GetUsers"},
 			{Subsystem: "UserManagement", Method: "ResetUserPassword"},
 			{Subsystem: "UserManagement", Method: "ChangePassword"},
+			{Subsystem: "CourseManagement", Method: "GetCourses"},
+			{Subsystem: "CourseManagement", Method: "EnrollUser"},
 		}},
 		{Name: "Семинарист", Capabilities: []*Capability{
 			{Subsystem: "UserManagement", Method: "Authorize"},
@@ -67,17 +73,20 @@ func (service *Services) CreateStandardRoles() {
 			{Subsystem: "UserManagement", Method: "GetUsers"},
 			{Subsystem: "UserManagement", Method: "ResetUserPassword"},
 			{Subsystem: "UserManagement", Method: "ChangePassword"},
+			{Subsystem: "CourseManagement", Method: "GetCourses"},
 		}},
 		{Name: "Учебный ассистент", Capabilities: []*Capability{
 			{Subsystem: "UserManagement", Method: "Authorize"},
 			{Subsystem: "UserManagement", Method: "GetProfile"},
 			{Subsystem: "UserManagement", Method: "GetUsers"},
 			{Subsystem: "UserManagement", Method: "ChangePassword"},
+			{Subsystem: "CourseManagement", Method: "GetCourses"},
 		}},
 		{Name: "Студент", Capabilities: []*Capability{
 			{Subsystem: "UserManagement", Method: "Authorize"},
 			{Subsystem: "UserManagement", Method: "GetProfile"},
 			{Subsystem: "UserManagement", Method: "ChangePassword"},
+			{Subsystem: "CourseManagement", Method: "GetCourses"},
 		}},
 	}
 
@@ -183,19 +192,17 @@ func StartServices(ctx context.Context, listenAddress, authToken string, dbProps
 		return nil, err
 	}
 
-	users := NewUserManagementService(db)
-	courses := NewCourseManagementService(db)
+	res = &Services{DB: db}
 
-	res = &Services{
-		DB: db,
-		UserManagement: users,
-		CourseManagement: courses,
-	}
+	res.UserManagement = NewUserManagementService(res)
+	res.CourseManagement = NewCourseManagementService(res)
+
+
 
 	server := grpc.NewServer(res.createAuthMiddlewares(authToken)...)
 
-	RegisterUserManagementServer(server, users)
-	RegisterCourseManagementServer(server, courses)
+	RegisterUserManagementServer(server, res.UserManagement)
+	RegisterCourseManagementServer(server, res.CourseManagement)
 
 	lis, err := net.Listen("tcp", listenAddress)
 	if err != nil {
