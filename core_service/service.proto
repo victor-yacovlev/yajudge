@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+// protoc --go-grpc_out=. --go_out=. service.proto
+
+option go_package = "./;core_service";
+
+package service;
+
+message Capability {
+  int64       id        = 1;
+  string      subsystem = 2;
+  string      method    = 3;
+}
+
+message Role {
+  int64               id        = 1;
+  string              name      = 2;
+  repeated Capability capabilities = 3;
+}
+
+message User {
+  int64       id          = 1;
+  string      first_name  = 2;
+  string      last_name   = 3;
+  string      mid_name    = 4;
+  string      email       = 5;
+  string      password    = 6;
+  string      group_name  = 7;
+  int64       default_role= 8;
+  bool        disabled    = 9;
+}
+
+message Session {
+  string      cookie      = 1;
+  int64       user_id     = 2;
+  int64       start       = 3;
+}
+
+message Nothing {
+  bool        dummy       = 1;
+}
+
+message UsersFilter {
+  Role        role                = 1;
+  User        user                = 2;
+  Course      course              = 3;
+  bool        partial_string_match = 4;
+  bool        include_disabled    = 5;
+}
+
+message UsersList {
+  repeated User users     = 1;
+}
+
+message TextReading {
+  int64       id          = 1;
+  string      title       = 2;
+  string      content_type= 3;  // text/mardown by default
+  string      data        = 4;
+  string      external_url= 5;
+}
+
+message File {
+  string      name        = 1;
+  string      content_type= 2;
+  bytes       data        = 3;
+}
+
+message Problem {
+  string          id                      = 1;  // string, but not int! id is a relative path to the problem directory
+  string          statement_text          = 2;
+  string          statement_content_type  = 3;  // text/mardown by default
+  repeated File   statement_files         = 4;
+  repeated File   solution_files          = 5;  // fileset meta-information to be filled by solution
+  float           full_score_multiplier   = 6;  // 1.0 by default, >1 for hard problems, <1 for easy problems
+  bool            blocks_positive_mark    = 7;
+  bool            blocks_next_lesson      = 8;
+  bool            accept_partial_tests    = 9;
+  bool            skip_solution_defence   = 10;
+  bool            skip_code_review        = 11;
+  // TODO problem technical details
+}
+
+enum SolutionStatus {
+  SUBMITTED           = 0;
+  GRADE_IN_PROGRESS   = 1;
+  COMPILATION_ERROR   = 2;
+  VERY_BAD            = 3;  // no one test passed
+  ACCEPTABLE          = 4;  // grade score > 0 (if accept partial solution) or score is full
+  CODE_REVIEW_REJECTED= 5;
+  DEFENCE_FAILED      = 6;
+  OK                  = 7;
+}
+
+message ReviewComment {
+  int64               id            = 1;
+  string              related_file  = 2;  // might be empty in case if solution has just one file
+  int64               start_position= 3;  // position in text (chars count, not lines or bytes)
+  int64               end_position  = 4;  // position in text (chars count, not lines or bytes)
+}
+
+message CodeReview {
+  int64                   id            = 1;
+  User                    author        = 2;
+  repeated ReviewComment  code_comments = 3;
+  string                  global_comment= 4;
+}
+
+message Submission {
+  int64               id            = 1;
+  repeated File       solution_files= 2;
+  float               score_gained  = 3;
+  SolutionStatus      status        = 4;
+  CodeReview          code_review   = 5;
+}
+
+message Solution {
+  int64                id      = 1;
+  Problem              problem = 2;  // must contain at least Problem.id
+  repeated Submission  history = 3;
+}
+
+message Lesson {
+  int64                 id            = 1;
+  repeated  TextReading readings      = 2;
+  repeated  Problem     problems      = 3;
+  int64                 open_date     = 4;
+  int64                 soft_deadline = 5;
+  int64                 hard_deadline = 6;
+}
+
+message Course {
+  int64       id          = 1;
+  string      name        = 2;
+}
+
+message Enrolment {
+  Course      course      = 1;
+  User        user        = 2;
+  Role        role        = 3;
+}
+
+message UserRole {
+  User        user        = 1;
+  Role        role        = 2;
+}
+
+
+service UserManagement {
+  rpc Authorize(User) returns (Session) {}
+  rpc GetProfile(Session) returns (User) {}
+  rpc CreateOrUpdateRole(Role) returns (Role) {}
+  rpc FindOrCreateCapability(Capability) returns (Capability) {}
+  rpc GetUsers(UsersFilter) returns (UsersList) {}
+  rpc SetUserDefaultRole(UserRole) returns (UserRole) {}
+  rpc CreateOrUpdateUser(User) returns (User) {}
+  rpc ResetUserPassword(User) returns (User) {}
+  rpc ChangePassword(User) returns (User) {}
+}
+
+message Enroll {
+  Course        course  = 1;
+  User          user    = 2;
+  Role          role    = 3;
+}
+
+
+service CourseManagement {
+  rpc CreateOrUpdateCourse(Course) returns (Course) {}
+  rpc EnrollUser(Enroll) returns (Course) {}
+  rpc CloneCourse(Course) returns (Course) {}
+  rpc CreateOrUpdateLesson(Lesson) returns (Lesson) {}
+  rpc UpdateCourseLessons(Course) returns (Course) {}
+  rpc CreateOrUpdateTextReading(TextReading) returns (TextReading) {}
+  rpc CreateOrUpdateProblem(Problem) returns (Problem) {}
+}
