@@ -66,6 +66,43 @@ message File {
   bytes       data        = 3;
 }
 
+enum Arch {
+  ARCH_ANY    = 0;
+  ARCH_X86    = 1;
+  ARCH_X86_64 = 2;
+  ARCH_ARMV7  = 3;
+  ARCH_AARCH64= 4;
+}
+
+enum OS {
+  OS_ANY      = 0;
+  OS_POSIX    = 1;
+  OS_LINUX    = 2;
+  OS_BSD      = 3;
+  OS_WINDOWS  = 4;
+}
+
+
+message GradingPlatform {
+  Arch            arch        = 1; // ARCH_ANY for generic problems
+  OS              os          = 2; // OS_ANY for too generic problems, OS_POSIX for most common
+  repeated string compilers   = 3; // gcc, g++, gas, javac, and so on
+  repeated string tools       = 4; // additional tools required like cmake
+  repeated string libraries   = 5; // additional libraries required (in terms of pkg-config for C/C++)
+}
+
+message GradingLimits {
+  int64           memory_limit_mb     = 1;
+  int64           cpu_time_limit_sec  = 2;
+  int64           real_time_limit_sec = 3;
+  // todo more options
+}
+
+message GradingOptions {
+  GradingPlatform   platform_required     = 1; // to match corresponding grader client
+  GradingLimits     limits                = 2;
+}
+
 message Problem {
   string          id                      = 1;  // string, but not int! id is a relative path to the problem directory
   string          statement_text          = 2;
@@ -78,7 +115,7 @@ message Problem {
   bool            accept_partial_tests    = 9;
   bool            skip_solution_defence   = 10;
   bool            skip_code_review        = 11;
-  // TODO problem technical details
+  GradingOptions  grading_options         = 12;
 }
 
 enum SolutionStatus {
@@ -89,7 +126,9 @@ enum SolutionStatus {
   ACCEPTABLE          = 4;  // grade score > 0 (if accept partial solution) or score is full
   CODE_REVIEW_REJECTED= 5;
   DEFENCE_FAILED      = 6;
-  OK                  = 7;
+  PLAGIARISM_DETECTED = 7;
+  DISQUALIFIED        = 8;
+  OK                  = 100;
 }
 
 message ReviewComment {
@@ -109,9 +148,12 @@ message CodeReview {
 message Submission {
   int64               id            = 1;
   repeated File       solution_files= 2;
-  float               score_gained  = 3;
-  SolutionStatus      status        = 4;
-  CodeReview          code_review   = 5;
+  SolutionStatus      status        = 3;
+  float               grader_score  = 4;
+  string              grader_name   = 5;  // id of grader that processed submission
+  string              grader_output = 6;  // stdout output by testing system
+  string              grader_errors = 7;  // stderr output by testing system
+  CodeReview          code_review   = 8;
 }
 
 message Solution {
@@ -124,14 +166,24 @@ message Lesson {
   int64                 id            = 1;
   repeated  TextReading readings      = 2;
   repeated  Problem     problems      = 3;
+  int64                 open_date     = 4;  // 0 for inherit from outer section
+  int64                 soft_deadline = 5;  // 0 for inherit from outer section
+  int64                 hard_deadline = 6;  // 0 for inherit from outer section
+}
+
+message Section {
+  int64                 id            = 1;
+  string                name          = 2;
+  repeated Lesson       lessons       = 3;
   int64                 open_date     = 4;
   int64                 soft_deadline = 5;
   int64                 hard_deadline = 6;
 }
 
 message Course {
-  int64       id          = 1;
-  string      name        = 2;
+  int64             id          = 1;
+  string            name        = 2;
+  repeated Section  sections    = 3;
 }
 
 message Enrolment {
@@ -164,13 +216,27 @@ message Enroll {
   Role          role    = 3;
 }
 
-
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
   rpc EnrollUser(Enroll) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
   rpc CreateOrUpdateLesson(Lesson) returns (Lesson) {}
-  rpc UpdateCourseLessons(Course) returns (Course) {}
+  rpc CreateOrUpdateSection(Section) returns (Section) {}
+  rpc UpdateSectionLessons(Section) returns (Section) {}
+  rpc UpdateCourseSections(Course) returns (Course) {}
   rpc CreateOrUpdateTextReading(TextReading) returns (TextReading) {}
   rpc CreateOrUpdateProblem(Problem) returns (Problem) {}
+}
+
+message GraderProperties {
+  string          name        = 1;
+  GradingPlatform platform    = 2;
+}
+
+service SubmissionsManagement {
+  // anounce grader alive and receive stream of submissions to be graded
+  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}
+
+  // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
+  rpc UpdateGraderOutput(Submission) returns (Submission) {}
 }

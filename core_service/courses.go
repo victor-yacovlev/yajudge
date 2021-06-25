@@ -9,15 +9,23 @@ type CourseManagementService struct {
 	DB		*sql.DB
 }
 
+func (serice *CourseManagementService) CreateOrUpdateSection(ctx context.Context, section *Section) (*Section, error) {
+	panic("implement me")
+}
+
+func (serice *CourseManagementService) UpdateSectionLessons(ctx context.Context, section *Section) (*Section, error) {
+	panic("implement me")
+}
+
+func (serice *CourseManagementService) UpdateCourseSections(ctx context.Context, course *Course) (*Course, error) {
+	panic("implement me")
+}
+
 func (serice *CourseManagementService) CloneCourse(ctx context.Context, course *Course) (*Course, error) {
 	panic("implement me")
 }
 
 func (serice *CourseManagementService) CreateOrUpdateLesson(ctx context.Context, lesson *Lesson) (*Lesson, error) {
-	panic("implement me")
-}
-
-func (serice *CourseManagementService) UpdateCourseLessons(ctx context.Context, course *Course) (*Course, error) {
 	panic("implement me")
 }
 
