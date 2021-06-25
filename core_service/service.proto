@@ -98,9 +98,22 @@ message GradingLimits {
   // todo more options
 }
 
+message TestCase {
+  bool            blocks_submission           = 1; // important in case if patial tests allowed, ignored otherwise
+  string          description                 = 2; // optional
+  string          command_line_arguments      = 3; // optional
+  File            stdin_data                  = 4;
+  File            stdout_reference            = 5;
+  File            stderr_reference            = 6;
+  int64           retval_reference            = 7;
+  repeated File   input_extra_files           = 8;
+  repeated File   output_reference_extra_files= 9;
+}
+
 message GradingOptions {
   GradingPlatform   platform_required     = 1; // to match corresponding grader client
   GradingLimits     limits                = 2;
+  repeated TestCase test_cases            = 3;
 }
 
 message Problem {
@@ -154,6 +167,7 @@ message Submission {
   string              grader_output = 6;  // stdout output by testing system
   string              grader_errors = 7;  // stderr output by testing system
   CodeReview          code_review   = 8;
+  Problem             problem       = 9;  // just references Problem.id in most cases, but contains full data for grader
 }
 
 message Solution {
