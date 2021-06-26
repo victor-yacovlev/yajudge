@@ -66,6 +66,10 @@ message File {
   bytes       data        = 3;
 }
 
+message FileSet {
+  repeated File   files = 1;
+}
+
 enum Arch {
   ARCH_ANY    = 0;
   ARCH_X86    = 1;
@@ -106,22 +110,26 @@ message TestCase {
   File            stdout_reference            = 5;
   File            stderr_reference            = 6;
   int64           retval_reference            = 7;
-  repeated File   input_extra_files           = 8;
-  repeated File   output_reference_extra_files= 9;
+  FileSet         input_extra_files           = 8;
+  FileSet         output_reference_extra_files= 9;
 }
 
 message GradingOptions {
   GradingPlatform   platform_required     = 1; // to match corresponding grader client
   GradingLimits     limits                = 2;
   repeated TestCase test_cases            = 3;
+  string            standard_checker      = 4; // named by ejudge checkers name
+  string            standard_checker_opts = 5; // like ejudge checker environment
+  FileSet           custom_checker        = 6; // checker source files
+  FileSet           custom_interactor     = 7; // interactor soure files
 }
 
 message Problem {
   string          id                      = 1;  // string, but not int! id is a relative path to the problem directory
   string          statement_text          = 2;
   string          statement_content_type  = 3;  // text/mardown by default
-  repeated File   statement_files         = 4;
-  repeated File   solution_files          = 5;  // fileset meta-information to be filled by solution
+  FileSet         statement_files         = 4;
+  FileSet         solution_files          = 5;  // fileset meta-information to be filled by solution
   float           full_score_multiplier   = 6;  // 1.0 by default, >1 for hard problems, <1 for easy problems
   bool            blocks_positive_mark    = 7;
   bool            blocks_next_lesson      = 8;
@@ -160,7 +168,7 @@ message CodeReview {
 
 message Submission {
   int64               id            = 1;
-  repeated File       solution_files= 2;
+  FileSet             solution_files= 2;
   SolutionStatus      status        = 3;
   float               grader_score  = 4;
   string              grader_name   = 5;  // id of grader that processed submission
