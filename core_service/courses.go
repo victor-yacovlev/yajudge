@@ -12,6 +12,17 @@ type CourseManagementService struct {
 	Parent		*Services
 }
 
+func (service *CourseManagementService) DeleteCourse(ctx context.Context, course *Course) (*Nothing, error) {
+	if course.Id==0 {
+		return nil, status.Errorf(codes.InvalidArgument, "course id required")
+	}
+	_, err := service.DB.Exec(`delete from courses where id=$1`, course.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &Nothing{}, nil
+}
+
 func (service *CourseManagementService) GetUserEnrollments(user *User) (res []*Enrolment, err error) {
 	if user.Id == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "no user id specified")
@@ -115,8 +126,27 @@ func (service *CourseManagementService) UpdateCourseSections(ctx context.Context
 	panic("implement me")
 }
 
-func (service *CourseManagementService) CloneCourse(ctx context.Context, course *Course) (*Course, error) {
-	panic("implement me")
+func (service *CourseManagementService) CloneCourse(ctx context.Context, course *Course) (res *Course, err error) {
+	// todo make deep contents copy
+	if course.Id==0 {
+		return nil, status.Errorf(codes.InvalidArgument, "course id required")
+	}
+	if course.Name=="" {
+		err = service.DB.QueryRow(`select name from courses where id=$1`, course.Id).Scan(&course.Name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	newName, err := MakeEntryCopyName(service.DB, "courses", course.Name)
+	if err != nil {
+		return nil, err
+	}
+	res = &Course{Name: newName}
+	err = service.DB.QueryRow(`insert into courses(name) values ($1) returning id`, newName).Scan(&res.Id)
+	if err != nil {
+		return nil, err
+	}
+	return res, err
 }
 
 func (service *CourseManagementService) CreateOrUpdateLesson(ctx context.Context, lesson *Lesson) (*Lesson, error) {

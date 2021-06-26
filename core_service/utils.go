@@ -3,7 +3,9 @@ package core_service
 import (
 	"context"
 	"crypto/sha512"
+	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"google.golang.org/grpc/metadata"
 	"strings"
 )
@@ -40,4 +42,23 @@ func UpdateContextWithSession(ctx context.Context, session *Session) context.Con
 	oldMd, _ := metadata.FromOutgoingContext(ctx)
 	md := metadata.Pairs("session", session.Cookie)
 	return metadata.NewOutgoingContext(ctx, metadata.Join(oldMd, md))
+}
+
+func MakeEntryCopyName(db *sql.DB, tableName string, entryName string) (string, error) {
+	const copyPrefix = "Копия"
+	const limit = 100
+	i := 1
+	for i=1; i<limit ; i++ {
+		testName := fmt.Sprintf("%s %d %s", copyPrefix, i, entryName)
+		q, err := db.Query("select id from "+tableName+" where name=$1", testName)
+		if err != nil {
+			return "", err
+		}
+		found := q.Next()
+		q.Close()
+		if !found {
+			break
+		}
+	}
+	return fmt.Sprintf("%s %d %s", copyPrefix, i, entryName), nil
 }

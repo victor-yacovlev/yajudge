@@ -2,6 +2,7 @@ package core_service
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -143,5 +144,60 @@ func TestCourseEnrollment(t *testing.T) {
 	}
 	if coursesList4.Courses[0].Role.Name != "Учебный ассистент" {
 		t.Errorf("4: course role mismatch")
+	}
+}
+
+func TestCloneAndDeleteCourse(t *testing.T) {
+	api := createCoursesTestClientAndAdminContext(t)
+	defer api.Finish()
+
+	// 1 Create new course
+	course1, err := api.Courses.CreateOrUpdateCourse(api.AdminContext, &Course{Name: "Курс 1"})
+	if err != nil {
+		t.Fatalf("1: can't create course: %v", err)
+	}
+
+	// 2 check if courses count == 1
+	coursesList2, err := api.Courses.GetCourses(api.AdminContext, &CoursesFilter{})
+	if err != nil {
+		t.Fatalf("2: can't get courses list: %v", err)
+	}
+	if len(coursesList2.Courses)!=1 {
+		t.Fatalf("courses count not 1 after creation")
+	}
+
+	// 3 clone course
+	course3, err := api.Courses.CloneCourse(api.AdminContext, &Course{Id: course1.Id})
+	if err != nil {
+		t.Fatalf("3: can't clone course: %v", err)
+	}
+
+	// 4 check if courses count == 2 and their names almout match
+	coursesList4, err := api.Courses.GetCourses(api.AdminContext, &CoursesFilter{})
+	if err != nil {
+		t.Fatalf("4: can't get courses list: %v", err)
+	}
+	if len(coursesList4.Courses)!=2 {
+		t.Fatalf("courses count not 2 after creation")
+	}
+	nameFirst := coursesList4.Courses[0].Course.Name
+	nameSecond := coursesList4.Courses[1].Course.Name
+	if !strings.Contains(nameSecond, nameFirst) {
+		t.Fatalf("4: courses names not partial match")
+	}
+
+	// 5 delete course
+	_, err = api.Courses.DeleteCourse(api.AdminContext, course3)
+	if err != nil {
+		t.Fatalf("5: can't delete course: %v", err)
+	}
+
+	// 6 check if courses count == 1 and their names almout match
+	coursesList6, err := api.Courses.GetCourses(api.AdminContext, &CoursesFilter{})
+	if err != nil {
+		t.Fatalf("6: can't get courses list: %v", err)
+	}
+	if len(coursesList6.Courses)!=1 {
+		t.Fatalf("courses count not 1 after delete")
 	}
 }

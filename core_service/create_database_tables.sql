@@ -5,6 +5,8 @@ drop table if exists roles cascade;
 drop table if exists roles_capabilities cascade;
 drop table if exists courses cascade;
 drop table if exists enrollments cascade;
+drop table if exists sections cascade;
+drop table if exists lessons cascade;
 
 create table capabilities
 (
@@ -89,4 +91,31 @@ create table enrollments
     roles_id   integer not null
         constraint enrollments_roles_id_fk
             references roles
+);
+
+create table sections
+(
+    id         integer          not null
+        constraint sections_pk
+            primary key,
+    name       varchar(100),
+    "order"    double precision not null default 0,
+    courses_id integer          not null
+        constraint sections_courses_id_fk
+            references courses
+);
+
+create table lessons
+(
+    id            integer not null
+        constraint lessons_pk
+            primary key,
+    sections_id   integer not null
+        constraint lessons_sections_id_fk
+            references sections
+        constraint lessons_sections_id_fk_2
+            references sections,
+    open_date     timestamp,
+    soft_deadline timestamp,
+    hard_deadline timestamp
 );

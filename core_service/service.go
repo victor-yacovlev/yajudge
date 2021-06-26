@@ -55,6 +55,7 @@ func (service *Services) CreateStandardRoles() {
 			{Subsystem: "UserManagement", Method: "ChangePassword"},
 			{Subsystem: "CourseManagement", Method: "CreateOrUpdateCourse"},
 			{Subsystem: "CourseManagement", Method: "CloneCourse"},
+			{Subsystem: "CourseManagement", Method: "DeleteCourse"},
 			{Subsystem: "CourseManagement", Method: "GetCourses"},
 			{Subsystem: "CourseManagement", Method: "EnrollUser"},
 		}},

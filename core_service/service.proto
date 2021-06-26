@@ -248,6 +248,7 @@ service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
   rpc EnrollUser(Enroll) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
+  rpc DeleteCourse(Course) returns (Nothing) {}
   rpc CreateOrUpdateLesson(Lesson) returns (Lesson) {}
   rpc CreateOrUpdateSection(Section) returns (Section) {}
   rpc UpdateSectionLessons(Section) returns (Section) {}
