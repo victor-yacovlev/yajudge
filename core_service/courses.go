@@ -288,8 +288,53 @@ func (service *CourseManagementService) CreateOrUpdateLesson(ctx context.Context
 	return res, nil
 }
 
-func (service *CourseManagementService) CreateOrUpdateTextReading(ctx context.Context, reading *TextReading) (*TextReading, error) {
-	panic("implement me")
+func (service *CourseManagementService) CreateOrUpdateTextReading(ctx context.Context, reading *TextReading) (res *TextReading, err error) {
+	if reading.Id == 0 {
+		if reading.LessonsId == 0 {
+			return nil, status.Errorf(codes.InvalidArgument, "lesson id is required")
+		}
+		if reading.Title == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "title is required")
+		}
+		if reading.ContentType == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "content-type is required")
+		}
+		if reading.Data=="" && reading.ExternalUrl=="" {
+			return nil, status.Errorf(codes.InvalidArgument, "content or external URL is required")
+		}
+	}
+	res = new(TextReading)
+	fields := make([]string, 0, 10)
+	vals := make([]interface{}, 0, 10)
+	if reading.Title!="" {
+		fields = append(fields, "title")
+		vals = append(vals, reading.Title)
+	}
+	if reading.ContentType!="" {
+		fields = append(fields, "content_type")
+		vals = append(vals, reading.ContentType)
+	}
+	if reading.Data!="" {
+		fields = append(fields, "data")
+		vals = append(vals, reading.Data)
+	}
+	if reading.Data!="" {
+		fields = append(fields, "external_url")
+		vals = append(vals, reading.ExternalUrl)
+	}
+	if reading.Id > 0 {
+		err = QueryForTableItemUpdate(service.DB, "text_readings", reading.Id, fields, vals)
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	} else {
+		res.Id, err = QueryForTableItemInsert(service.DB, "text_readings", fields, vals)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (service *CourseManagementService) CreateOrUpdateProblem(ctx context.Context, problem *Problem) (res *Problem, err error) {
@@ -312,6 +357,16 @@ func (service *CourseManagementService) CreateOrUpdateProblem(ctx context.Contex
 		fields = append(fields, "hard_deadline")
 		vals = append(vals, problem.HardDeadline)
 	}
+	fields = append(fields, "blocks_positive_mark")
+	vals = append(vals, problem.BlocksPositiveMark)
+	fields = append(fields, "blocks_next_problem")
+	vals = append(vals, problem.BlocksNextProblem)
+	fields = append(fields, "accept_partial_tests")
+	vals = append(vals, problem.AcceptPartialTests)
+	fields = append(fields, "skip_solution_defence")
+	vals = append(vals, problem.SkipSolutionDefence)
+	fields = append(fields, "skip_code_review")
+	vals = append(vals, problem.SkipCodeReview)
 	if problem.Id > 0 {
 		err = QueryForTableItemUpdate(service.DB, "problems", problem.Id, fields, vals)
 		if err != nil {

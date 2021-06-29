@@ -54,10 +54,11 @@ message UsersList {
 
 message TextReading {
   int64       id          = 1;
-  string      title       = 2;
-  string      content_type= 3;  // text/mardown by default
-  string      data        = 4;
-  string      external_url= 5;
+  int64       lessons_id  = 2;
+  string      title       = 3;
+  string      content_type= 4;  // text/mardown by default
+  string      data        = 5;
+  string      external_url= 6;
 }
 
 message File {
@@ -146,12 +147,12 @@ message Problem {
   string          name                    = 3;
   int64           show_atfer_id           = 4;
   ProblemData     problem_data            = 5;  // to be found at some know place in filesystem
-  int64           open_date               = 6;  // 0 for inherit from outer section
-  int64           soft_deadline           = 7;  // 0 for inherit from outer section
-  int64           hard_deadline           = 8;  // 0 for inherit from outer section
+  int64           open_date               = 6;  // 0 for inherit from outer lesson
+  int64           soft_deadline           = 7;  // 0 for inherit from outer lesson
+  int64           hard_deadline           = 8;  // 0 for inherit from outer lesson
   float           full_score_multiplier   = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
   bool            blocks_positive_mark    = 10;
-  bool            blocks_next_lesson      = 11;
+  bool            blocks_next_problem     = 11;
   bool            accept_partial_tests    = 12;
   bool            skip_solution_defence   = 13;
   bool            skip_code_review        = 14;
@@ -171,17 +172,19 @@ enum SolutionStatus {
 }
 
 message ReviewComment {
-  int64               id            = 1;
-  string              related_file  = 2;  // might be empty in case if solution has just one file
-  int64               start_position= 3;  // position in text (chars count, not lines or bytes)
-  int64               end_position  = 4;  // position in text (chars count, not lines or bytes)
+  int64               id              = 1;
+  int64               code_reviews_id = 2;
+  string              related_file    = 3;  // might be empty in case if solution has just one file
+  int64               start_position  = 4;  // position in text (chars count, not lines or bytes)
+  int64               end_position    = 5;  // position in text (chars count, not lines or bytes)
 }
 
 message CodeReview {
   int64                   id            = 1;
-  User                    author        = 2;
-  repeated ReviewComment  code_comments = 3;
-  string                  global_comment= 4;
+  int64                   submission_id = 2;
+  User                    author        = 3;
+  repeated ReviewComment  code_comments = 4;
+  string                  global_comment= 5;
 }
 
 message Submission {
