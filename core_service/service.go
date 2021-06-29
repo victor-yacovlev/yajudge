@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -135,22 +136,25 @@ func GetCapabilitiesForSession(cookie string, db *sql.DB) (result []Capability, 
 }
 
 
-func (services *Services) createAuthMiddlewares(authToken string) []grpc.ServerOption {
-	checkAuth := func(ctx context.Context, authToken string) bool {
+func (services *Services) createAuthMiddlewares(genericAuthToken, gradersAuthToken string) []grpc.ServerOption {
+	checkAuth := func(ctx context.Context, genericAuthToken string, graderOutToken, method string) bool {
 		md, _ := metadata.FromIncomingContext(ctx)
 		values := md.Get("auth")
 		if len(values) == 0 {
 			return false
 		}
 		auth := values[0]
-		if auth != authToken {
+		if strings.Contains(method, "ReceiveSubmissionsToGrade") || strings.Contains(method, "UpdateGraderOutput") {
+			return auth == gradersAuthToken
+		}
+		if auth != genericAuthToken {
 			return false
 		}
 		return true
 	}
 	result := make([]grpc.ServerOption, 2)
 	result[0] = grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		if !checkAuth(ctx, authToken) {
+		if !checkAuth(ctx, genericAuthToken, gradersAuthToken, info.FullMethod) {
 			return nil, status.Errorf(codes.Unauthenticated, "not authorized")
 		}
 		if !services.UserManagement.CheckUserSession(ctx, info.FullMethod) {
@@ -167,7 +171,7 @@ func (services *Services) createAuthMiddlewares(authToken string) []grpc.ServerO
 		}
 	})
 	result[1] = grpc.StreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if !checkAuth(ss.Context(), authToken) {
+		if !checkAuth(ss.Context(), genericAuthToken, gradersAuthToken, info.FullMethod) {
 			return status.Errorf(codes.Unauthenticated, "not authorized")
 		}
 		if !services.UserManagement.CheckUserSession(ss.Context(), info.FullMethod) {
@@ -186,7 +190,7 @@ func (services *Services) createAuthMiddlewares(authToken string) []grpc.ServerO
 	return result
 }
 
-func StartServices(ctx context.Context, listenAddress, authToken string, dbProps DatabaseProperties) (res *Services, err error) {
+func StartServices(ctx context.Context, listenAddress, genericAuthToken, gradersAuthToken string, dbProps DatabaseProperties) (res *Services, err error) {
 
 	db, err := MakeDatabaseConnection(dbProps)
 	if err != nil {
@@ -200,7 +204,7 @@ func StartServices(ctx context.Context, listenAddress, authToken string, dbProps
 
 
 
-	server := grpc.NewServer(res.createAuthMiddlewares(authToken)...)
+	server := grpc.NewServer(res.createAuthMiddlewares(genericAuthToken, gradersAuthToken)...)
 
 	RegisterUserManagementServer(server, res.UserManagement)
 	RegisterCourseManagementServer(server, res.CourseManagement)

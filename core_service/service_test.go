@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	listenAddress = "127.0.0.1:9095"
-	authorizationToken = "abrakadabra"
+	listenAddress            	= "127.0.0.1:9095"
+	genericAuthorizationToken	= "abrakadabra"
+	graderAuthorizationToken	= "alah agbar"
 )
 
 var (
@@ -36,14 +37,15 @@ func createTestClientConnection(t *testing.T) *grpc.ClientConn {
 
 func createTestContext() context.Context {
 	ctx := context.Background()
-	md := metadata.Pairs("auth", authorizationToken)
+	md := metadata.Pairs("auth", genericAuthorizationToken)
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
 
 func TestAuth(t *testing.T) {
 	servicesContext, finish := context.WithCancel(context.Background())
-	_, err := StartServices(servicesContext, listenAddress, authorizationToken, testDatabaseProps)
+	_, err := StartServices(servicesContext, listenAddress,
+		genericAuthorizationToken, graderAuthorizationToken, testDatabaseProps)
 	if err != nil {
 		t.Fatalf("Can't start services: %s", err.Error())
 	}
