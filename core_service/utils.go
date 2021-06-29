@@ -62,3 +62,35 @@ func MakeEntryCopyName(db *sql.DB, tableName string, entryName string) (string, 
 	}
 	return fmt.Sprintf("%s %d %s", copyPrefix, i, entryName), nil
 }
+
+func QueryForTableItemUpdate(db *sql.DB, tableName string, entryId int64,
+	fieldNames []string, fieldVals []interface{}) error {
+	if len(fieldNames)!=len(fieldVals) {
+		return fmt.Errorf("field names count do not match values count")
+	}
+	setStrings := make([]string, len(fieldNames))
+	for i:=0; i<len(fieldNames); i++ {
+		setStrings[i] = fmt.Sprintf("%s=$%d", fieldNames, i+1)
+	}
+	query := fmt.Sprintf("update %s set %s where id=$%d",
+		tableName, strings.Join(setStrings, ","), len(fieldNames))
+	fieldVals = append(fieldVals, entryId)
+	_, err := db.Exec(query, fieldVals...)
+	return err
+}
+
+func QueryForTableItemInsert(db *sql.DB, tableName string,
+	fieldNames []string, fieldVals []interface{}) (int64, error) {
+	if len(fieldNames)!=len(fieldVals) {
+		return 0, fmt.Errorf("field names count do not match values count")
+	}
+	setStrings := make([]string, len(fieldNames))
+	for i:=0; i<len(fieldNames); i++ {
+		setStrings[i] = fmt.Sprintf("$%d", i+1)
+	}
+	query := fmt.Sprintf("insert into %s(%s) values (%s) returning id",
+		tableName, strings.Join(fieldNames, ","), strings.Join(setStrings, ","))
+	var returningId int64
+	err := db.QueryRow(query, fieldVals...).Scan(&returningId)
+	return returningId, err
+}

@@ -124,19 +124,37 @@ message GradingOptions {
   FileSet           custom_interactor     = 7; // interactor soure files
 }
 
+message ProblemData {
+  // These data structures are not stored in database, but attached to courses via Problem records
+
+  string          id                            = 1;  // string, but not int! id is a relative path to the problem directory
+  string          statement_text                = 2;
+  string          statement_content_type        = 3;  // text/mardown by default
+  FileSet         statement_files               = 4;
+  FileSet         solution_files                = 5;  // fileset meta-information to be filled by solution
+  float           full_score_multiplier_propose = 6;  // 1.0 by default, >1 for hard problems, <1 for easy problems
+  GradingOptions  grading_options               = 7;
+
+  // This is problem property but not a problem usage in course/lesson property!
+  // Cons: the problem solution might be demonstrated sometime in past at another course
+  bool            skip_plagiarism_check         = 8;
+}
+
 message Problem {
-  string          id                      = 1;  // string, but not int! id is a relative path to the problem directory
-  string          statement_text          = 2;
-  string          statement_content_type  = 3;  // text/mardown by default
-  FileSet         statement_files         = 4;
-  FileSet         solution_files          = 5;  // fileset meta-information to be filled by solution
-  float           full_score_multiplier   = 6;  // 1.0 by default, >1 for hard problems, <1 for easy problems
-  bool            blocks_positive_mark    = 7;
-  bool            blocks_next_lesson      = 8;
-  bool            accept_partial_tests    = 9;
-  bool            skip_solution_defence   = 10;
-  bool            skip_code_review        = 11;
-  GradingOptions  grading_options         = 12;
+  int64           id                      = 1;
+  int64           lessons_id              = 2;
+  string          name                    = 3;
+  int64           show_atfer_id           = 4;
+  ProblemData     problem_data            = 5;  // to be found at some know place in filesystem
+  int64           open_date               = 6;  // 0 for inherit from outer section
+  int64           soft_deadline           = 7;  // 0 for inherit from outer section
+  int64           hard_deadline           = 8;  // 0 for inherit from outer section
+  float           full_score_multiplier   = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
+  bool            blocks_positive_mark    = 10;
+  bool            blocks_next_lesson      = 11;
+  bool            accept_partial_tests    = 12;
+  bool            skip_solution_defence   = 13;
+  bool            skip_code_review        = 14;
 }
 
 enum SolutionStatus {
@@ -175,31 +193,36 @@ message Submission {
   string              grader_output = 6;  // stdout output by testing system
   string              grader_errors = 7;  // stderr output by testing system
   CodeReview          code_review   = 8;
-  Problem             problem       = 9;  // just references Problem.id in most cases, but contains full data for grader
+  ProblemData             problem       = 9;  // just references Problem.id in most cases, but contains full data for grader
 }
 
 message Solution {
   int64                id      = 1;
-  Problem              problem = 2;  // must contain at least Problem.id
+  ProblemData              problem = 2;  // must contain at least Problem.id
   repeated Submission  history = 3;
 }
 
 message Lesson {
   int64                 id            = 1;
-  repeated  TextReading readings      = 2;
-  repeated  Problem     problems      = 3;
-  int64                 open_date     = 4;  // 0 for inherit from outer section
-  int64                 soft_deadline = 5;  // 0 for inherit from outer section
-  int64                 hard_deadline = 6;  // 0 for inherit from outer section
+  int64                 sections_id   = 2;  // required for creating new lesson in some section
+  string                name          = 3;
+  repeated  TextReading readings      = 4;
+  repeated  ProblemData     problems      = 5;
+  int64                 open_date     = 6;  // 0 for inherit from outer section
+  int64                 soft_deadline = 7;  // 0 for inherit from outer section
+  int64                 hard_deadline = 8;  // 0 for inherit from outer section
+  int64                 show_after_id = 9;  // determine display order: 0 for first lesson, 999 for undefined
 }
 
 message Section {
   int64                 id            = 1;
-  string                name          = 2;
-  repeated Lesson       lessons       = 3;
-  int64                 open_date     = 4;
-  int64                 soft_deadline = 5;
-  int64                 hard_deadline = 6;
+  int64                 courses_id    = 2;  // required for creating new section in some course
+  string                name          = 3;
+  repeated Lesson       lessons       = 4;
+  int64                 open_date     = 5;
+  int64                 soft_deadline = 6;
+  int64                 hard_deadline = 7;
+  int64                 show_after_id = 8;  // determine display order: 0 for first lesson, 999 for undefined
 }
 
 message Course {
@@ -257,10 +280,10 @@ service CourseManagement {
   rpc EnrollUser(Enroll) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
   rpc DeleteCourse(Course) returns (Nothing) {}
-  rpc CreateOrUpdateLesson(Lesson) returns (Lesson) {}
   rpc CreateOrUpdateSection(Section) returns (Section) {}
-  rpc UpdateSectionLessons(Section) returns (Section) {}
-  rpc UpdateCourseSections(Course) returns (Course) {}
+  rpc DeleteSection(Section) returns (Nothing) {}
+  rpc DeleteLesson(Lesson) returns (Nothing) {}
+  rpc CreateOrUpdateLesson(Lesson) returns (Lesson) {}
   rpc CreateOrUpdateTextReading(TextReading) returns (TextReading) {}
   rpc CreateOrUpdateProblem(Problem) returns (Problem) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}

@@ -99,10 +99,10 @@ create table sections
         constraint sections_pk
             primary key,
     name       varchar(100),
-    "order"    double precision not null default 0,
     courses_id integer          not null
         constraint sections_courses_id_fk
-            references courses
+            references courses,
+    show_after_id integer not null default 999
 );
 
 create table lessons
@@ -110,6 +110,7 @@ create table lessons
     id            integer not null
         constraint lessons_pk
             primary key,
+    name       varchar(100),
     sections_id   integer not null
         constraint lessons_sections_id_fk
             references sections
@@ -117,5 +118,6 @@ create table lessons
             references sections,
     open_date     timestamp,
     soft_deadline timestamp,
-    hard_deadline timestamp
+    hard_deadline timestamp,
+    show_after_id integer not null default 999
 );
