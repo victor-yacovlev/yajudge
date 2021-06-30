@@ -22,5 +22,5 @@ go.sum: go.mod
 	$(GO) mod download
 
 clean:
-	$(RM) yajudge_server$(EXE_SUFFIX)
-	$(RM) go.sum
+	$(RM) yajudge_server$(EXE_SUFFIX) || true
+	$(RM) go.sum || true

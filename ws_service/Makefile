@@ -13,6 +13,7 @@ test: service
 	$(GO) test -v -cover
 
 service: go.sum service.go
+	$(GO) get yajudge/ws_service
 	$(GO) build $(GOGLAGS) .
 
 go.sum: go.mod
@@ -22,5 +23,5 @@ service.pb.go: ../service.proto
 	$(PROTOC) --go_out=. ../service.proto
 
 clean:
-	$(RM) *.pb.go
-	$(RM) go.sum
+	$(RM) *.pb.go || true
+	$(RM) go.sum || true
