@@ -7,20 +7,20 @@ PROTOC=protoc
 # can override to del for Windows
 RM=rm
 
-all: service
+EXE_SUFFIX=
 
-test: service
+all: yajudge_server$(EXE_SUFFIX)
+
+test: yajudge_server$(EXE_SUFFIX)
 	$(GO) test -v -cover
 
-service: go.sum service.go courses.go users.go service_grpc.pb.go
+yajudge_server$(EXE_SUFFIX): go.sum main.go
+	$(GO) get yajudge/yajudge_server
 	$(GO) build $(GOGLAGS) .
 
 go.sum: go.mod
 	$(GO) mod download
 
-service_grpc.pb.go: ../service.proto
-	$(PROTOC) --go-grpc_out=. ../service.proto
-
 clean:
-	$(RM) *.pb.go
+	$(RM) yajudge_server$(EXE_SUFFIX)
 	$(RM) go.sum
