@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	core_service "yajudge/service"
 )
 
 type IncomingMessage struct {
@@ -26,33 +27,51 @@ type OutgoingMessage struct {
 	Result				interface{}	`json:"result"`
 }
 
+type ClassMethod struct {
+	Name		string
+	Func		reflect.Value
+	ArgType		reflect.Type
+}
+
 type Class struct {
-	Pointer		interface{}
+	Instance	interface{}
+	Methods		map[string]ClassMethod
 }
 
 type WsService struct {
-	ctx					context.Context
-	authToken			string
-	RegisteredClasses	map[string]Class
+	AuthToken         string
+	RegisteredClasses map[string]Class
 }
 
-func NewWsService(authToken string, grpcServices []interface{}) (res *WsService) {
+func NewWsService(authToken string) (res *WsService) {
 	res = new(WsService)
 	res.RegisteredClasses = make(map[string]Class)
-	for _, grpcClient := range grpcServices {
-		res.RegisterService(grpcClient)
-	}
-	md := metadata.Pairs("auth", authToken)
-	res.ctx = metadata.NewOutgoingContext(context.Background(), md)
+	res.AuthToken = authToken
 	return res
 }
 
-func (service *WsService) RegisterService(srv interface{}) {
-	serviceName := reflect.TypeOf(srv).Name()
-	if strings.HasSuffix(serviceName, "Client") {
-		serviceName = serviceName[0:len(serviceName)-6]
+func (service *WsService) RegisterService(name string, srv interface{}) {
+	typee := reflect.TypeOf(srv)
+	class := Class{
+		Instance: srv,
+		Methods: make(map[string]ClassMethod),
 	}
-	service.RegisteredClasses[serviceName] = Class{Pointer: srv}
+	methodsCount := typee.NumMethod()
+	for i:=0; i<methodsCount; i++ {
+		method := typee.Method(i)
+		methodName := method.Name
+		funcType := method.Type
+		argType := funcType.In(2).Elem()
+		argTypeName := argType.Name()
+		_ = argTypeName
+		m := ClassMethod{
+			Name: methodName,
+			Func: method.Func,
+			ArgType: argType,
+		}
+		class.Methods[methodName] = m
+	}
+	service.RegisteredClasses[name] = class
 }
 
 
@@ -100,29 +119,105 @@ func (service *WsService) ProcessTextMessage(in []byte) (out []byte, err error) 
 	return out, err
 }
 
+func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res reflect.Value, err error) {
+	fieldsCount := argType.NumField()
+	res = reflect.New(argType)
+	for i:=0; i<fieldsCount; i++ {
+		field := argType.Field(i)
+		jsonTag := field.Tag.Get("json")
+		if jsonTag=="" {
+			continue
+		}
+		tagParams := strings.Split(jsonTag, ",")
+		jsonFieldName := tagParams[0]
+		jsonValue, hasHavlue := data[jsonFieldName]
+		var fieldVal reflect.Value
+		if !hasHavlue {
+			continue
+		}
+		fieldType := field.Type
+		if fieldType.Kind() == reflect.Int64 {
+			intVal, isInt := jsonValue.(int64)
+			if isInt {
+				fieldVal = reflect.ValueOf(intVal)
+			} else {
+				return res, fmt.Errorf("can't convert '%v' to int64 for field '%s'", jsonValue, jsonFieldName)
+			}
+		} else if fieldType.Kind() == reflect.Float64 {
+			floatVal, isFloat := jsonValue.(float64)
+			if isFloat {
+				fieldVal = reflect.ValueOf(floatVal)
+			} else {
+				return res, fmt.Errorf("can't convert '%v' to float64 for field '%s'", jsonValue, jsonFieldName)
+			}
+		} else if fieldType.Kind() == reflect.String {
+			strVal, isStr := jsonValue.(string)
+			if isStr {
+				fieldVal = reflect.ValueOf(strVal)
+			} else {
+				return res, fmt.Errorf("can't convert '%v' to string for field '%s'", jsonValue, jsonFieldName)
+			}
+		} else if fieldType.Kind() == reflect.String {
+			boolVal, isBool := jsonValue.(bool)
+			if isBool {
+				fieldVal.SetBool(boolVal)
+			} else {
+				return res, fmt.Errorf("can't convert '%v' to bool for field '%s'", jsonValue, jsonFieldName)
+			}
+		}
+		res.Elem().Field(i).Set(fieldVal)
+	}
+	return
+}
+
 func (service *WsService) ProcessMessage(cookie string, className string,
 	methodName string, argument interface{}) (res interface{}, err error) {
 	class, classFound := service.RegisteredClasses[className]
 	if !classFound {
 		return nil, fmt.Errorf("class not found: %s", className)
 	}
-	method, methodFound := reflect.TypeOf(class.Pointer).MethodByName(methodName)
+	method, methodFound := class.Methods[methodName]
+	_ = method
 	if !methodFound {
 		return nil, fmt.Errorf("method %s not found in class %s",
 			methodName, className)
 	}
-	ctx := context.Background()
-	args := make([]reflect.Value, 3)
-	args[0] = reflect.ValueOf(class.Pointer)
-	args[1] = reflect.ValueOf(ctx)
-	args[2] = reflect.ValueOf(argument)
+	if argument == nil {
+		return nil, fmt.Errorf("method argument is required")
+	}
+	argumentMap, argumentIsMap := argument.(map[string]interface{})
+	if !argumentIsMap {
+		return nil, fmt.Errorf("method argument must be a struct of fields")
+	}
+	argumentValue, err := ArgumentMapToValue(method.ArgType, argumentMap)
+	if err != nil {
+		return nil, err
+	}
+	var md metadata.MD
+	if cookie != "" {
+		md = metadata.Pairs("auth", service.AuthToken, "session", cookie)
+	} else {
+		md = metadata.Pairs("auth", service.AuthToken)
+	}
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	args := []reflect.Value{
+		reflect.ValueOf(class.Instance),
+		reflect.ValueOf(ctx),
+		argumentValue,
+	}
 	retvals := method.Func.Call(args)
-	resRetval := retvals[0].Interface()
-	errRetval := retvals[1].Interface()
-	return resRetval, errRetval.(error)
+	res = retvals[0].Interface()
+	errOrNil := retvals[1].Interface()
+	if errOrNil != nil {
+		err = errOrNil.(error)
+	}
+	return res, err
 }
 
 func (service *WsService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		return true
+	}
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		w.WriteHeader(500)
@@ -134,16 +229,15 @@ func (service *WsService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func StartWebsocketHttpHandler(authToken string, grpcAddr string) (http.Handler, error) {
 	var err error
-	users, err := grpc.Dial(grpcAddr, grpc.WithInsecure())
+	grpcConn, err := grpc.Dial(grpcAddr, grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
-	courses, err := grpc.Dial(grpcAddr, grpc.WithInsecure())
-	if err != nil {
-		return nil, err
-	}
-	service := NewWsService(authToken, []interface{}{
-		users, courses,
-	})
+	users := core_service.NewUserManagementClient(grpcConn)
+	courses := core_service.NewCourseManagementClient(grpcConn)
+	_ = users
+	service := NewWsService(authToken)
+	service.RegisterService("UserManagement", users)
+	service.RegisterService("CourseManagement", courses)
 	return service, nil
 }

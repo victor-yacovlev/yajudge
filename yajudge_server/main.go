@@ -63,6 +63,8 @@ type WebConfig struct {
 
 type LogConfig struct {
 	ErrorFile		string
+	AccessFile		string
+	RpcFile			string
 }
 
 type YajudgeServerConfig struct {
@@ -105,7 +107,7 @@ func Serve(config *YajudgeServerConfig) error {
 	ctx, finish := context.WithCancel(context.Background())
 	defer finish()
 	mux := http.DefaultServeMux
-	srv := http.Server { Handler: mux }
+	srv := http.Server { Handler: mux, Addr: config.Web.ListenAddr }
 	defer srv.Shutdown(context.Background())
 
 	signalsChan := make(chan interface{})
@@ -132,7 +134,7 @@ func Serve(config *YajudgeServerConfig) error {
 		return err
 	}
 
-	ws, err := ws_service.StartWebsocketHttpHandler(config.Rpc.PrivateAuthToken, config.Rpc.ListenAddr)
+	ws, err := ws_service.StartWebsocketHttpHandler(config.Rpc.PublicAuthToken, config.Rpc.ListenAddr)
 	if err != nil {
 		return err
 	}
@@ -141,6 +143,10 @@ func Serve(config *YajudgeServerConfig) error {
 	mux.Handle(config.Web.ContentPrefix,
 		http.StripPrefix(config.Web.ContentPrefix, http.FileServer(http.Dir(config.Web.ContentRootDir))))
 
+	err = srv.ListenAndServe();
+	if err != nil {
+		return err
+	}
 	<- signalsChan
 	return nil
 }
