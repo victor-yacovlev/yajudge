@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"net/http"
 	"reflect"
 	"strings"
@@ -14,17 +15,24 @@ import (
 )
 
 type IncomingMessage struct {
-	Id					int			`json:"id"`
-	SessionCookie		string		`json:"session_cookie"`
-	RequestService		string		`json:"request_service"`
-	RequestMethod		string		`json:"request_method"`
-	Argument			interface{}	`json:"argument"`
+	Id       int         `json:"id"`
+	Session  string      `json:"session"`
+	Service  string      `json:"service"`
+	Method   string      `json:"method"`
+	Type     string      `json:"type"`
+	Argument interface{} `json:"argument"`
+}
+
+type ErrorMessage struct {
+	Code	int64		`json:"code"`
+	Desc	string		`json:"desc"`
 }
 
 type OutgoingMessage struct {
-	Id					int			`json:"id"`
-	Error				string		`json:"error"`
-	Result				interface{}	`json:"result"`
+	Id     int			`json:"id"`
+	Error  ErrorMessage `json:"error"`
+	Type   string       `json:"type"`
+	Result interface{}  `json:"result"`
 }
 
 type ClassMethod struct {
@@ -107,15 +115,25 @@ func (service *WsService) ProcessTextMessage(in []byte) (out []byte, err error) 
 	if err != nil {
 		return nil, err
 	}
-	res, err := service.ProcessMessage(inData.SessionCookie,
-		inData.RequestService, inData.RequestMethod, inData.Argument)
-	outData := OutgoingMessage{Id: inData.Id}
-	if err != nil {
-		outData.Error = err.Error()
-	} else {
-		outData.Result = res
+	if inData.Type == "" {
+		return nil, fmt.Errorf("method type not specified, must be 'unary' or 'stream'")
+	} else if inData.Type == "unary" {
+		res, err := service.ProcessUnaryMessage(inData.Session,
+			inData.Service, inData.Method, inData.Argument)
+		outData := OutgoingMessage{Id: inData.Id, Type: "unary"}
+		if err != nil {
+			outData.Error.Code = 99999;
+			outData.Error.Desc = err.Error()
+			grpcErr := status.Convert(err)
+			if grpcErr != nil {
+				outData.Error.Code = int64(grpcErr.Code())
+				outData.Error.Desc = grpcErr.Message()
+			}
+		} else {
+			outData.Result = res
+		}
+		out, err = json.Marshal(outData)
 	}
-	out, err = json.Marshal(outData)
 	return out, err
 }
 
@@ -138,8 +156,11 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 		fieldType := field.Type
 		if fieldType.Kind() == reflect.Int64 {
 			intVal, isInt := jsonValue.(int64)
+			floatVal, isFloat := jsonValue.(float64)
 			if isInt {
 				fieldVal = reflect.ValueOf(intVal)
+			} else if isFloat {
+				fieldVal = reflect.ValueOf(int64(floatVal))
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to int64 for field '%s'", jsonValue, jsonFieldName)
 			}
@@ -157,10 +178,10 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to string for field '%s'", jsonValue, jsonFieldName)
 			}
-		} else if fieldType.Kind() == reflect.String {
+		} else if fieldType.Kind() == reflect.Bool {
 			boolVal, isBool := jsonValue.(bool)
 			if isBool {
-				fieldVal.SetBool(boolVal)
+				fieldVal = reflect.ValueOf(boolVal)
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to bool for field '%s'", jsonValue, jsonFieldName)
 			}
@@ -170,7 +191,7 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 	return
 }
 
-func (service *WsService) ProcessMessage(cookie string, className string,
+func (service *WsService) ProcessUnaryMessage(cookie string, className string,
 	methodName string, argument interface{}) (res interface{}, err error) {
 	class, classFound := service.RegisteredClasses[className]
 	if !classFound {

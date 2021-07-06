@@ -14,13 +14,21 @@ all: yajudge_server$(EXE_SUFFIX)
 test: yajudge_server$(EXE_SUFFIX)
 	$(GO) test -v -cover
 
-yajudge_server$(EXE_SUFFIX): go.sum main.go
+protoc: core_service/service_grpc.pb.go core_service/service.pb.go
+
+core_service/service_grpc.pb.go: service.proto
+	$(PROTOC) --go-grpc_out=./core_service -I. service.proto
+
+core_service/service.pb.go: service.proto
+	$(PROTOC) --go_out=./core_service -I. service.proto
+
+yajudge_server$(EXE_SUFFIX): main.go protoc
 	$(GO) get yajudge/yajudge_server
 	$(GO) build $(GOGLAGS) .
-
-go.sum: go.mod
-	$(GO) mod download
 
 clean:
 	$(RM) yajudge_server$(EXE_SUFFIX) || true
 	$(RM) go.sum || true
+	$(RM) */go.sum || true
+	$(RM) */*.pb.go || true
+

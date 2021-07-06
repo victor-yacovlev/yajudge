@@ -32,7 +32,7 @@ func createCoursesTestClientAndAdminContext(t *testing.T) ServiceTestClients {
 		t.Fatalf("can't authorize admin user: %v", err)
 	}
 	adminCtx := UpdateContextWithSession(ctx, adminSession)
-	return ServiceTestClients {
+	return ServiceTestClients{
 		Courses:      client,
 		Users:        usersClient,
 		AdminContext: adminCtx,
