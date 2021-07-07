@@ -42,65 +42,6 @@ func (service *Services) CreateEmptyDatabase() {
 	}
 }
 
-func (service *Services) CreateStandardRoles() {
-	std := []*Role{
-		{Name: "Администратор", Capabilities: []*Capability{
-			{Subsystem: "UserManagement", Method: "Authorize"},
-			{Subsystem: "UserManagement", Method: "GetProfile"},
-			{Subsystem: "UserManagement", Method: "CreateOrUpdateRole"},
-			{Subsystem: "UserManagement", Method: "FindOrCreateCapability"},
-			{Subsystem: "UserManagement", Method: "GetUsers"},
-			{Subsystem: "UserManagement", Method: "CreateOrUpdateUser"},
-			{Subsystem: "UserManagement", Method: "SetUserDefaultRole"},
-			{Subsystem: "UserManagement", Method: "ResetUserPassword"},
-			{Subsystem: "UserManagement", Method: "ChangePassword"},
-			{Subsystem: "CourseManagement", Method: "CreateOrUpdateCourse"},
-			{Subsystem: "CourseManagement", Method: "CloneCourse"},
-			{Subsystem: "CourseManagement", Method: "DeleteCourse"},
-			{Subsystem: "CourseManagement", Method: "GetCourses"},
-			{Subsystem: "CourseManagement", Method: "EnrollUser"},
-		}},
-		{Name: "Лектор", Capabilities: []*Capability{
-			{Subsystem: "UserManagement", Method: "Authorize"},
-			{Subsystem: "UserManagement", Method: "GetProfile"},
-			{Subsystem: "UserManagement", Method: "GetUsers"},
-			{Subsystem: "UserManagement", Method: "ResetUserPassword"},
-			{Subsystem: "UserManagement", Method: "ChangePassword"},
-			{Subsystem: "CourseManagement", Method: "GetCourses"},
-			{Subsystem: "CourseManagement", Method: "EnrollUser"},
-		}},
-		{Name: "Семинарист", Capabilities: []*Capability{
-			{Subsystem: "UserManagement", Method: "Authorize"},
-			{Subsystem: "UserManagement", Method: "GetProfile"},
-			{Subsystem: "UserManagement", Method: "GetUsers"},
-			{Subsystem: "UserManagement", Method: "ResetUserPassword"},
-			{Subsystem: "UserManagement", Method: "ChangePassword"},
-			{Subsystem: "CourseManagement", Method: "GetCourses"},
-		}},
-		{Name: "Учебный ассистент", Capabilities: []*Capability{
-			{Subsystem: "UserManagement", Method: "Authorize"},
-			{Subsystem: "UserManagement", Method: "GetProfile"},
-			{Subsystem: "UserManagement", Method: "GetUsers"},
-			{Subsystem: "UserManagement", Method: "ChangePassword"},
-			{Subsystem: "CourseManagement", Method: "GetCourses"},
-		}},
-		{Name: "Студент", Capabilities: []*Capability{
-			{Subsystem: "UserManagement", Method: "Authorize"},
-			{Subsystem: "UserManagement", Method: "GetProfile"},
-			{Subsystem: "UserManagement", Method: "ChangePassword"},
-			{Subsystem: "CourseManagement", Method: "GetCourses"},
-		}},
-	}
-
-	ctx := context.Background()
-
-	for _, role := range std {
-		_, err := service.UserManagement.CreateOrUpdateRole(ctx, role)
-		if err != nil {
-			panic(err)
-		}
-	}
-}
 
 func NewPostgresDatabaseProperties() DatabaseProperties {
 	return DatabaseProperties{
@@ -118,23 +59,6 @@ func MakeDatabaseConnection(p DatabaseProperties) (*sql.DB, error) {
 		return nil, fmt.Errorf("database engine '%s' not supported yet", p.Engine)
 	}
 }
-
-func GetCapabilitiesForSession(cookie string, db *sql.DB) (result []Capability, err error) {
-	sessionRow, err := db.Query(`select users_id from sessions, where cookie=$1`, cookie)
-	if err != nil {
-		return nil, err
-	}
-	defer sessionRow.Close()
-	userId := 0
-	if sessionRow.Next() {
-		err = sessionRow.Scan(&userId)
-		if err != nil { return nil, err }
-	} else {
-		return nil, fmt.Errorf("bad session cookie")
-	}
-	return
-}
-
 
 func (services *Services) createAuthMiddlewares(genericAuthToken, gradersAuthToken string) []grpc.ServerOption {
 	checkAuth := func(ctx context.Context, genericAuthToken string, graderOutToken, method string) bool {

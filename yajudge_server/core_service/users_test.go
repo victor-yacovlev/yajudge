@@ -9,7 +9,6 @@ import (
 func createTestUsers(t *testing.T, services *Services) {
 	var err error
 	services.CreateEmptyDatabase()
-	services.CreateStandardRoles()
 
 	query := `
 insert into users(first_name, last_name, email, group_name, password) 
@@ -30,10 +29,10 @@ values
 		t.Fatalf("Can't prepare test data in database: %v", err)
 	}
 	ctx := context.Background()
-	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 1}, Role: &Role{Name: "Студент"}})
-	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 2}, Role: &Role{Name: "Администратор"}})
-	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 4}, Role: &Role{Name: "Студент"}})
-	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 5}, Role: &Role{Name: "Студент"}})
+	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 1}, Role: Role_ROLE_STUDENT})
+	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 2}, Role: Role_ROLE_ADMINISTRATOR})
+	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 4}, Role: Role_ROLE_STUDENT})
+	services.UserManagement.SetUserDefaultRole(ctx, &UserRole{User: &User{Id: 5}, Role: Role_ROLE_STUDENT})
 }
 
 
@@ -145,7 +144,7 @@ func TestGetAllUsers(t *testing.T) {
 	}
 
 	// 3 reuse Admin authorization to get list of Students only
-	res3, err := client.GetUsers(adminCtx, &UsersFilter{Role: &Role{Name: "Студент"}})
+	res3, err := client.GetUsers(adminCtx, &UsersFilter{Role: Role_ROLE_STUDENT})
 	if err != nil {
 		t.Errorf("[Test case 3]: can't get users list by admin session")
 	} else {
@@ -169,7 +168,7 @@ func TestGetAllUsers(t *testing.T) {
 	// 5 find by soft name matching
 	filter5 := &UsersFilter{
 		PartialStringMatch: true,
-		Role: &Role{Name: "Студент"},
+		Role: Role_ROLE_STUDENT,
 		User: &User{
 			FirstName: "бек",
 			LastName: "ебаны",
@@ -187,7 +186,7 @@ func TestGetAllUsers(t *testing.T) {
 	// 6 find only stundents from group 921
 	filter6 := &UsersFilter{
 		PartialStringMatch: true,
-		Role: &Role{Name: "Студент"},
+		Role: Role_ROLE_STUDENT,
 		User: &User{GroupName: "921"},
 	}
 	res6, err := client.GetUsers(adminCtx, filter6)
@@ -220,7 +219,7 @@ func TestUserCreation(t *testing.T) {
 		t.Fatalf("can't authorize admin user: %v", err)
 	}
 	adminCtx := UpdateContextWithSession(ctx, adminSession)
-	studentsBefore, err := client.GetUsers(adminCtx, &UsersFilter{Role: &Role{Name: "Студент"}})
+	studentsBefore, err := client.GetUsers(adminCtx, &UsersFilter{Role: Role_ROLE_STUDENT})
 	if err != nil {
 		t.Fatalf("can't get initial data before manipulations: %v", err)
 	}
@@ -240,13 +239,13 @@ func TestUserCreation(t *testing.T) {
 	}
 	_, err = client.SetUserDefaultRole(adminCtx, &UserRole{
 		User: &User{Id: createdUser.Id},
-		Role: &Role{Name: "Студент"},
+		Role: Role_ROLE_STUDENT,
 	})
 	if err != nil {
 		t.Fatalf("can't set user role: %v", err)
 	}
 
-	studentsAfter, err := client.GetUsers(adminCtx, &UsersFilter{Role: &Role{Name: "Студент"}})
+	studentsAfter, err := client.GetUsers(adminCtx, &UsersFilter{Role: Role_ROLE_STUDENT})
 	if err != nil {
 		t.Fatalf("can't get data after manipulations: %v", err)
 	}

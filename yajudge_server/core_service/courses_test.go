@@ -113,7 +113,7 @@ func TestCourseEnrollment(t *testing.T) {
 	// 3 Enroll student to course
 	course3, err := api.Courses.EnrollUser(api.AdminContext, &Enroll{
 		User:   usersList2.Users[0],
-		Role:   &Role{Name: "Учебный ассистент"},
+		Role:   Role_ROLE_TEACHER_ASSISTANT,
 		Course: course1,
 	})
 	if err != nil {
@@ -142,7 +142,7 @@ func TestCourseEnrollment(t *testing.T) {
 	if coursesList4.Courses[0].Course.Name != course3.Name {
 		t.Errorf("4: course name mismatch")
 	}
-	if coursesList4.Courses[0].Role.Name != "Учебный ассистент" {
+	if coursesList4.Courses[0].Role != Role_ROLE_TEACHER_ASSISTANT {
 		t.Errorf("4: course role mismatch")
 	}
 }

@@ -51,8 +51,7 @@ func (service *CourseManagementService) GetUserEnrollments(user *User) (res []*E
 		return nil, status.Errorf(codes.InvalidArgument, "no user id specified")
 	}
 	q, err := service.DB.Query(
-		`select roles.name, courses_id, roles_id from enrollments, roles where users_id=$1 and roles.id=enrollments.roles_id`,
-		user.Id)
+		`select courses_id, role from enrollments where users_id=$1`, user.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -60,17 +59,16 @@ func (service *CourseManagementService) GetUserEnrollments(user *User) (res []*E
 	res = make([]*Enrolment, 0, 10)
 	for q.Next() {
 		course := &Course{}
-		role := &Role{}
-		err = q.Scan(&role.Name, &course.Id, &role.Id)
+		role := 0
+		err = q.Scan(&course.Id, &role)
 		if err != nil {
 			return nil, err
 		}
-		role.Capabilities, err = service.Parent.UserManagement.GetRoleCapabilities(role)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, &Enrolment{
-			Role: role,
+			Role: Role(role),
 			Course: course,
 		})
 	}
@@ -155,7 +153,7 @@ func (service *CourseManagementService) GetCourses(ctx context.Context, filter *
 		if err != nil {
 			return nil, err
 		}
-		courseRole := &Role{}
+		var courseRole Role
 		if enrollments != nil {
 			enrollmentFound := false
 			for _, enr := range enrollments {
@@ -414,13 +412,8 @@ func (service *CourseManagementService) EnrollUser(ctx context.Context, request 
 			return nil, err
 		}
 	}
-	if role.Id==0 && role.Name=="" {
+	if role == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "role id or name required")
-	} else if role.Id==0 {
-		err = service.DB.QueryRow(`select id from roles where name=$1`, role.Name).Scan(&role.Id)
-		if err != nil {
-			return nil, err
-		}
 	}
 	if course.Id==0 && course.Name=="" {
 		return nil, status.Errorf(codes.InvalidArgument, "course id or name required")
@@ -437,8 +430,8 @@ func (service *CourseManagementService) EnrollUser(ctx context.Context, request 
 			return nil, err
 		}
 	}
-	_, err = service.DB.Exec(`insert into enrollments(courses_id, users_id, roles_id) values ($1,$2,$3)`,
-		course.Id, user.Id, role.Id)
+	_, err = service.DB.Exec(`insert into enrollments(courses_id, users_id, role) values ($1,$2,$3)`,
+		course.Id, user.Id, role)
 	return course, err
 }
 

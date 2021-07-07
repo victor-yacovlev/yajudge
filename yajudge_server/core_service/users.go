@@ -18,9 +18,25 @@ import (
 	"time"
 )
 
+var Capabilities = map[Role][][2]string {
+	Role_ROLE_UNAUTHORIZED: {
+		{"UserManagement", "Authorize"},
+		{"SubmissionsManagement", "ReceiveSubmissionsToGrade"},
+		{"SubmissionsManagement", "UpdateGraderOutput"},
+	},
+	Role_ROLE_STUDENT: {
+		{"UserManagement", "Authorize"},
+		{"UserManagement", "GetProfile"},
+		{"UserManagement", "ChangePassword"},
+		{"CourseManagement", "GetCourses"},
+		{"SubmissionsManagement", "ReceiveSubmissionsToGrade"},
+		{"SubmissionsManagement", "UpdateGraderOutput"},
+	},
+}
+
 type UserManagementService struct {
-	Parent		*Services
-	DB 			*sql.DB
+	Parent			*Services
+	DB 				*sql.DB
 }
 
 func (service *UserManagementService) ResetUserPassword(ctx context.Context, user *User) (*User, error) {
@@ -147,16 +163,7 @@ func (service *UserManagementService) CreateOrUpdateUser(ctx context.Context, us
 func (service *UserManagementService) GetUsers(ctx context.Context, filter *UsersFilter) (*UsersList, error) {
 
 	// Important note: this might work slow because we will not use SQL-based filtering
-	if filter.Role != nil && (filter.Role.Id > 0 || filter.Role.Name != "") {
-		if filter.Role.Id == 0 {
-			err := service.DB.QueryRow(`select id from roles where name=$1`, filter.Role.Name).Scan(&filter.Role.Id)
-			if err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		filter.Role = nil
-	}
+
 	if filter.Course != nil && filter.Course.Id > 0 {
 		// todo
 	} else {
@@ -192,12 +199,12 @@ func (service *UserManagementService) GetUsers(ctx context.Context, filter *User
 			user.GroupName = groupName.String
 		}
 		if defaultRole.Valid {
-			user.DefaultRole = defaultRole.Int64
+			user.DefaultRole = Role(defaultRole.Int64)
 		}
 		if filter.Course != nil {
 			// todo: check for course+role match
-		} else if filter.Role != nil {
-			if user.DefaultRole != filter.Role.Id {
+		} else if filter.Role != Role_ROLE_ANY {
+			if user.DefaultRole != filter.Role {
 				continue // not matched by role
 			}
 		}
@@ -244,93 +251,8 @@ func (service *UserManagementService) SetUserDefaultRole(ctx context.Context, ar
 			return nil, status.Errorf(codes.NotFound, "user with email '%s' not found", arg.User.Email)
 		}
 	}
-	if arg.Role.Id == 0 && arg.Role.Name != "" {
-		q, err := service.DB.Query(`select id from roles where name=$1`, arg.Role.Name)
-		if err != nil {
-			return nil, err
-		}
-		defer q.Close()
-		if q.Next() {
-			q.Scan(&arg.Role.Id)
-		} else {
-			return nil, status.Errorf(codes.NotFound, "role '%s' not found", arg.Role.Name)
-		}
-	}
-	if arg.Role.Id != 0 {
-		_, err = service.DB.Exec(`update users set default_role=$1 where id=$2`, arg.Role.Id, arg.User.Id)
-	} else {
-		_, err = service.DB.Exec(`update users set default_role=NULL where id=$1`, arg.User.Id)
-	}
+	_, err = service.DB.Exec(`update users set default_role=$1 where id=$2`, arg.Role, arg.User.Id)
 	return arg, err
-}
-
-func (service *UserManagementService) FindOrCreateCapability(ctx context.Context, cap *Capability) (res *Capability, err error) {
-	var capRows *sql.Rows
-	if cap.Id > 0 {
-		capRows, err = service.DB.Query(`select id, subsystem, method from capabilities where id=$1`, cap.Id)
-	} else {
-		capRows, err = service.DB.Query(
-			`select id, subsystem, method from capabilities where subsystem=$1 and method=$2`,
-			cap.Subsystem, cap.Method)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer capRows.Close()
-	if capRows.Next() {
-		res = &Capability{}
-		err = capRows.Scan(&res.Id, &res.Subsystem, &res.Method)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		err := service.DB.QueryRow(
-			`insert into capabilities(subsystem, method) values ($1, $2) returning id`, cap.Subsystem, cap.Method).Scan(&cap.Id)
-		if err != nil {
-			return nil, err
-		}
-		res = cap
-	}
-	return res, err
-}
-
-func (service *UserManagementService) CreateOrUpdateRole(ctx context.Context, role *Role) (res *Role, err error) {
-	var rolesRows *sql.Rows
-	if role.Id > 0 {
-		rolesRows, err = service.DB.Query(`select id, name from roles where id=$1`, role.Id)
-	} else {
-		rolesRows, err = service.DB.Query(`select id, name from roles where name=$1`, role.Name)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rolesRows.Close()
-	if rolesRows.Next() {
-		err = rolesRows.Scan(&role.Id, &role.Name)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		err := service.DB.QueryRow(
-			`insert into roles(name) values ($1) returning id`, role.Name).Scan(&role.Id)
-		if err != nil {
-			return nil, err
-		}
-	}
-	for _, roleCap := range role.Capabilities {
-		foundCap, err := service.FindOrCreateCapability(ctx, roleCap)
-		if err != nil {
-			return nil, err
-		}
-		_, err = service.DB.Exec(
-			`insert into roles_capabilities(roles_id, capabilities_id) values ($1, $2)`,
-			role.Id, foundCap.Id)
-		if err != nil {
-			return nil, err
-		}
-	}
-	res = role
-	return res, nil
 }
 
 
@@ -416,11 +338,7 @@ func (service *UserManagementService) CheckUserSession(ctx context.Context, requ
 	parts := pattern.FindStringSubmatch(requestMethod)
 	subsystem := parts[2]
 	method := parts[3]
-	sessionLessAPIs := [][2]string{
-		{"UserManagement", "Authorize"},
-		{"SubmissionsManagement", "ReceiveSubmissionsToGrade"},
-		{"SubmissionsManagement", "UpdateGraderOutput"},
-	}
+	sessionLessAPIs := Capabilities[Role_ROLE_UNAUTHORIZED]
 	for _, allowedApi := range sessionLessAPIs {
 		allowedSubsystem := allowedApi[0]
 		allowedMethod := allowedApi[1]
@@ -441,82 +359,25 @@ func (service *UserManagementService) CheckUserSession(ctx context.Context, requ
 		if err != nil {
 			return false
 		}
-		caps, err := service.GetUserCapabilities(user, nil)
-		if err != nil {
-			return false
-		}
-		foundCap := false
-		for _, c := range caps {
-			if c.Subsystem == subsystem && c.Method == method {
-				foundCap = true
-				break
+		if user.DefaultRole == Role_ROLE_ADMINISTRATOR {
+			return true
+		} else {
+			foundCap := false
+			caps := Capabilities[user.DefaultRole]
+			for _, capEntry := range caps {
+				capSubsystem := capEntry[0]
+				capMethod := capEntry[1]
+				if capSubsystem==subsystem && capMethod==method {
+					foundCap = true
+					break
+				}
 			}
+			return foundCap
 		}
-		return foundCap
 	}
 	return true
 }
 
-func (service *UserManagementService) GetUserCapabilities(user *User, course *Course) (caps []*Capability, err error) {
-	if user.DefaultRole == 0 && (course == nil || course.Id == 0) {
-		return []*Capability{}, nil // no default role and no enrollment -> can't do nothing
-	}
-	if course != nil && course.Id > 0 {
-		enrollQuery, err := service.DB.Query(
-			`select roles_id from enrollments where courses_id=$1 and users_id=$2`,
-			course.Id, user.Id)
-		if err != nil {
-			return nil, err
-		}
-		defer enrollQuery.Close()
-		if enrollQuery.Next() {
-			role := &Role{}
-			err = enrollQuery.Scan(&role.Id)
-			if err != nil {
-				return nil, err
-			}
-			caps, err = service.GetRoleCapabilities(role)
-		}
-	} else {
-		caps, err = service.GetRoleCapabilities(&Role{Id: user.DefaultRole})
-	}
-	return caps, err
-}
-
-func (service *UserManagementService) GetRoleCapabilities(role *Role) (caps []*Capability, err error) {
-	roleQuery, err := service.DB.Query(
-		`select capabilities_id from roles_capabilities where roles_id=$1`, role.Id)
-	if err != nil {
-		return nil, err
-	}
-	defer roleQuery.Close()
-
-	for roleQuery.Next() {
-		var capId int64
-		err = roleQuery.Scan(&capId)
-		if err != nil {
-			return nil, err
-		}
-		capQuery, err := service.DB.Query(
-			`select id, subsystem, method from capabilities where id=$1`, capId)
-		if err != nil {
-			return nil, err
-		}
-		if !capQuery.Next() {
-			capQuery.Close()
-			return nil, fmt.Errorf("capability with id=%d not found", capId)
-		}
-		cap := new(Capability)
-		err = capQuery.Scan(&cap.Id, &cap.Subsystem, &cap.Method)
-		if err != nil {
-			return nil, err
-		}
-		caps = append(caps, cap)
-		capQuery.Close()
-	}
-
-	return caps, nil
-}
 
 func (service *UserManagementService) GetUserBySession(session *Session) (user *User, err error) {
 	if session.UserId == 0 {
@@ -564,7 +425,7 @@ func (service *UserManagementService) GetUserBySession(session *Session) (user *
 			result.GroupName = groupName.String
 		}
 		if defaultRole.Valid {
-			result.DefaultRole = defaultRole.Int64
+			result.DefaultRole = Role(defaultRole.Int64)
 		}
 		return result, nil
 	} else {
@@ -584,41 +445,11 @@ func (service UserManagementService) mustEmbedUnimplementedUserManagementServer(
 	panic("implement me")
 }
 
-func (service *UserManagementService) GetDefaultRole(user *User) (role *Role, err error) {
-	var roleId int64
-	role = new(Role)
-	if user.DefaultRole > 0 {
-		roleId = user.DefaultRole
-	} else {
-		roleQ, err := service.DB.Query(`select default_role from users where id=$1`, user.Id)
-		if err != nil {
-			return nil, err
-		}
-		defer roleQ.Close()
-		if roleQ.Next() {
-			var defauleRole sql.NullInt64
-			err = roleQ.Scan(&defauleRole)
-			if err != nil {
-				return nil, err
-			}
-			if defauleRole.Valid {
-				roleId = defauleRole.Int64
-			}
-		}
-	}
-	if roleId > 0 {
-		role.Id = roleId
-		role.Capabilities, err = service.GetRoleCapabilities(role)
-		if err != nil {
-			return nil, err
-		}
-		err = service.DB.QueryRow(`select name from roles where id=$1`, roleId).Scan(&role.Name)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return role, nil
+func (service *UserManagementService) GetDefaultRole(user *User) (role Role, err error) {
+	err = service.DB.QueryRow(`select default_role from users where id=$1`, user.Id).Scan(&role)
+	return role, err
 }
+
 
 func NewUserManagementService(parent *Services) *UserManagementService {
 	result := new(UserManagementService)

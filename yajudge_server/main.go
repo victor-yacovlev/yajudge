@@ -168,7 +168,6 @@ func InitializeEmptyDatabase(config *YajudgeServerConfig) error {
 		return err
 	}
 	rpcServices.CreateEmptyDatabase()
-	rpcServices.CreateStandardRoles()
 	return nil
 }
 
