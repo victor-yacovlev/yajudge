@@ -154,15 +154,22 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 			continue
 		}
 		fieldType := field.Type
-		if fieldType.Kind() == reflect.Int64 {
-			intVal, isInt := jsonValue.(int64)
+		if fieldType.Kind() == reflect.Int64 || fieldType.Kind() == reflect.Int32 {
+			int64Val, isInt64 := jsonValue.(int64)
 			floatVal, isFloat := jsonValue.(float64)
-			if isInt {
-				fieldVal = reflect.ValueOf(intVal)
+			var intVal int64
+			if isInt64 {
+				intVal = int64Val
 			} else if isFloat {
-				fieldVal = reflect.ValueOf(int64(floatVal))
+				intVal = int64(floatVal)
 			} else {
-				return res, fmt.Errorf("can't convert '%v' to int64 for field '%s'", jsonValue, jsonFieldName)
+				return res, fmt.Errorf("can't convert '%v' to int for field '%s'", jsonValue, jsonFieldName)
+			}
+			if fieldType.Kind() == reflect.Int64 {
+				fieldVal = reflect.ValueOf(intVal)
+			} else {
+				int32Val := int32(intVal)
+				fieldVal = reflect.ValueOf(int32Val)
 			}
 		} else if fieldType.Kind() == reflect.Float64 {
 			floatVal, isFloat := jsonValue.(float64)
@@ -186,7 +193,17 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 				return res, fmt.Errorf("can't convert '%v' to bool for field '%s'", jsonValue, jsonFieldName)
 			}
 		}
-		res.Elem().Field(i).Set(fieldVal)
+		structField := res.Elem().Field(i)
+		structFieldType := structField.Type()
+		fieldValType := fieldVal.Type()
+		if structFieldType.Name() != fieldValType.Name() && fieldValType.Name()=="int32" {
+			// some dirty hack for enum values
+			enumValue := reflect.New(structFieldType).Elem()
+			enumValue.SetInt(fieldVal.Int())
+			structField.Set(enumValue)
+		} else {
+			structField.Set(fieldVal)
+		}
 	}
 	return
 }
