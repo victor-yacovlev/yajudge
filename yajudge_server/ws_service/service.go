@@ -154,7 +154,8 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 			continue
 		}
 		fieldType := field.Type
-		if fieldType.Kind() == reflect.Int64 || fieldType.Kind() == reflect.Int32 {
+		fieldKind := fieldType.Kind()
+		if fieldKind == reflect.Int64 || fieldKind == reflect.Int32 {
 			int64Val, isInt64 := jsonValue.(int64)
 			floatVal, isFloat := jsonValue.(float64)
 			var intVal int64
@@ -165,32 +166,44 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to int for field '%s'", jsonValue, jsonFieldName)
 			}
-			if fieldType.Kind() == reflect.Int64 {
+			if fieldKind == reflect.Int64 {
 				fieldVal = reflect.ValueOf(intVal)
 			} else {
 				int32Val := int32(intVal)
 				fieldVal = reflect.ValueOf(int32Val)
 			}
-		} else if fieldType.Kind() == reflect.Float64 {
+		} else if fieldKind == reflect.Float64 {
 			floatVal, isFloat := jsonValue.(float64)
 			if isFloat {
 				fieldVal = reflect.ValueOf(floatVal)
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to float64 for field '%s'", jsonValue, jsonFieldName)
 			}
-		} else if fieldType.Kind() == reflect.String {
+		} else if fieldKind == reflect.String {
 			strVal, isStr := jsonValue.(string)
 			if isStr {
 				fieldVal = reflect.ValueOf(strVal)
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to string for field '%s'", jsonValue, jsonFieldName)
 			}
-		} else if fieldType.Kind() == reflect.Bool {
+		} else if fieldKind == reflect.Bool {
 			boolVal, isBool := jsonValue.(bool)
 			if isBool {
 				fieldVal = reflect.ValueOf(boolVal)
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to bool for field '%s'", jsonValue, jsonFieldName)
+			}
+		} else if fieldKind == reflect.Ptr {
+			fieldTargetType := fieldType.Elem()
+			mapVal, isMap := jsonValue.(map[string]interface{})
+			if isMap {
+				fieldVal, err = ArgumentMapToValue(fieldTargetType, mapVal)
+				if err != nil {
+					return res, err
+				}
+			} else {
+				return res, fmt.Errorf("can't convert '%v' to '%s' for field '%s'",
+					jsonValue, fieldTargetType.Name(), jsonFieldName)
 			}
 		}
 		structField := res.Elem().Field(i)
