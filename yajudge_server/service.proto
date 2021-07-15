@@ -250,6 +250,9 @@ service UserManagement {
   rpc GetUsers(UsersFilter) returns (UsersList) {}
   rpc SetUserDefaultRole(UserRole) returns (UserRole) {}
   rpc CreateOrUpdateUser(User) returns (User) {}
+  rpc BatchCreateStudents(UsersList) returns (UsersList) {}  // returns same users with ID's set
+  rpc BatchDeleteUsers(UsersList) returns (Nothing) {}
+  rpc DeleteUser(User) returns (Nothing) {}
   rpc ResetUserPassword(User) returns (User) {}
   rpc ChangePassword(User) returns (User) {}
 }

@@ -39,17 +39,22 @@ type UserManagementService struct {
 	DB 				*sql.DB
 }
 
+func (service *UserManagementService) GenerateRandomPassword() (password string) {
+	const alphabet = "01234567abcdef"
+	password = ""
+	for i := 0; i < 8; i++ {
+		runeNum := rand.Int31n(int32(len(alphabet) - 1))
+		rune := alphabet[runeNum]
+		password += string(rune)
+	}
+	return password
+}
+
 func (service *UserManagementService) ResetUserPassword(ctx context.Context, user *User) (*User, error) {
 	if user.Id == 0 || user.Password == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "user_id and password required")
 	}
-	const alphabet = "01234567abcdef"
-	newPass := "="
-	for i := 0; i < 8; i++ {
-		runeNum := rand.Int31n(int32(len(alphabet) - 1))
-		rune := alphabet[runeNum]
-		newPass += string(rune)
-	}
+	newPass := "=" + service.GenerateRandomPassword()
 	_, err := service.DB.Exec(`update users set password=$1 where id=$2`, newPass, user.Id)
 	if err != nil {
 		return nil, err
@@ -79,6 +84,48 @@ func (service *UserManagementService) ChangePassword(ctx context.Context, user *
 	query := `update users set password=$1 where id=$2`
 	_, err = service.DB.Query(query, newPassword, currentUser.Id)
 	return currentUser, err
+}
+
+func (service *UserManagementService) BatchCreateStudents(ctx context.Context, usersList *UsersList) (res *UsersList, err error) {
+	res = usersList
+	err = nil
+	for index, user := range usersList.Users {
+		user.Password = service.GenerateRandomPassword()
+		user, err = service.CreateOrUpdateUser(ctx, user)
+		if err != nil {
+			err = fmt.Errorf("while creating '%s' '%s': %s'", user.LastName, user.FirstName, err.Error());
+			return
+		}
+		user.DefaultRole = Role_ROLE_STUDENT
+		_, err = service.SetUserDefaultRole(ctx, &UserRole{User: user, Role: user.DefaultRole})
+		if err != nil {
+			err = fmt.Errorf("while creating '%s' '%s': %s'", user.LastName, user.FirstName, err.Error());
+			return
+		}
+		res.Users[index] = user
+	}
+	return
+}
+
+func (service *UserManagementService) BatchDeleteUsers(ctx context.Context, usersList *UsersList) (res *Nothing, err error) {
+	for _, user := range usersList.Users {
+		_, err = service.DeleteUser(ctx, user)
+		if err != nil {
+			return
+		}
+	}
+	return &Nothing{}, nil
+}
+
+func (service *UserManagementService) DeleteUser(ctx context.Context, user *User) (res *Nothing, err error) {
+	if user.Id==0 {
+		return nil, status.Errorf(codes.InvalidArgument, "user id required")
+	}
+	_, err = service.DB.Exec(`delete from users where id=$1`, user.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &Nothing{}, nil
 }
 
 func (service *UserManagementService) CreateOrUpdateUser(ctx context.Context, user *User) (res *User, err error) {

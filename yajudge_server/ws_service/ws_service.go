@@ -171,13 +171,18 @@ func ToNonEmptyjson(s interface{}) (res string, err error) {
 		}
 		res += "\"" + jsonKey + "\": "
 		if field.Type().Kind() == reflect.Struct || field.Type().Kind() == reflect.Interface {
-			var valueToSave reflect.Value
-			if field.IsValid() {
-				valueToSave = field
+			var valueToSave interface{}
+			if field.IsValid() && field.Interface()!=nil {
+				valueToSave = field.Interface()
 			} else {
-				valueToSave = reflect.New(field.Type()).Elem()
+				valueToSave = reflect.New(field.Type()).Interface()
 			}
-			fieldData, err := ToNonEmptyjson(valueToSave.Interface())
+			var fieldData string
+			if valueToSave == nil {
+				fieldData = "null";
+			} else {
+				fieldData, err = ToNonEmptyjson(valueToSave)
+			}
 			if err != nil {
 				return "", err
 			}
@@ -277,6 +282,28 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 				}
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to '%s' for field '%s'",
+					jsonValue, fieldTargetType.Name(), jsonFieldName)
+			}
+		} else if fieldKind == reflect.Slice {
+			sliceVal, isSlice := jsonValue.([]interface{})
+			fieldTargetType := fieldType.Elem()
+			if fieldTargetType.Kind() == reflect.Ptr {
+				fieldTargetType = fieldTargetType.Elem()
+			}
+			if isSlice {
+				itemsCount := len(sliceVal)
+				fieldVal = reflect.MakeSlice(fieldType, itemsCount, itemsCount)
+				for index:=0; index<itemsCount; index++ {
+					jsonItem := sliceVal[index]
+					jsonItemAsMessage := jsonItem.(map[string]interface{})
+					itemVal, err := ArgumentMapToValue(fieldTargetType, jsonItemAsMessage)
+					if err != nil {
+						return res, err
+					}
+					fieldVal.Index(index).Set(itemVal)
+				}
+			} else {
+				return res, fmt.Errorf("can't convert '%v' to '[]%s' for field '%s'",
 					jsonValue, fieldTargetType.Name(), jsonFieldName)
 			}
 		}
