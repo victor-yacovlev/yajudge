@@ -185,6 +185,11 @@ func (service *UserManagementService) CreateOrUpdateUser(ctx context.Context, us
 		values = append(values, user.GroupName)
 		res.GroupName = user.GroupName
 	}
+	if user.DefaultRole != Role_ROLE_ANY {
+		fields = append(fields, "default_role")
+		values = append(values, user.DefaultRole)
+		res.DefaultRole = user.DefaultRole
+	}
 
 	sets := ""
 	placeholders := ""
@@ -211,13 +216,50 @@ func (service *UserManagementService) GetUsers(ctx context.Context, filter *User
 
 	// Important note: this might work slow because we will not use SQL-based filtering
 
+	if filter.User != nil && filter.User.Id > 0 {
+		// return exact one user
+		query := `select first_name,last_name,mid_name,group_name,email,password,default_role,disabled from users where id=$1`
+
+		row := service.DB.QueryRow(query, filter.User.Id)
+		user := User{Id: filter.User.Id}
+		var midName sql.NullString
+		var email sql.NullString
+		var groupName sql.NullString
+		var defaultRole sql.NullInt64
+		err := row.Scan(&user.FirstName, &user.LastName, &midName,
+			&groupName, &email, &user.Password, &defaultRole, &user.Disabled)
+		if err != nil {
+			return nil, err
+		}
+		if midName.Valid {
+			user.MidName = midName.String
+		}
+		if email.Valid {
+			user.Email = email.String
+		}
+		if groupName.Valid {
+			user.GroupName = groupName.String
+		}
+		if defaultRole.Valid {
+			user.DefaultRole = Role(defaultRole.Int64)
+		}
+		if strings.HasPrefix(user.Password, "=") {
+			user.Password = user.Password[1:]
+		} else {
+			user.Password = "" // do not show user-changed password
+		}
+		res := &UsersList{Users: make([]*User, 1)}
+		res.Users[0] = &user
+		return res, nil
+	}
+
 	if filter.Course != nil && filter.Course.Id > 0 {
 		// todo
 	} else {
 		filter.Course = nil
 	}
 
-	query := `select id,first_name,last_name,mid_name,group_name,email,default_role,disabled from users`
+	query := `select id,first_name,last_name,mid_name,group_name,email,default_role,disabled from users order by default_role desc,group_name,last_name,first_name`
 	q, err := service.DB.Query(query)
 	if err != nil {
 		return nil, err
