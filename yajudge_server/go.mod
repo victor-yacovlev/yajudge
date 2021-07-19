@@ -8,8 +8,7 @@ replace (
 )
 
 require (
-	gopkg.in/gcfg.v1 v1.2.3
-	gopkg.in/warnings.v0 v0.1.2 // indirect
+	gopkg.in/yaml.v2 v2.4.0
 	yajudge/service v0.0.0-00010101000000-000000000000
 	yajudge/ws_service v0.0.0-00010101000000-000000000000
 )

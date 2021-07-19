@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"gopkg.in/gcfg.v1"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"yajudge/service"
 	"yajudge/ws_service"
 )
@@ -41,41 +43,40 @@ func main() {
 }
 
 type DatabaseConfig struct {
-	Host				string
-	Port				uint16
-	Name				string
-	User				string
-	Password			string
+	Host				string `yaml:"host"`
+	Port				uint16 `yaml:"port"`
+	Name				string `yaml:"name"`
+	User				string `yaml:"user"`
+	Password			string `yaml:"password"`
 }
 
 type RpcConfig struct {
-	ListenAddr			string
-	PublicAuthToken		string
-	PrivateAuthToken	string
+	Host				string `yaml:"host"`
+	Port				uint16 `yaml:"port"`
+	PublicToken			string `yaml:"public_token"`
+	PrivateToken		string `yaml:"private_token"`
 }
 
-type WebConfig struct {
-	ListenAddr		string
-	ContentRootDir	string
-	ContentPrefix	string
-	ApiPrefix		string
-}
-
-type LogConfig struct {
-	ErrorFile		string
-	AccessFile		string
-	RpcFile			string
+type Web struct {
+	Host			string `yaml:"host"`
+	Port			uint16 `yaml:"port"`
+	Root			string `yaml:"root"`
+	StaticDir		string `yaml:"static_dir"`
+	WsApi			string `yaml:"ws_api"`
 }
 
 type YajudgeServerConfig struct {
-	Database		DatabaseConfig
-	Rpc				RpcConfig
-	Web				WebConfig
-	Log				LogConfig
+	Database		DatabaseConfig `yaml:"database"`
+	Rpc				RpcConfig `yaml:"rpc"`
+	Web				Web `yaml:"web"`
 }
 
 func ParseConfig(fileName string) (*YajudgeServerConfig, error) {
 	_, err := os.Stat(fileName)
+	if err != nil {
+		return nil, err
+	}
+	confData, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -85,18 +86,17 @@ func ParseConfig(fileName string) (*YajudgeServerConfig, error) {
 			Port: 5432,
 		},
 		Rpc:      RpcConfig{
-			ListenAddr: ":9095",
+			Host: "localhost",
+			Port: 9095,
 		},
-		Web:      WebConfig{
-			ListenAddr: ":8080",
-			ContentPrefix: "/",
-			ApiPrefix: "/api-ws",
-		},
-		Log: 	  LogConfig{
-
+		Web:      Web{
+			Host: "localhost",
+			Port: 8080,
+			Root: "/",
+			WsApi: "/api-ws",
 		},
 	}
-	err = gcfg.ReadFileInto(conf, fileName)
+	err = yaml.Unmarshal(confData, &conf)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,8 @@ func Serve(config *YajudgeServerConfig) error {
 	ctx, finish := context.WithCancel(context.Background())
 	defer finish()
 	mux := http.DefaultServeMux
-	srv := http.Server { Handler: mux, Addr: config.Web.ListenAddr }
+	listenAddr := config.Web.Host + ":" + strconv.Itoa(int(config.Web.Port))
+	srv := http.Server { Handler: mux, Addr: listenAddr }
 	defer srv.Shutdown(context.Background())
 
 	signalsChan := make(chan interface{})
@@ -119,8 +120,11 @@ func Serve(config *YajudgeServerConfig) error {
 	}()
 	defer finish()
 
-	rpcServices, err := core_service.StartServices(ctx, config.Rpc.ListenAddr,
-		config.Rpc.PublicAuthToken, config.Rpc.PrivateAuthToken, core_service.DatabaseProperties{
+	rpcAddr := config.Rpc.Host + ":" + strconv.Itoa(int(config.Rpc.Port))
+	rpcServices, err := core_service.StartServices(
+		ctx,
+		rpcAddr,
+		config.Rpc.PublicToken, config.Rpc.PrivateToken, core_service.DatabaseProperties{
 			Engine:   "postgres",
 			Host:     config.Database.Host,
 			Port:     config.Database.Port,
@@ -134,14 +138,17 @@ func Serve(config *YajudgeServerConfig) error {
 		return err
 	}
 
-	ws, err := ws_service.StartWebsocketHttpHandler(config.Rpc.PublicAuthToken, config.Rpc.ListenAddr)
+	ws, err := ws_service.StartWebsocketHttpHandler(
+		config.Rpc.PublicToken,
+		rpcAddr,
+		)
 	if err != nil {
 		return err
 	}
 
-	mux.Handle(config.Web.ApiPrefix, ws)
-	mux.Handle(config.Web.ContentPrefix,
-		http.StripPrefix(config.Web.ContentPrefix, http.FileServer(http.Dir(config.Web.ContentRootDir))))
+	mux.Handle(config.Web.WsApi, ws)
+	mux.Handle(config.Web.Root,
+		http.StripPrefix(config.Web.Root, http.FileServer(http.Dir(config.Web.StaticDir))))
 
 	err = srv.ListenAndServe();
 	if err != nil {
@@ -154,8 +161,10 @@ func Serve(config *YajudgeServerConfig) error {
 func InitializeEmptyDatabase(config *YajudgeServerConfig) error {
 	ctx, finish := context.WithCancel(context.Background())
 	defer finish()
-	rpcServices, err := core_service.StartServices(ctx, config.Rpc.ListenAddr,
-		config.Rpc.PublicAuthToken, config.Rpc.PrivateAuthToken, core_service.DatabaseProperties{
+	rpcServices, err := core_service.StartServices(
+		ctx,
+		config.Rpc.Host + ":" + string(config.Rpc.Port),
+		config.Rpc.PublicToken, config.Rpc.PrivateToken, core_service.DatabaseProperties{
 			Engine:   "postgres",
 			Host:     config.Database.Host,
 			Port:     config.Database.Port,

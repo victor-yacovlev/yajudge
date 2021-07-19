@@ -1,0 +1,18 @@
+database:
+  host: localhost
+  port: 5432
+  user: test
+  name: yajudge_devel
+  password: qwerty
+
+web:
+  host: localhost
+  port: 8080
+  root: /
+  ws_api: /api-ws
+
+rpc:
+  host: localhost
+  port: 9095
+  public_token: abrakadabra
+  private_token: zxcvbnmsdfsd
