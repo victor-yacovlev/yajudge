@@ -2,10 +2,6 @@ drop table if exists users cascade;
 drop table if exists sessions cascade;
 drop table if exists courses cascade;
 drop table if exists enrollments cascade;
-drop table if exists sections cascade;
-drop table if exists lessons cascade;
-drop table if exists problems cascade;
-drop table if exists text_readings cascade;
 drop table if exists review_comments cascade;
 drop table if exists code_reviews cascade;
 drop table if exists submission_files cascade;
@@ -41,10 +37,11 @@ create table sessions
 
 create table courses
 (
-    id   serial      not null
+    id          serial       not null
         constraint courses_pk
             primary key,
-    name varchar(50) not null
+    name        varchar(50)  not null,
+    course_data varchar(50) not null
 );
 
 create table enrollments
@@ -61,70 +58,6 @@ create table enrollments
     role   integer not null
 );
 
-create table sections
-(
-    id         integer          not null
-        constraint sections_pk
-            primary key,
-    name       varchar(100),
-    courses_id integer          not null
-        constraint sections_courses_id_fk
-            references courses,
-    show_after_id integer not null default 999
-);
-
-create table lessons
-(
-    id            integer not null
-        constraint lessons_pk
-            primary key,
-    name       varchar(100),
-    sections_id   integer not null
-        constraint lessons_sections_id_fk
-            references sections
-        constraint lessons_sections_id_fk_2
-            references sections,
-    open_date     timestamp,
-    soft_deadline timestamp,
-    hard_deadline timestamp,
-    show_after_id integer not null default 999
-);
-
-create table problems
-(
-    id int not null
-        constraint problems_pk
-            primary key,
-    lessons_id int not null
-        constraint problems_lessons_id_fk
-            references lessons
-            on delete cascade,
-    name int,
-    show_after_id int default 999 not null,
-    problem_data_id varchar not null,
-    open_date timestamp,
-    soft_deadline timestamp,
-    hard_deadline timestamp,
-    blocks_positive_mark boolean default false not null,
-    blocks_next_problem boolean default false not null,
-    accept_partial_tests boolean default false not null,
-    skip_solution_defence boolean default false not null,
-    skip_code_review boolean default false not null
-);
-
-create table text_readings
-(
-    id           integer                                         not null
-        constraint text_readings_pk
-            primary key,
-    title        varchar                                         not null,
-    content_type varchar default 'text/plain'::character varying not null,
-    data         text,
-    external_url varchar,
-    lessons_id   integer                                         not null
-        constraint text_readings_lessons_id_fk
-            references lessons
-);
 
 create table submissions
 (

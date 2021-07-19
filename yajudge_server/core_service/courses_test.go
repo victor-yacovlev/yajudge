@@ -45,7 +45,11 @@ func TestCourseCreation(t *testing.T) {
 	defer api.Finish()
 
 	// 1 Create new course
-	course1, err := api.Courses.CreateOrUpdateCourse(api.AdminContext, &Course{Name: "Курс 1"})
+	course1, err := api.Courses.CreateOrUpdateCourse(
+		api.AdminContext, &Course{
+			Name: "Курс 1",
+			CourseData: &CourseData{Id: "test1"},
+		})
 	if err != nil {
 		t.Fatalf("1: can't create course: %v", err)
 	}
@@ -96,7 +100,11 @@ func TestCourseEnrollment(t *testing.T) {
 	defer api.Finish()
 
 	// 1 Create new course
-	course1, err := api.Courses.CreateOrUpdateCourse(api.AdminContext, &Course{Name: "Курс 1"})
+	course1, err := api.Courses.CreateOrUpdateCourse(
+		api.AdminContext, &Course{
+			Name: "Курс 1",
+			CourseData: &CourseData{Id: "test1"},
+		})
 	if err != nil {
 		t.Fatalf("1: can't create course: %v", err)
 	}
@@ -152,7 +160,11 @@ func TestCloneAndDeleteCourse(t *testing.T) {
 	defer api.Finish()
 
 	// 1 Create new course
-	course1, err := api.Courses.CreateOrUpdateCourse(api.AdminContext, &Course{Name: "Курс 1"})
+	course1, err := api.Courses.CreateOrUpdateCourse(
+		api.AdminContext, &Course{
+			Name: "Курс 1",
+			CourseData: &CourseData{Id: "test1"},
+		})
 	if err != nil {
 		t.Fatalf("1: can't create course: %v", err)
 	}

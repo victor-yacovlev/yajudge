@@ -24,28 +24,6 @@ func (service *CourseManagementService) DeleteCourse(ctx context.Context, course
 	return &Nothing{}, nil
 }
 
-func (service *CourseManagementService) DeleteSection(ctx context.Context, section *Section) (*Nothing, error) {
-	if section.Id==0 {
-		return nil, status.Errorf(codes.InvalidArgument, "section id required")
-	}
-	_, err := service.DB.Exec(`delete from sections where id=$1`, section.Id)
-	if err != nil {
-		return nil, err
-	}
-	return &Nothing{}, nil
-}
-
-func (service *CourseManagementService) DeleteLesson(ctx context.Context, lesson *Lesson) (*Nothing, error) {
-	if lesson.Id==0 {
-		return nil, status.Errorf(codes.InvalidArgument, "lesson id required")
-	}
-	_, err := service.DB.Exec(`delete from lessons where id=$1`, lesson.Id)
-	if err != nil {
-		return nil, err
-	}
-	return &Nothing{}, nil
-}
-
 func (service *CourseManagementService) GetUserEnrollments(user *User) (res []*Enrolment, err error) {
 	if user.Id == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "no user id specified")
@@ -192,49 +170,17 @@ func (service *CourseManagementService) GetCourses(ctx context.Context, filter *
 	return res, err
 }
 
-func (service *CourseManagementService) CreateOrUpdateSection(ctx context.Context, section *Section) (res *Section, err error) {
-	res = new(Section)
-	fields := make([]string, 0, 10)
-	vals := make([]interface{}, 0, 10)
-	fields = append(fields, "name")
-	vals = append(vals, section.Name)
-	fields = append(fields, "show_after_id")
-	vals = append(vals, section.ShowAfterId)
-	if section.OpenDate != 0 {
-		fields = append(fields, "open_date")
-		vals = append(vals, section.OpenDate)
-	}
-	if section.OpenDate != 0 {
-		fields = append(fields, "soft_deadline")
-		vals = append(vals, section.SoftDeadline)
-	}
-	if section.OpenDate != 0 {
-		fields = append(fields, "hard_deadline")
-		vals = append(vals, section.HardDeadline)
-	}
-	if section.Id > 0 {
-		err = QueryForTableItemUpdate(service.DB, "sections", section.Id, fields, vals)
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
-	} else {
-		res.Id, err = QueryForTableItemInsert(service.DB, "sections", fields, vals)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
 
 func (service *CourseManagementService) CloneCourse(ctx context.Context, course *Course) (res *Course, err error) {
 	// todo make deep contents copy
 	if course.Id==0 {
 		return nil, status.Errorf(codes.InvalidArgument, "course id required")
 	}
+	if course.CourseData == nil {
+		course.CourseData = &CourseData{}
+	}
 	if course.Name=="" {
-		err = service.DB.QueryRow(`select name from courses where id=$1`, course.Id).Scan(&course.Name)
+		err = service.DB.QueryRow(`select name,course_data from courses where id=$1`, course.Id).Scan(&course.Name, &course.CourseData.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -244,141 +190,13 @@ func (service *CourseManagementService) CloneCourse(ctx context.Context, course 
 		return nil, err
 	}
 	res = &Course{Name: newName}
-	err = service.DB.QueryRow(`insert into courses(name) values ($1) returning id`, newName).Scan(&res.Id)
+	err = service.DB.QueryRow(`insert into courses(name,course_data) values ($1,$2) returning id`, newName, course.CourseData.Id).Scan(&res.Id)
 	if err != nil {
 		return nil, err
 	}
 	return res, err
 }
 
-func (service *CourseManagementService) CreateOrUpdateLesson(ctx context.Context, lesson *Lesson) (res *Lesson, err error) {
-	res = new(Lesson)
-	fields := make([]string, 0, 10)
-	vals := make([]interface{}, 0, 10)
-	fields = append(fields, "name")
-	vals = append(vals, lesson.Name)
-	fields = append(fields, "show_after_id")
-	vals = append(vals, lesson.ShowAfterId)
-	if lesson.OpenDate != 0 {
-		fields = append(fields, "open_date")
-		vals = append(vals, lesson.OpenDate)
-	}
-	if lesson.OpenDate != 0 {
-		fields = append(fields, "soft_deadline")
-		vals = append(vals, lesson.SoftDeadline)
-	}
-	if lesson.OpenDate != 0 {
-		fields = append(fields, "hard_deadline")
-		vals = append(vals, lesson.HardDeadline)
-	}
-	if lesson.Id > 0 {
-		err = QueryForTableItemUpdate(service.DB, "lessons", lesson.Id, fields, vals)
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
-	} else {
-		res.Id, err = QueryForTableItemInsert(service.DB, "lessons", fields, vals)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (service *CourseManagementService) CreateOrUpdateTextReading(ctx context.Context, reading *TextReading) (res *TextReading, err error) {
-	if reading.Id == 0 {
-		if reading.LessonsId == 0 {
-			return nil, status.Errorf(codes.InvalidArgument, "lesson id is required")
-		}
-		if reading.Title == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "title is required")
-		}
-		if reading.ContentType == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "content-type is required")
-		}
-		if reading.Data=="" && reading.ExternalUrl=="" {
-			return nil, status.Errorf(codes.InvalidArgument, "content or external URL is required")
-		}
-	}
-	res = new(TextReading)
-	fields := make([]string, 0, 10)
-	vals := make([]interface{}, 0, 10)
-	if reading.Title!="" {
-		fields = append(fields, "title")
-		vals = append(vals, reading.Title)
-	}
-	if reading.ContentType!="" {
-		fields = append(fields, "content_type")
-		vals = append(vals, reading.ContentType)
-	}
-	if reading.Data!="" {
-		fields = append(fields, "data")
-		vals = append(vals, reading.Data)
-	}
-	if reading.Data!="" {
-		fields = append(fields, "external_url")
-		vals = append(vals, reading.ExternalUrl)
-	}
-	if reading.Id > 0 {
-		err = QueryForTableItemUpdate(service.DB, "text_readings", reading.Id, fields, vals)
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
-	} else {
-		res.Id, err = QueryForTableItemInsert(service.DB, "text_readings", fields, vals)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (service *CourseManagementService) CreateOrUpdateProblem(ctx context.Context, problem *Problem) (res *Problem, err error) {
-	res = new(Problem)
-	fields := make([]string, 0, 10)
-	vals := make([]interface{}, 0, 10)
-	fields = append(fields, "name")
-	vals = append(vals, problem.Name)
-	fields = append(fields, "show_after_id")
-	vals = append(vals, problem.ShowAtferId)
-	if problem.OpenDate != 0 {
-		fields = append(fields, "open_date")
-		vals = append(vals, problem.OpenDate)
-	}
-	if problem.OpenDate != 0 {
-		fields = append(fields, "soft_deadline")
-		vals = append(vals, problem.SoftDeadline)
-	}
-	if problem.OpenDate != 0 {
-		fields = append(fields, "hard_deadline")
-		vals = append(vals, problem.HardDeadline)
-	}
-	fields = append(fields, "blocks_positive_mark")
-	vals = append(vals, problem.BlocksPositiveMark)
-	fields = append(fields, "blocks_next_problem")
-	vals = append(vals, problem.BlocksNextProblem)
-	fields = append(fields, "accept_partial_tests")
-	vals = append(vals, problem.AcceptPartialTests)
-	fields = append(fields, "skip_solution_defence")
-	vals = append(vals, problem.SkipSolutionDefence)
-	fields = append(fields, "skip_code_review")
-	vals = append(vals, problem.SkipCodeReview)
-	if problem.Id > 0 {
-		err = QueryForTableItemUpdate(service.DB, "problems", problem.Id, fields, vals)
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
-	} else {
-		res.Id, err = QueryForTableItemInsert(service.DB, "problems", fields, vals)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
 
 func (service *CourseManagementService) CreateOrUpdateCourse(ctx context.Context, course *Course) (res *Course, err error) {
 	var query string
@@ -391,8 +209,8 @@ func (service *CourseManagementService) CreateOrUpdateCourse(ctx context.Context
 		}
 		return res, nil
 	} else {
-		query = `insert into courses(name) values ($1) returning id`
-		err := service.DB.QueryRow(query, course.Name).Scan(&res.Id)
+		query = `insert into courses(name,course_data) values ($1,$2) returning id`
+		err := service.DB.QueryRow(query, course.Name, course.CourseData.Id).Scan(&res.Id)
 		if err != nil {
 			return nil, err
 		}

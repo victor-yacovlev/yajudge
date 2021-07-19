@@ -194,7 +194,7 @@ message Submission {
   string              grader_output = 6;  // stdout output by testing system
   string              grader_errors = 7;  // stderr output by testing system
   CodeReview          code_review   = 8;
-  ProblemData             problem       = 9;  // just references Problem.id in most cases, but contains full data for grader
+  ProblemData         problem       = 9;  // just references Problem.id in most cases, but contains full data for grader
 }
 
 message Solution {
@@ -208,7 +208,7 @@ message Lesson {
   int64                 sections_id   = 2;  // required for creating new lesson in some section
   string                name          = 3;
   repeated  TextReading readings      = 4;
-  repeated  ProblemData     problems      = 5;
+  repeated  ProblemData problems      = 5;
   int64                 open_date     = 6;  // 0 for inherit from outer section
   int64                 soft_deadline = 7;  // 0 for inherit from outer section
   int64                 hard_deadline = 8;  // 0 for inherit from outer section
@@ -220,16 +220,23 @@ message Section {
   int64                 courses_id    = 2;  // required for creating new section in some course
   string                name          = 3;
   repeated Lesson       lessons       = 4;
-  int64                 open_date     = 5;
+  int64                 open_date     = 5;  // all dates are relative to course run start datetime
   int64                 soft_deadline = 6;
   int64                 hard_deadline = 7;
   int64                 show_after_id = 8;  // determine display order: 0 for first lesson, 999 for undefined
 }
 
+// Courses are stored in filesystem directories but not in database.
+// ID is a string path after the courses root directory.
+message CourseData {
+  string            id          = 1;
+}
+
 message Course {
   int64             id          = 1;
   string            name        = 2;
-  repeated Section  sections    = 3;
+  CourseData        courseData  = 3;
+  int64             courseStart = 4;  // UTC timestamp for course start, other times are relative
 }
 
 message Enrolment {
@@ -282,12 +289,6 @@ service CourseManagement {
   rpc EnrollUser(Enroll) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
   rpc DeleteCourse(Course) returns (Nothing) {}
-  rpc CreateOrUpdateSection(Section) returns (Section) {}
-  rpc DeleteSection(Section) returns (Nothing) {}
-  rpc DeleteLesson(Lesson) returns (Nothing) {}
-  rpc CreateOrUpdateLesson(Lesson) returns (Lesson) {}
-  rpc CreateOrUpdateTextReading(TextReading) returns (TextReading) {}
-  rpc CreateOrUpdateProblem(Problem) returns (Problem) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
 }
 
