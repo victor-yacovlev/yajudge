@@ -1,6 +1,8 @@
 package ws_service
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -85,6 +88,41 @@ func (service *WsService) RegisterService(name string, srv interface{}) {
 
 var upgrader = websocket.Upgrader{}
 
+func decompress(src []byte) (out []byte, err error) {
+	reader, err := gzip.NewReader(bytes.NewReader(src))
+	if err != nil {
+		return nil, err
+	}
+	const bufSize = 10
+	buffer := make([]byte, bufSize)
+	result := make([]byte, 0)
+	n := 0
+	for {
+		n, err = reader.Read(buffer)
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		if n > 0 {
+			result = append(result, buffer[0:n]...)
+		}
+		if err == io.EOF {
+			break
+		}
+	}
+	return result, nil
+}
+
+func compress(src []byte) (out []byte, err error) {
+	var buf bytes.Buffer
+	writer, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	_, err = writer.Write(src)
+	if err != nil {
+		return nil, err
+	}
+	writer.Close()
+	return buf.Bytes(), nil
+}
+
 func (service *WsService) HandleWsConnection(ws *websocket.Conn) {
 	defer ws.Close()
 	working := true
@@ -104,7 +142,10 @@ func (service *WsService) HandleWsConnection(ws *websocket.Conn) {
 			}
 			ws.WriteMessage(websocket.TextMessage, response)
 		case websocket.BinaryMessage:
-			// TODO implement BSON message format
+			uncompressedRequest, _ := decompress(messageData)
+			response, _ := service.ProcessTextMessage(uncompressedRequest)
+			compressedResponse, _ := compress(response)
+			ws.WriteMessage(websocket.BinaryMessage, compressedResponse)
 		}
 	}
 }
