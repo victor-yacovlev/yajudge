@@ -51,12 +51,11 @@ message UsersList {
 }
 
 message TextReading {
-  int64       id          = 1;
-  int64       lessons_id  = 2;
+  string      id          = 1;
   string      title       = 3;
   string      content_type= 4;  // text/mardown by default
-  string      data        = 5;
-  string      external_url= 6;
+  string      data        = 5;  // encoded in base64 if content-type not starts with 'text/'
+  int64       time_to_read= 6;  // average time to read in seconds
 }
 
 message File {
@@ -127,16 +126,18 @@ message ProblemData {
   // These data structures are not stored in database, but attached to courses via Problem records
 
   string          id                            = 1;  // string, but not int! id is a relative path to the problem directory
-  string          statement_text                = 2;
-  string          statement_content_type        = 3;  // text/mardown by default
-  FileSet         statement_files               = 4;
-  FileSet         solution_files                = 5;  // fileset meta-information to be filled by solution
-  float           full_score_multiplier_propose = 6;  // 1.0 by default, >1 for hard problems, <1 for easy problems
-  GradingOptions  grading_options               = 7;
+  string          unique_id                     = 2;  // problem id to match previous years cheaters matching
+  string          statement_text                = 3;
+  string          statement_content_type        = 4;  // text/mardown by default or text/html for legacy statements
+  FileSet         statement_files               = 5;  // public files for students
+  FileSet         solution_files                = 6;  // fileset meta-information to be filled by solution
+  FileSet         grader_files                  = 7;  // private files for grading
+  float           full_score_multiplier_propose = 8;  // 1.0 by default, >1 for hard problems, <1 for easy problems
+  GradingOptions  grading_options               = 9;
 
   // This is problem property but not a problem usage in course/lesson property!
   // Cons: the problem solution might be demonstrated sometime in past at another course
-  bool            skip_plagiarism_check         = 8;
+  bool            skip_plagiarism_check         = 10;
 }
 
 message Problem {
@@ -199,44 +200,45 @@ message Submission {
 
 message Solution {
   int64                id      = 1;
-  ProblemData              problem = 2;  // must contain at least Problem.id
+  ProblemData          problem = 2;  // must contain at least Problem.id
   repeated Submission  history = 3;
 }
 
 message Lesson {
-  int64                 id            = 1;
-  int64                 sections_id   = 2;  // required for creating new lesson in some section
+  string                id            = 1;
   string                name          = 3;
-  repeated  TextReading readings      = 4;
-  repeated  ProblemData problems      = 5;
-  int64                 open_date     = 6;  // 0 for inherit from outer section
-  int64                 soft_deadline = 7;  // 0 for inherit from outer section
-  int64                 hard_deadline = 8;  // 0 for inherit from outer section
-  int64                 show_after_id = 9;  // determine display order: 0 for first lesson, 999 for undefined
+  string                description   = 4;
+  repeated  TextReading readings      = 5;
+  repeated  ProblemData problems      = 6;
+  int64                 open_date     = 7;  // 0 for inherit from outer section
+  int64                 soft_deadline = 8;  // 0 for inherit from outer section
+  int64                 hard_deadline = 9;  // 0 for inherit from outer section
 }
 
 message Section {
-  int64                 id            = 1;
-  int64                 courses_id    = 2;  // required for creating new section in some course
-  string                name          = 3;
+  string                id            = 1;
+  string                name          = 2;
+  string                description   = 3;
   repeated Lesson       lessons       = 4;
   int64                 open_date     = 5;  // all dates are relative to course run start datetime
   int64                 soft_deadline = 6;
   int64                 hard_deadline = 7;
-  int64                 show_after_id = 8;  // determine display order: 0 for first lesson, 999 for undefined
 }
 
 // Courses are stored in filesystem directories but not in database.
 // ID is a string path after the courses root directory.
 message CourseData {
   string            id          = 1;
+  string            description = 2;
+  repeated Section  sections    = 3;
 }
 
 message Course {
-  int64             id          = 1;
-  string            name        = 2;
-  CourseData        courseData  = 3;
-  int64             courseStart = 4;  // UTC timestamp for course start, other times are relative
+  int64             id            = 1;
+  string            name          = 2;
+  CourseData        course_data   = 3;
+  int64             course_start  = 4;  // UTC timestamp for course start, other times are relative
+  string            url_prefix    = 5;
 }
 
 message Enrolment {
@@ -284,12 +286,41 @@ message CoursesList {
   repeated CourseListEntry  courses = 1;
 }
 
+message CourseContentRequest {
+  string                course_data_id  = 1;
+  int64                 cached_timestamp= 2;
+}
+
+enum CourseContentStatus {
+  HAS_DATA        = 0;
+  NOT_CHANGED     = 1;
+}
+
+message CourseContentResponse {
+  string                course_data_id  = 1;
+  CourseContentStatus   status          = 2;
+  CourseData            data            = 3;
+  int64                 last_modified   = 4;
+}
+
+// message sent when user have read (scrolled) text reading
+// to mark reading 'passed' and estimate average reading time
+message TextReadingDone {
+  User        user      = 1;  // id only important
+  Course      course    = 2;  // id only important
+  Section     section   = 3;  // id only important
+  Lesson      lesson    = 4;  // id only important
+  TextReading reading   = 5;  // id only important
+  int64       time      = 6;  // in seconds from page load to leave
+}
+
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
   rpc EnrollUser(Enroll) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
   rpc DeleteCourse(Course) returns (Nothing) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
+  rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
 }
 
 message GraderProperties {

@@ -16,3 +16,7 @@ rpc:
   port: 9095
   public_token: abrakadabra
   private_token: zxcvbnmsdfsd
+
+locations:
+  courses_root: ./core_service/test_data/courses
+  web_static_root: ./yajudge_client/build/web

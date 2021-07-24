@@ -2,9 +2,7 @@ module yajudge/ws_service
 
 go 1.16
 
-replace (
-	yajudge/service => ../core_service
-)
+replace yajudge/service => ../core_service
 
 require (
 	github.com/gorilla/websocket v1.4.2

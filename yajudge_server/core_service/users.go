@@ -29,6 +29,7 @@ var Capabilities = map[Role][][2]string {
 		{"UserManagement", "GetProfile"},
 		{"UserManagement", "ChangePassword"},
 		{"CourseManagement", "GetCourses"},
+		{"CourseManagement", "GetCoursePublicContent"},
 		{"SubmissionsManagement", "ReceiveSubmissionsToGrade"},
 		{"SubmissionsManagement", "UpdateGraderOutput"},
 	},

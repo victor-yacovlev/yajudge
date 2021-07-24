@@ -114,7 +114,12 @@ func (services *Services) createAuthMiddlewares(genericAuthToken, gradersAuthTok
 	return result
 }
 
-func StartServices(ctx context.Context, listenAddress, genericAuthToken, gradersAuthToken string, dbProps DatabaseProperties) (res *Services, err error) {
+func StartServices(ctx context.Context,
+	listenAddress, genericAuthToken,
+	gradersAuthToken string,
+	dbProps DatabaseProperties,
+	coursesRoot string,
+	) (res *Services, err error) {
 
 	db, err := MakeDatabaseConnection(dbProps)
 	if err != nil {
@@ -124,7 +129,7 @@ func StartServices(ctx context.Context, listenAddress, genericAuthToken, graders
 	res = &Services{DB: db}
 
 	res.UserManagement = NewUserManagementService(res)
-	res.CourseManagement = NewCourseManagementService(res)
+	res.CourseManagement = NewCourseManagementService(res, coursesRoot)
 
 
 

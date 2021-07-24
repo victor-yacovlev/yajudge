@@ -57,7 +57,7 @@ type RpcConfig struct {
 	PrivateToken		string `yaml:"private_token"`
 }
 
-type Web struct {
+type WebConfig struct {
 	Host			string `yaml:"host"`
 	Port			uint16 `yaml:"port"`
 	Root			string `yaml:"root"`
@@ -65,10 +65,16 @@ type Web struct {
 	WsApi			string `yaml:"ws_api"`
 }
 
+type LocationsConfig struct {
+	CoursesRoot		string `yaml:"courses_root"`
+	WebStaticRoot	string `yaml:"web_static_root"`
+}
+
 type YajudgeServerConfig struct {
-	Database		DatabaseConfig `yaml:"database"`
-	Rpc				RpcConfig `yaml:"rpc"`
-	Web				Web `yaml:"web"`
+	Database  		DatabaseConfig  `yaml:"database"`
+	Rpc       		RpcConfig       `yaml:"rpc"`
+	Web       		WebConfig       `yaml:"web"`
+	Locations 		LocationsConfig `yaml:"locations"`
 }
 
 func ParseConfig(fileName string) (*YajudgeServerConfig, error) {
@@ -89,7 +95,7 @@ func ParseConfig(fileName string) (*YajudgeServerConfig, error) {
 			Host: "localhost",
 			Port: 9095,
 		},
-		Web:      Web{
+		Web:      WebConfig{
 			Host: "localhost",
 			Port: 8080,
 			Root: "/",
@@ -132,7 +138,9 @@ func Serve(config *YajudgeServerConfig) error {
 			Password: config.Database.Password,
 			DBName:   config.Database.Name,
 			SSLMode:  "disable",
-		})
+		},
+		config.Locations.CoursesRoot,
+	)
 	_ = rpcServices
 	if err != nil {
 		return err
@@ -172,7 +180,9 @@ func InitializeEmptyDatabase(config *YajudgeServerConfig) error {
 			Password: config.Database.Password,
 			DBName:   config.Database.Name,
 			SSLMode:  "disable",
-		})
+		},
+		config.Locations.CoursesRoot,
+	)
 	if err != nil {
 		return err
 	}

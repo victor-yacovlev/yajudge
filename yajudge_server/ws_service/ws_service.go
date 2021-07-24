@@ -38,6 +38,7 @@ type OutgoingMessage struct {
 	Result interface{}  `json:"result"`
 }
 
+
 type ClassMethod struct {
 	Name		string
 	Func		reflect.Value
@@ -211,7 +212,15 @@ func ToNonEmptyjson(s interface{}) (res string, err error) {
 			res += ", "
 		}
 		res += "\"" + jsonKey + "\": "
-		if field.Type().Kind() == reflect.Struct || field.Type().Kind() == reflect.Interface {
+		fieldKind := field.Type().Kind()
+		if fieldKind == reflect.Ptr {
+			if field.IsNil() {
+				field = reflect.New(field.Type())
+			}
+			field = field.Elem()
+			fieldKind = field.Type().Kind()
+		}
+		if fieldKind == reflect.Struct || fieldKind == reflect.Interface {
 			var valueToSave interface{}
 			if field.IsValid() && field.Interface()!=nil {
 				valueToSave = field.Interface()
