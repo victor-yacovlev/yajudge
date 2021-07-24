@@ -192,12 +192,14 @@ func InitializeEmptyDatabase(config *YajudgeServerConfig) error {
 
 func FindConfigFile() (res string) {
 	binDir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	homeDir := os.Getenv("HOME")
 	variants := []string{
-		binDir + "/yajudge-server.ini",
-		"/etc/yajudge-server.ini",
+		binDir + "/server.yaml",
+		homeDir + "/.config/yajudge/yajudge/server.yaml",
+		"/etc/yajudge/server.yaml",
 	}
 	for _, item := range variants {
-		_, err := os.Stat(binDir + "/yajudge-server.ini")
+		_, err := os.Stat(item)
 		if err == nil {
 			return item
 		}
