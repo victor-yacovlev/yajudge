@@ -13,8 +13,13 @@ first: web
 
 all: web native
 
-native: deps generated_code
+native: ${PLATFORM}
 	$(FLUTTER) build ${PLATFORM}
+
+macos: macos/Podfile.lock
+
+macos/Podfile.lock:
+	cd macos && pod install
 
 web: deps generated_code
 	$(FLUTTER) build web
