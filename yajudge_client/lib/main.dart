@@ -7,19 +7,21 @@ import 'package:flutter/material.dart';
 import 'utils/utils.dart';
 
 
-void main(List<String> arguments) {
+void main([List<String>? arguments]) {
   String? wsApiUrl;
   String? theme;
   bool disableCoursesCache = false;
 
-  for (String arg in arguments) {
-    arg = arg.toLowerCase();
-    if (arg.startsWith('--wsapiurl=')) {
-      wsApiUrl = arg.substring(11);
-    } else if (arg.startsWith('--theme=')) {
-      theme = arg.substring(8);
-    } else if (arg == '--disable-courses-cache') {
-      disableCoursesCache = true;
+  if (arguments != null) {
+    for (String arg in arguments) {
+      arg = arg.toLowerCase();
+      if (arg.startsWith('--wsapiurl=')) {
+        wsApiUrl = arg.substring(11);
+      } else if (arg.startsWith('--theme=')) {
+        theme = arg.substring(8);
+      } else if (arg == '--disable-courses-cache') {
+        disableCoursesCache = true;
+      }
     }
   }
 
