@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/widgets.dart';
@@ -28,7 +30,6 @@ class ScreenSubmitAction {
 
 class ScreenAction {
   final Icon icon;
-  final Icon cupertinoIcon;
   final String title;
   final Function() onAction;
 
@@ -36,15 +37,12 @@ class ScreenAction {
     required this.icon,
     required this.title,
     required this.onAction,
-    Icon? cupertinoIcon,
-  })
-      : this.cupertinoIcon = cupertinoIcon!=null ? cupertinoIcon : icon;
+  });
 
 }
 
 class ScreenActions {
   final Icon rootIcon;
-  final Icon rootIconCupertino;
   final String rootTitle;
   final bool isPrimaryActions;
   final Function()? onRootAction;
@@ -61,18 +59,21 @@ class ScreenActions {
   ScreenActions({
     required this.rootIcon,
     required this.rootTitle,
-    Icon? rootIconCupertino,
     bool? isPrimary,
     Function()? onRoot,
     List<ScreenAction>? actions,
   })
       : isPrimaryActions = isPrimary!=null? isPrimary : true,
         onRootAction = onRoot,
-        this.actions = actions!=null? actions : List.empty(),
-        this.rootIconCupertino = rootIconCupertino!=null
-            ? rootIconCupertino
-            : rootIcon
-  ;
+        this.actions = actions!=null? actions : List.empty() ;
+}
+
+class SecondLevelNavigationTab {
+  final String title;
+  final Icon icon;
+  final Widget Function(BuildContext context) builder;
+
+  SecondLevelNavigationTab(this.title, this.icon, this.builder);
 }
 
 abstract class BaseScreenState extends State<BaseScreen> {
@@ -80,7 +81,6 @@ abstract class BaseScreenState extends State<BaseScreen> {
   late RpcConnectionState _rpcConnectionState;
   final bool isLoginScreen;
   final bool isFirstScreen;
-  late final bool isCupertino;
 
   BaseScreenState({required String title, bool? isLoginScreen, bool? isFirstScreen})
       : this.title = title,
@@ -92,7 +92,6 @@ abstract class BaseScreenState extends State<BaseScreen> {
   @override
   void initState() {
     super.initState();
-    isCupertino = PlatformsUtils.getInstance().isCupertino;
     RpcConnection connection = RpcConnection.getInstance();
     _rpcConnectionState = connection.getState();
     connection.registerChangeStateCallback((state) {
@@ -121,22 +120,13 @@ abstract class BaseScreenState extends State<BaseScreen> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (isCupertino) {
-      return _buildCupertino(context);
-    } else {
-      return _buildMaterial(context);
-    }
-  }
-
   String _userProfileName(BuildContext context) {
     if (AppState.instance.userProfile == null) {
       return '';
     }
     String visibleName;
     double screenWidth = MediaQuery.of(context).size.width;
-    final double ShortNameWidth = 500;
+    final double ShortNameWidth = 600;
     User user = AppState.instance.userProfile!;
     if (user.firstName != null &&
         user.firstName!.isNotEmpty &&
@@ -159,24 +149,6 @@ abstract class BaseScreenState extends State<BaseScreen> {
   }
 
 
-  bool _middleCupertinoTextIsTitle = false;
-  void _changeCupertinoLargeTextVisibility(VisibilityInfo visibilityInfo) {
-    if (!this.mounted) {
-      _middleCupertinoTextIsTitle = false;
-      return;
-    }
-    var visiblePercentage = visibilityInfo.visibleFraction * 100;
-    if (visiblePercentage < 8 && !_middleCupertinoTextIsTitle) {
-      setState(() {
-        _middleCupertinoTextIsTitle = true;
-      });
-    } else if (visiblePercentage >= 8 && _middleCupertinoTextIsTitle) {
-      setState(() {
-        _middleCupertinoTextIsTitle = false;
-      });
-    }
-  }
-
   void _doLogout() {
     AppState app = AppState.instance;
     app.sessionId = '';
@@ -198,18 +170,7 @@ abstract class BaseScreenState extends State<BaseScreen> {
         _doLogout();
       }, color: Colors.red, fontSize: 18)
     ];
-    if (isCupertino) {
-      showCupertinoDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          return CupertinoAlertDialog(
-            actions: actions,
-          );
-        }
-      );
-    } else {
-      showDialog(
+    showDialog(
         context: context,
         barrierDismissible: true,
         builder: (context) {
@@ -218,24 +179,47 @@ abstract class BaseScreenState extends State<BaseScreen> {
             child: Center(child: Column(children: actions)),
           ));
         }
-      );
-    }
+    );
   }
 
-  Widget _buildUserProfileWidgetCupertino(BuildContext context) {
+  Widget _buildUserProfileWidget(BuildContext context) {
     Color profileColor;
     if (_rpcConnectionState == RpcConnectionState.Connected) {
-      profileColor = Theme.of(context).primaryColor;
+      profileColor = Colors.white;
     } else {
       profileColor = Theme.of(context).errorColor;
     }
     TextStyle textStyle = TextStyle(
       color: profileColor,
-      fontSize: 14,
+      fontSize: 9,
     );
-    Text textItem = Text(_userProfileName(context), style: textStyle);
+    String userProfileText = _userProfileName(context).replaceAll(' ', '\n');
+    List<String> lines = userProfileText.split('\n');
+    int maxLettersInLine = 0;
+    for (String line in lines) {
+      maxLettersInLine = max(maxLettersInLine, line.length);
+    }
+    double boxMinWidth = 26.0 + 7.0 * maxLettersInLine;
+    if (userProfileText.length < 4) {
+      boxMinWidth = 50;
+    }
+    Text textItem = Text(userProfileText, style: textStyle);
+    Icon profileIcon = Icon(Icons.person_sharp, size: 22, color: profileColor);
+    Container box = Container(
+      child: Center(child: Row(children: [profileIcon,  textItem])),
+      padding: EdgeInsets.fromLTRB(3, 0, 3, 0),
+      width: boxMinWidth,
+      constraints: BoxConstraints(
+        maxWidth: 150,
+        maxHeight: 26,
+      ),
+      decoration: BoxDecoration(
+        border: Border.all(color: profileColor.withAlpha(130)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+    );
     MouseRegion pointable = MouseRegion(
-      child: textItem, cursor: SystemMouseCursors.click,
+      child: box, cursor: SystemMouseCursors.click,
     );
     GestureDetector clickable = GestureDetector(
       child: pointable,
@@ -243,22 +227,7 @@ abstract class BaseScreenState extends State<BaseScreen> {
     );
     return clickable;
   }
-
-  Widget _buildUserProfileWidgetMaterial(BuildContext context) {
-    TextStyle textStyle = TextStyle(
-      color: Colors.white,
-      fontSize: 18,
-    );
-    Text textItem = Text(_userProfileName(context), style: textStyle);
-    MouseRegion pointable = MouseRegion(
-      child: textItem, cursor: SystemMouseCursors.click,
-    );
-    GestureDetector clickable = GestureDetector(
-      child: pointable,
-      onTap: _showProfileActions,
-    );
-    return clickable;
-  }
+  
 
   EdgeInsets internalPadding() {
     return EdgeInsets.symmetric(horizontal: 8);
@@ -267,69 +236,11 @@ abstract class BaseScreenState extends State<BaseScreen> {
   final double leftNavigationWidthThreshold = 550;
   final double leftNavigationPadding = 320;
 
-  Widget _buildCupertino(BuildContext context) {
-
-    Widget central = buildCentralWidgetCupertino(context);
+  @override
+  Widget build(BuildContext context) {
+    Widget central = buildCentralWidget(context);
     Widget titleItem = Text(title);
-    Widget userProfileItem = _buildUserProfileWidgetCupertino(context);
-
-    double leftPadding = internalPadding().left;
-    Widget? navigationWidget = buildNavigationWidget(context);
-    if (navigationWidget != null && MediaQuery.of(context).size.width > leftNavigationWidthThreshold) {
-      leftPadding = leftNavigationPadding;
-    }
-    Widget largeTitleWithVisibilityDetector = VisibilityDetector(
-      child: titleItem,
-      key: Key('large-title-for-'+title),
-      onVisibilityChanged: _changeCupertinoLargeTextVisibility,
-    );
-
-    Widget topNavigationBar = CupertinoSliverNavigationBar(
-      largeTitle: largeTitleWithVisibilityDetector,
-      middle: _middleCupertinoTextIsTitle? titleItem : userProfileItem,
-      trailing: _buildCupertinoTrailingToolbar(context),
-    );
-
-    Widget mainArea = SliverToBoxAdapter(
-        child: Padding(
-          child: central,
-          padding: internalPadding().copyWith(left: leftPadding),
-        )
-    );
-
-    Widget scaffold = CupertinoPageScaffold(child: CustomScrollView(slivers: [
-      topNavigationBar, mainArea
-    ]));
-
-    List<Widget> topLevelScreenItems = [scaffold];
-
-    if (navigationWidget != null && MediaQuery.of(context).size.width > leftNavigationWidthThreshold) {
-      topLevelScreenItems.add(Positioned(
-        top: 130,
-        left: 20,
-        bottom: 60,
-        child: _wrapNavigationFloatBoxPanel(navigationWidget)!,
-      ));
-    }
-
-    return Stack(children: topLevelScreenItems);
-  }
-
-
-  Widget _buildMaterial(BuildContext context) {
-    Widget central = buildCentralWidgetMaterial(context);
-    Widget titleItem = Text(title);
-    Widget statusItem = Padding(
-      padding: EdgeInsets.all(8),
-      child: Icon(
-        Icons.circle,
-        color: _rpcConnectionState == RpcConnectionState.Connected
-            ? Theme.of(context).appBarTheme.color
-            : Theme.of(context).errorColor,
-        size: 8.0,
-      ),
-    );
-    Widget userProfileItem = _buildUserProfileWidgetMaterial(context);
+    Widget userProfileItem = _buildUserProfileWidget(context);
     Drawer? drawer;
     Widget? navItem = buildNavigationWidget(context);
     late Widget body;
@@ -356,27 +267,44 @@ abstract class BaseScreenState extends State<BaseScreen> {
           child: Padding(child: central, padding: internalPadding())
       );
     }
-    return Scaffold(
-      appBar: AppBar(title: Row(children: [
-        titleItem, Spacer(), userProfileItem, statusItem
-      ])),
+    List<Tab> tabs = List.empty(growable: true);
+    for (SecondLevelNavigationTab tabData in secondLevelNavigationTabs()) {
+      tabs.add(Tab(text: tabData.title, icon: tabData.icon));
+    }
+    TabBar? tabBar = tabs.isEmpty? null : TabBar(tabs: tabs);
+    Scaffold scaffold = Scaffold(
+      appBar: AppBar(
+        title: Row(children: [titleItem, Spacer(), userProfileItem]),
+        bottom: tabBar,
+      ),
       body: body,
-      bottomSheet: _buildMaterialSubmitBar(context),
-      floatingActionButton: _buildMaterialFAB(context),
+      bottomSheet: _buildSubmitBar(context),
+      floatingActionButton: _buildFAB(context),
       drawer: drawer,
       drawerEnableOpenDragGesture: false,
     );
+    DefaultTabController tabController = DefaultTabController(
+        length: tabs.length,
+        child: scaffold
+    );
+    return tabController;
   }
 
-  Widget buildCentralWidgetCupertino(BuildContext context) ;
-  Widget buildCentralWidgetMaterial(BuildContext context) ;
+  @protected
+  Widget buildCentralWidget(BuildContext context) ;
+
+  @protected
   ScreenActions? buildPrimaryScreenActions(BuildContext context) => null;
+
+  @protected
   ScreenActions? buildSecondaryScreenActions(BuildContext context) => null;
+
+  @protected
   ScreenSubmitAction? submitAction(BuildContext context) => null;
 
   Widget? buildNavigationWidget(BuildContext context) => null;
 
-  Widget? _buildMaterialFAB(BuildContext context) {
+  Widget? _buildFAB(BuildContext context) {
     ScreenActions? primary = buildPrimaryScreenActions(context);
     ScreenActions? secondary = buildSecondaryScreenActions(context);
     ScreenActions? screenActions = secondary==null? primary : secondary;
@@ -410,71 +338,8 @@ abstract class BaseScreenState extends State<BaseScreen> {
     }
   }
 
-  Widget _actionItemToCupertinoIcon(BuildContext context, ScreenAction a, bool primary) {
-    return Material(child:
-      IconButton(
-        onPressed: a.onAction,
-        icon: a.cupertinoIcon,
-        tooltip: a.title,
-        color: primary? Theme.of(context).primaryColor : Colors.deepOrange,
-      )
-    );
-  }
 
-  Widget? _buildCupertinoTrailingToolbar(BuildContext context) {
-    ScreenActions? primary = buildPrimaryScreenActions(context);
-    ScreenActions? secondary = buildSecondaryScreenActions(context);
-    ScreenSubmitAction? submit = submitAction(context);
-    if (primary==null && secondary==null && submit==null) {
-      return null;
-    }
-    List<Widget> items = List.empty(growable: true);
-    items.add(Spacer());
-    if (secondary != null && secondary.actions.length > 0) {
-      items.addAll(secondary.actions.map((e) => _actionItemToCupertinoIcon(context, e, false)));
-    } else if (secondary != null) {
-      items.add(_actionItemToCupertinoIcon(context, secondary.rootAction!, false));
-    }
-    if (primary != null && primary.actions.length > 0) {
-      items.addAll(primary.actions.map((e) => _actionItemToCupertinoIcon(context, e, true)));
-    } else if (primary != null) {
-      items.add(_actionItemToCupertinoIcon(context, primary.rootAction!, true));
-    }
-    if (submit != null) {
-      Color buttonColor;
-      MouseCursor mouseCursor = SystemMouseCursors.click;
-      if (submit.onAction == null) {
-        // button disabled
-        buttonColor = Theme.of(context).disabledColor.withAlpha(20);
-        mouseCursor = SystemMouseCursors.basic;
-      } else if (submit.color != null) {
-        // use custom color
-        buttonColor = submit.color!;
-      } else {
-        // use default color
-        buttonColor = Theme.of(context).primaryColor;
-      }
-      items.add(OutlinedButton(
-        style: ButtonStyle(
-          backgroundColor: MaterialStateProperty.all<Color>(buttonColor),
-          mouseCursor: MaterialStateProperty.all<MouseCursor>(mouseCursor),
-        ),
-        child: Text(submit.title,
-          style: TextStyle(
-            // fontSize: 11
-            color: Colors.white
-          ),
-        ),
-        onPressed: submit.onAction,
-      ));
-    }
-    return Container(
-      constraints: BoxConstraints(maxWidth: 150),
-      child: Row(children: items)
-    );
-  }
-
-  Widget? _buildMaterialSubmitBar(BuildContext context) {
+  Widget? _buildSubmitBar(BuildContext context) {
     List<Widget> items = List.empty(growable: true);
     ScreenSubmitAction? submit = submitAction(context);
     if (submit != null) {
@@ -541,5 +406,7 @@ abstract class BaseScreenState extends State<BaseScreen> {
       ),
     );
   }
+
+  List<SecondLevelNavigationTab> secondLevelNavigationTabs() => List.empty();
 
 }

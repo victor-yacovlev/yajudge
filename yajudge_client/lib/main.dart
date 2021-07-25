@@ -9,7 +9,6 @@ import 'utils/utils.dart';
 
 void main([List<String>? arguments]) {
   String? wsApiUrl;
-  String? theme;
   bool disableCoursesCache = false;
 
   if (arguments != null) {
@@ -17,8 +16,6 @@ void main([List<String>? arguments]) {
       arg = arg.toLowerCase();
       if (arg.startsWith('--wsapiurl=')) {
         wsApiUrl = arg.substring(11);
-      } else if (arg.startsWith('--theme=')) {
-        theme = arg.substring(8);
       } else if (arg == '--disable-courses-cache') {
         disableCoursesCache = true;
       }
@@ -27,9 +24,6 @@ void main([List<String>? arguments]) {
 
   PlatformsUtils platformsSettings = PlatformsUtils.getInstance();
   platformsSettings.disableCoursesCache = disableCoursesCache;
-  if (theme != null) {
-    platformsSettings.overrideTheme = theme;
-  }
 
   if (wsApiUrl == null) {
     wsApiUrl = platformsSettings.getWsApiUrl();

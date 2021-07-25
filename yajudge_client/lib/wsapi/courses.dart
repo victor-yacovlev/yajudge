@@ -9,6 +9,7 @@ part 'courses.g.dart';
 @JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
 class ProblemData {
   String id = '';
+  String title = '';
   String uniqueId = '';
   String statementText = '';
   String statementContentType = '';
@@ -81,6 +82,25 @@ class CourseData {
             for (TextReading reading in lesson.readings) {
               if (reading.id == parts[2]) {
                 return reading;
+              }
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  ProblemData? findProblemByKey(String key) {
+    List<String> parts = key.substring(1).split('/');
+    assert (parts.length >= 3);
+    for (Section section in sections) {
+      if (section.id == parts[0]) {
+        for (Lesson lesson in section.lessons) {
+          if (lesson.id == parts[1]) {
+            for (ProblemData problem in lesson.problems) {
+              if (problem.id == parts[2]) {
+                return problem;
               }
             }
           }

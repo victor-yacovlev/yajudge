@@ -60,11 +60,7 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
       return Text('Загрузка...');
     }
     TreeViewTheme theme;
-    if (PlatformsUtils.getInstance().isCupertino) {
-      theme = _createTreeViewThemeCupertino(context);
-    } else {
-      theme = _createTreeViewThemeMaterial(context);
-    }
+    theme = _createTreeViewTheme(context);
     assert (treeViewController != null);
     TreeView treeView = TreeView(
       primary: false,
@@ -210,34 +206,7 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
     }
   }
 
-  TreeViewTheme _createTreeViewThemeCupertino(BuildContext context) {
-    TreeViewTheme theme = TreeViewTheme(
-      expanderTheme: ExpanderThemeData(
-        type: ExpanderType.caret,
-        modifier: ExpanderModifier.none,
-        position: ExpanderPosition.start,
-        size: 20,
-      ),
-      labelStyle: TextStyle(
-        fontSize: 15,
-        letterSpacing: 0.3,
-      ),
-      parentLabelStyle: TextStyle(
-        fontSize: 15,
-        letterSpacing: 0.1,
-      ),
-      iconTheme: IconThemeData(
-        size: 18,
-        color: Colors.grey.shade800,
-      ),
-      colorScheme: ColorScheme.light(
-        primary: Theme.of(context).primaryColor,
-      ),
-    );
-    return theme;
-  }
-
-  TreeViewTheme _createTreeViewThemeMaterial(BuildContext context) {
+  TreeViewTheme _createTreeViewTheme(BuildContext context) {
     TreeViewTheme theme = TreeViewTheme(
       expanderTheme: ExpanderThemeData(
         type: ExpanderType.caret,

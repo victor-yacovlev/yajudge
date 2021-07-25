@@ -46,7 +46,9 @@ class CourseScreenState extends BaseScreenState {
   void _loadCourseData() {
     AppState.instance.loadCourseData(screen.courseId)
         .then((value) => setState((){ screen.courseData = value; }))
-        .onError((err, stackTrace) => setState(() { _errorString = err.toString(); }));
+        .onError((err, stackTrace) => setState(() {
+          _errorString = err.toString() + '\n' + stackTrace.toString();
+        }));
   }
 
   @override
@@ -57,16 +59,6 @@ class CourseScreenState extends BaseScreenState {
     }
     if (screen.sectionKey != null && screen.lessonKey != null) {
       findLesson();
-    }
-  }
-
-  @override
-  EdgeInsets internalPadding() {
-    if (isCupertino) {
-      return EdgeInsets.fromLTRB(0, 0, 0, 0);
-    }
-    else {
-      return super.internalPadding();
     }
   }
 
@@ -119,16 +111,11 @@ class CourseScreenState extends BaseScreenState {
   }
 
   @override
-  Widget buildCentralWidgetCupertino(BuildContext context) {
+  Widget buildCentralWidget(BuildContext context) {
     if (screen.courseData == null) {
       return Center(child: Text(_errorString==null? 'Загружается...' : _errorString!));
     }
     return _createContentArea(context);
-  }
-
-  @override
-  Widget buildCentralWidgetMaterial(BuildContext context) {
-    return buildCentralWidgetCupertino(context);
   }
 
   List<Widget> _createCommonLessonInformation(BuildContext context, Lesson lesson) {
@@ -162,7 +149,7 @@ class CourseScreenState extends BaseScreenState {
 
   void _navigateToProblem(Section section, Lesson lesson, ProblemData problem) {
     String url = '/' + screen.courseUrl + '/' + section.id +
-        '/' + lesson.id + '/problems/' + problem.id;
+        '/' + lesson.id + '/problems/' + problem.id + '/statement';
     Navigator.pushNamed(context, url);
   }
 
@@ -180,19 +167,10 @@ class CourseScreenState extends BaseScreenState {
       VoidCallback action = () {
         _navigateToReading(section, lesson, reading);
       };
-      Icon leadingIcon;
-      if (isCupertino) {
-        leadingIcon = Icon(
-          CupertinoIcons.doc_text,
-          color: Colors.grey,
-          size: 40,
-        );
-      } else {
-        leadingIcon = Icon(
-          Icons.text_snippet_outlined,
-          color: Colors.grey,
-        );
-      }
+      Icon leadingIcon = Icon(
+        Icons.article_outlined,
+        color: Colors.grey,
+      );
       result.add(Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 8),
         child: YCardLikeButton(
@@ -220,19 +198,10 @@ class CourseScreenState extends BaseScreenState {
         _navigateToProblem(section, lesson, problem);
       };
       bool problemPassed = false;  // TODO check for passed problems
-      Icon leadingIcon;
-      if (isCupertino) {
-        leadingIcon = Icon(
-          !problemPassed? CupertinoIcons.circle : CupertinoIcons.check_mark_circled,
-          color: Colors.grey,
-          size: 40,
-        );
-      } else {
-        leadingIcon = Icon(
-          !problemPassed? Icons.radio_button_off_outlined : Icons.check_circle_outline,
-          color: Colors.grey,
-        );
-      }
+      Icon leadingIcon = Icon(
+        !problemPassed? Icons.radio_button_off_outlined : Icons.check_circle_outline,
+        color: Colors.grey,
+      );
       result.add(Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 8),
         child: YCardLikeButton(
@@ -280,7 +249,7 @@ class CourseScreenState extends BaseScreenState {
       ),
       constraints: BoxConstraints(
         minWidth: MediaQuery.of(context).size.width - 300,
-        minHeight: MediaQuery.of(context).size.height - 96,
+        minHeight: MediaQuery.of(context).size.height - 46,
       ),
       child: Column(
         children: items,

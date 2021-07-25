@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:yajudge_client/utils/utils_linux.dart';
 import 'package:yajudge_client/wsapi/courses.dart';
 
 import 'utils.dart';
-import 'utils_macos.dart';
 import 'dart:io';
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
@@ -24,7 +22,7 @@ class NativeLocalFile extends LocalFile {
   }
 }
 
-abstract class NativePlatformUtils extends PlatformsUtils {
+class NativePlatformUtils extends PlatformsUtils {
   @override
   bool isNativeApp() => true;
 
@@ -162,11 +160,8 @@ abstract class NativePlatformUtils extends PlatformsUtils {
 }
 
 PlatformsUtils getPlatformSettings() {
-  if (Platform.isMacOS) {
-    return MacPlatformUtils();
-  }
-  if (Platform.isLinux) {
-    return LinuxPlatformUtils();
+  if (Platform.isMacOS || Platform.isLinux) {
+    return NativePlatformUtils();
   }
   throw 'This platform is not supported';
 }

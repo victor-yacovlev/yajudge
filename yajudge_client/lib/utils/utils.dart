@@ -19,7 +19,7 @@ abstract class PlatformsUtils {
 
   bool isNativeApp() => throw 'Not implemented';
   bool isWebApp() => !isNativeApp();
-  bool isAppleLAF() => throw 'Not implemented';
+
   void saveSettingsValue(String key, String? value) => throw 'Not implemented';
   String? loadSettingsValue(String key) => throw 'Not implemented';
   String? getWsApiUrl() => throw 'Not implemented';
@@ -38,27 +38,6 @@ abstract class PlatformsUtils {
       _instance = getPlatformSettings();
     }
     return _instance!;
-  }
-
-  String? _overrideTheme;
-  set overrideTheme (String? value ){
-    if (value == null) {
-      _overrideTheme = null;
-      return;
-    }
-    value = value.toLowerCase();
-    if (value != 'cupertino' && value != 'material') {
-      throw 'Not valid theme, must be one of "Cupertino" or "Material"';
-    }
-    _overrideTheme = value;
-  }
-
-  bool get isCupertino {
-    if (_overrideTheme != null) {
-      return _overrideTheme == 'cupertino';
-    } else {
-      return isAppleLAF();
-    }
   }
 
 }

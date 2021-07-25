@@ -256,7 +256,7 @@ class UsersScreenState extends BaseScreenState {
   }
 
   @override
-  Widget buildCentralWidgetMaterial(BuildContext context) {
+  Widget buildCentralWidget(BuildContext context) {
     Widget searchBox = _createSearchBoxWidgetMaterial(context);
     Widget usersTable = _buildUsersTable(context, false);
     return Column(children: [ searchBox, usersTable ]);
@@ -307,7 +307,7 @@ class UsersScreenState extends BaseScreenState {
     );
   }
 
-  Widget _buildConfirmDeleteDialogMaterial() {
+  Widget _buildConfirmDeleteDialog() {
     return AlertDialog(
       title: const Text('Удалить пользователей'),
       content: SingleChildScrollView(
@@ -326,14 +326,6 @@ class UsersScreenState extends BaseScreenState {
         )
       ],
     );
-  }
-
-  Widget _buildConfirmDeleteDialog() {
-    if (isCupertino) {
-      return _buildConfirmDeleteDialogCupertino();
-    } else {
-      return _buildConfirmDeleteDialogMaterial();
-    }
   }
 
   void _deleteSelectedItemsButtonPressed() {

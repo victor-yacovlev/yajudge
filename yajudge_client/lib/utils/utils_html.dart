@@ -40,16 +40,6 @@ class WebPlatformUtils extends PlatformsUtils {
   @override
   bool isNativeApp() => false;
 
-  @override
-  bool isAppleLAF() {
-    Navigator navigator = window.navigator;
-    String userAgent = navigator.userAgent;
-    String vendor = navigator.vendor;
-    bool isWebKit = userAgent.contains('WebKit');
-    bool isAppleVendor = vendor.contains('Apple');
-    return isWebKit && isAppleVendor;
-  }
-
   void saveSettingsValue(String key, String? value) {
     Storage storage = window.localStorage;
     if (value == null && storage.containsKey(key)) {

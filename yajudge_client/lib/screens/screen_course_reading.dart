@@ -127,7 +127,7 @@ class CourseReadingScreenState extends BaseScreenState {
   }
 
   @override
-  Widget buildCentralWidgetMaterial(BuildContext context) {
+  Widget buildCentralWidget(BuildContext context) {
     return buildCentralWidgetCupertino(context);
   }
 

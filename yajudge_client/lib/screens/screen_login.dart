@@ -120,82 +120,42 @@ class LoginScreenState extends State<LoginScreen> {
     String loginHint = 'ID пользователя или EMail';
     String passwordHint = 'Пароль';
     String buttonText = 'Войти';
-    bool isCupertino = PlatformsUtils.getInstance().isCupertino;
     Widget loginField, passwordField, loginButton;
     Form form;
-    if (isCupertino) {
-      loginField = CupertinoTextFormFieldRow(
-        prefix: Text(loginLabel+':'),
-        placeholder: loginHint,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        validator: loginValidator,
-        onSaved: loginSaver,
-      );
-      passwordField = CupertinoTextFormFieldRow(
-        prefix: Text(passwordLabel+':'),
-        placeholder: passwordHint,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        validator: passwordValidator,
-        onSaved: passwordSaver,
-        obscureText: true,
-      );
-      loginButton = CupertinoButton(
-        child: Text(buttonText),
-        onPressed: _buttonDisabled ? null : buttonHandler,
-      );
-      form = Form(
+    loginField = TextFormField(
+      decoration: InputDecoration(hintText: loginHint),
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: loginValidator,
+      onSaved: loginSaver,
+    );
+    passwordField = TextFormField(
+      obscureText: true,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      decoration: InputDecoration(hintText: passwordHint),
+      validator: passwordValidator,
+      onSaved: passwordSaver,
+    );
+    loginButton = TextButton(
+      child: Text(buttonText.toUpperCase()),
+      onPressed: _buttonDisabled ? null : buttonHandler,
+    );
+    form = Form(
         key: _formKey,
-        child: CupertinoFormSection.insetGrouped(
-          header: greetingItem,
-          footer: errorItem,
-          children: [loginField, passwordField, loginButton],
-          margin: EdgeInsets.all(20),
-        )
-      );
-    }
-    else {
-      loginField = TextFormField(
-        decoration: InputDecoration(hintText: loginHint),
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        validator: loginValidator,
-        onSaved: loginSaver,
-      );
-      passwordField = TextFormField(
-        obscureText: true,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        decoration: InputDecoration(hintText: passwordHint),
-        validator: passwordValidator,
-        onSaved: passwordSaver,
-      );
-      loginButton = TextButton(
-        child: Text(buttonText.toUpperCase()),
-        onPressed: _buttonDisabled ? null : buttonHandler,
-      );
-      form = Form(
-          key: _formKey,
-          child: Column(children: [loginField, passwordField, errorItem,])
-      );
-    }
-    if (isCupertino) {
-      return Center(
-        child: form,
-      );
-    }
-    else {
-      return Column(children: [
-          greetingItem,
-          const SizedBox(height: 8,),
-          Card(child: Container(
-              constraints: BoxConstraints.tightFor(width: 500),
-              padding: EdgeInsets.all(10),
-              child: Column(
-                children: [
-                  form,
-                  Row(children: [loginButton], mainAxisAlignment: MainAxisAlignment.end)
-                ],
-              ),
-            )),
-        ]);
-    }
+        child: Column(children: [loginField, passwordField, errorItem,])
+    );
+    return Column(children: [
+      greetingItem,
+      const SizedBox(height: 8,),
+      Card(child: Container(
+        constraints: BoxConstraints.tightFor(width: 500),
+        padding: EdgeInsets.all(10),
+        child: Column(
+          children: [
+            form,
+            Row(children: [loginButton], mainAxisAlignment: MainAxisAlignment.end)
+          ],
+        ),
+      )),
+    ]);
   }
 }

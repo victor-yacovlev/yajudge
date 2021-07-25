@@ -2,11 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:yajudge_client/utils/utils.dart';
 
-bool _isCupertino() {
-  PlatformsUtils utils = PlatformsUtils.getInstance();
-  return utils.isCupertino;
-}
-
 class YTextButton extends StatelessWidget {
   final String title;
   final VoidCallback? action;
@@ -18,33 +13,13 @@ class YTextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (_isCupertino()) {
-      CupertinoButton btn = CupertinoButton(
-        child: Text(title, style: TextStyle(
+    return TextButton(
+      onPressed: action,
+      child: Text(title, style: TextStyle(
           color: color,
           fontSize: fontSize
-        )),
-        onPressed: action
-      );
-      MouseCursor cursor;
-      if (action == null) {
-        cursor = SystemMouseCursors.basic;
-      } else {
-        cursor = SystemMouseCursors.click;
-      }
-      return MouseRegion(
-        child: btn,
-        cursor: cursor,
-      );
-    } else {
-      return TextButton(
-        onPressed: action,
-        child: Text(title, style: TextStyle(
-          color: color,
-          fontSize: fontSize
-        ))
-      );
-    }
+      ))
+    );
   }
 }
 
@@ -63,48 +38,13 @@ class YTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (_isCupertino()) {
-      BoxDecoration? decoration;
-      if (noBorders!=null && noBorders!) {
-        decoration = null;
-      } else {
-        const BorderSide _kDefaultRoundedBorderSide = BorderSide(
-          color: CupertinoDynamicColor.withBrightness(
-            color: Color(0x33000000),
-            darkColor: Color(0x33FFFFFF),
-          ),
-          style: BorderStyle.solid,
-          width: 0.0,
-        );
-        const Border _kDefaultRoundedBorder = Border(
-          top: _kDefaultRoundedBorderSide,
-          bottom: _kDefaultRoundedBorderSide,
-          left: _kDefaultRoundedBorderSide,
-          right: _kDefaultRoundedBorderSide,
-        );
-        decoration = BoxDecoration(
-          color: CupertinoDynamicColor.withBrightness(
-            color: CupertinoColors.white,
-            darkColor: CupertinoColors.black,
-          ),
-          border: _kDefaultRoundedBorder,
-          borderRadius: BorderRadius.all(Radius.circular(5.0)),
-        );
-      }
-      return CupertinoTextField(
-        controller: controller,
-        decoration: decoration,
-        maxLines: maxLines,
-        showCursor: showCursor,
-      );
+    InputDecoration? inputDecoration;
+    if (noBorders!=null && noBorders!) {
+      inputDecoration = null;
     } else {
-      InputDecoration? inputDecoration;
-      if (noBorders!=null && noBorders!) {
-        inputDecoration = null;
-      } else {
-        inputDecoration = InputDecoration();
-      }
-      return Padding(
+      inputDecoration = InputDecoration();
+    }
+    return Padding(
         padding: EdgeInsets.all(8),
         child: TextField(
           expands: true,
@@ -113,8 +53,7 @@ class YTextField extends StatelessWidget {
           maxLines: maxLines,
           showCursor: showCursor,
         )
-      );
-    }
+    );
   }
 }
 
@@ -127,25 +66,18 @@ class YCheckBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (_isCupertino()) {
-      return CupertinoSwitch(
-          value: initialValue,
-          onChanged: action
-      );
+    final ValueChanged<bool?>? action2;
+    if (action != null) {
+      action2 = (bool? value) {
+        action!(value!);
+      };
     } else {
-      final ValueChanged<bool?>? action2;
-      if (action != null) {
-        action2 = (bool? value) {
-          action!(value!);
-        };
-      } else {
-        action2 = null;
-      }
-      return Checkbox(
-          value: initialValue,
-          onChanged: action2
-      );
+      action2 = null;
     }
+    return Checkbox(
+        value: initialValue,
+        onChanged: action2
+    );
   }
 
 }
@@ -203,17 +135,14 @@ class YCardLikeButton extends StatelessWidget {
     );
     Color buttonColor = Theme.of(context).primaryColor;
     buttonColor = Color.alphaBlend(Color.fromARGB(230, 240, 240, 240), buttonColor);
-    return Material(
-        child: ElevatedButton(
-          style: ButtonStyle(
-            backgroundColor: MaterialStateProperty.all(buttonColor),
-            minimumSize: MaterialStateProperty.all(Size.fromHeight(80)),
-          ),
-          child: cardContainer,
-          onPressed: action,
-        )
+    return ElevatedButton(
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all(buttonColor),
+        minimumSize: MaterialStateProperty.all(Size.fromHeight(80)),
+      ),
+      child: cardContainer,
+      onPressed: action,
     );
-
   }
 }
 

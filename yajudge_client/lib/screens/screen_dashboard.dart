@@ -109,7 +109,7 @@ class DashboardScreenState extends BaseScreenState {
       ),
       constraints: BoxConstraints(
         minWidth: MediaQuery.of(context).size.width - 300,
-        minHeight: MediaQuery.of(context).size.height - 96,
+        minHeight: MediaQuery.of(context).size.height - 46,
       ),
       child: Column(
         children: items,
@@ -120,7 +120,7 @@ class DashboardScreenState extends BaseScreenState {
   }
 
   @override
-  Widget buildCentralWidgetMaterial(BuildContext context) {
+  Widget buildCentralWidget(BuildContext context) {
     return buildCentralWidgetCupertino(context);
   }
 }

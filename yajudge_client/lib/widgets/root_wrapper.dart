@@ -100,7 +100,6 @@ class RootWrapperState extends State<RootWrapper> {
     } else {
       userProfile = '';
     }
-    bool isCupertino = PlatformsUtils.getInstance().isCupertino;
     Widget titleItem = Text(_title);
     Widget statusItem = Padding(
       padding: EdgeInsets.all(8),
@@ -113,33 +112,13 @@ class RootWrapperState extends State<RootWrapper> {
       ),
     );
 
-    if (isCupertino) {
-      Widget userProfileItem = Text(userProfile, style: TextStyle(
-        color: _rpcConnectionState == RpcConnectionState.Connected
-            ? Theme.of(context).primaryColor
-            : Theme.of(context).errorColor
-      ));
-      bool removeBackNavigation = _child is LoginScreen || _child is DashboardScreen;
-      return CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(
-          middle: titleItem,
-          trailing: userProfileItem,
-          leading: removeBackNavigation? Text('') : null,
-        ),
-        child: Container(
-          padding: EdgeInsets.fromLTRB(0, 44, 0, 0),
-          child: _child,
-        ),
-      );
-    } else {
-      Widget userProfileItem = Text(userProfile);
-      return Scaffold(
-        appBar: AppBar(title: Row(children: [
-          titleItem, Spacer(), userProfileItem, statusItem
-        ])),
-        body: Padding(child: _child, padding: EdgeInsets.all(8)),
-      );
-    }
+    Widget userProfileItem = Text(userProfile);
+    return Scaffold(
+      appBar: AppBar(title: Row(children: [
+        titleItem, Spacer(), userProfileItem, statusItem
+      ])),
+      body: Padding(child: _child, padding: EdgeInsets.all(8)),
+    );
 
   }
 

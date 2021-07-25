@@ -125,35 +125,13 @@ class UserEditScreenState extends BaseScreenState {
       controller.text = value;
     }
 
-    if (isCupertino) {
-      return Container(
-        child: CupertinoTextField(
-          prefix: Container(
-            child: Text(label+':', textAlign: TextAlign.end,),
-            width: 200,
-          ),
-          controller: controller,
-          suffix: actionWidget,
-          placeholder: hintText,
-          focusNode: editable? null : AlwaysDisabledFocusNode(),
-          style: TextStyle(
-            color: editable
-                ? Theme.of(context).textTheme.bodyText1!.color
-                : Theme.of(context).disabledColor,
-          ),
-          onChanged: (_) => setState(() {_checkIsCanSubmit();}),
-        ),
-        padding: EdgeInsets.symmetric(vertical: 4),
-        height: 60,
-      );
-    } else {
-      List<Widget> rowItems = List.empty(growable: true);
-      rowItems.add(Container(
-        width: 150,
-        margin: EdgeInsets.fromLTRB(0, 0, 10, 0),
-        child: Text(label+':', textAlign: TextAlign.end),
-      ));
-      rowItems.add(Expanded(
+    List<Widget> rowItems = List.empty(growable: true);
+    rowItems.add(Container(
+      width: 150,
+      margin: EdgeInsets.fromLTRB(0, 0, 10, 0),
+      child: Text(label+':', textAlign: TextAlign.end),
+    ));
+    rowItems.add(Expanded(
         child: TextField(
           controller: controller,
           decoration: InputDecoration(hintText: hintText),
@@ -165,19 +143,18 @@ class UserEditScreenState extends BaseScreenState {
           ),
           onChanged: (_) => setState(() {_checkIsCanSubmit();}),
         )
+    ));
+    if (actionWidget != null) {
+      rowItems.add(Container(
+        width: 100,
+        child: actionWidget,
       ));
-      if (actionWidget != null) {
-        rowItems.add(Container(
-          width: 100,
-          child: actionWidget,
-        ));
-      }
-      return Container(
-        child: Row(
-          children: rowItems
-        )
-      );
     }
+    return Container(
+        child: Row(
+            children: rowItems
+        )
+    );
   }
 
   void _resetPassword() {
@@ -244,10 +221,7 @@ class UserEditScreenState extends BaseScreenState {
           }));
         }
       }
-      if (isCupertino) {
-        return CupertinoAlertDialog(actions: roleItems);
-      } else {
-        return AlertDialog(
+      return AlertDialog(
           content: Container(
             child: Center(
               child: Column(
@@ -257,14 +231,9 @@ class UserEditScreenState extends BaseScreenState {
             height: 140,
           ),
           actions: []
-        );
-      }
+      );
     };
-    if (isCupertino) {
-      showCupertinoDialog(context: context, builder: builder);
-    } else {
-      showDialog(context: context, builder: builder);
-    }
+    showDialog(context: context, builder: builder);
   }
 
   String generateRandomPassword() {
@@ -371,7 +340,7 @@ class UserEditScreenState extends BaseScreenState {
   }
 
   @override
-  Widget buildCentralWidgetMaterial(BuildContext context) {
+  Widget buildCentralWidget(BuildContext context) {
     return _buildCentralWidgetUnified(context);
   }
 

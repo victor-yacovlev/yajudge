@@ -1,11 +1,11 @@
 import 'package:yajudge_client/screens/screen_course.dart';
+import 'package:yajudge_client/screens/screen_course_problem.dart';
 import 'package:yajudge_client/screens/screen_course_reading.dart';
 import 'package:yajudge_client/screens/screen_users_edit.dart';
 import 'package:yajudge_client/screens/screen_users.dart';
 import 'package:yajudge_client/screens/screen_users_import_csv.dart';
 import 'package:yajudge_client/widgets/unified_widgets.dart';
 import 'package:yajudge_client/wsapi/courses.dart';
-
 import 'utils/utils.dart';
 import 'screens/screen_dashboard.dart';
 import 'screens/screen_login.dart';
@@ -17,6 +17,7 @@ import 'package:flutter/cupertino.dart';
 
 class App extends StatefulWidget {
   String _sessionId;
+
   App(String sessionId)
       : _sessionId = sessionId,
         super();
@@ -47,12 +48,14 @@ class AppState extends State<App> {
   }
 
   static AppState get instance {
-    assert (_instance != null);
+    assert(_instance != null);
     return _instance!;
   }
 
   User? get userProfile => _userProfile;
+
   String get sessionId => _sessionId;
+
   CoursesList get coursesList => _coursesList;
 
   set sessionId(String sessionId) {
@@ -60,7 +63,8 @@ class AppState extends State<App> {
     RpcConnection.getInstance().setSessionCookie(sessionId);
     Session session = Session();
     session.cookie = sessionId;
-    PlatformsUtils.getInstance().saveSettingsValue('User/session_id', sessionId);
+    PlatformsUtils.getInstance()
+        .saveSettingsValue('User/session_id', sessionId);
     if (sessionId == '') {
       _userProfile = null;
       return;
@@ -70,7 +74,9 @@ class AppState extends State<App> {
         _userProfile = user;
       });
       CoursesFilter filter = CoursesFilter()..user = user;
-      CoursesService.instance.getCourses(filter).then((CoursesList coursesList) {
+      CoursesService.instance
+          .getCourses(filter)
+          .then((CoursesList coursesList) {
         setState(() {
           _coursesList = coursesList;
         });
@@ -135,7 +141,10 @@ class AppState extends State<App> {
     // - group 3: lesson id
     // - group 4: 'readings' or 'problems' to choose proper page type
     // - group 5: part name
-    final RegExp rxCoursesLessonParts = RegExp(r'/([0-9a-z_-]+)/([0-9a-z_-]+)/([0-9a-z_-]+)/(readings|problems)/([0-9a-z_-]+)');
+    // - group 6: /tab
+    // - group 7: tab
+    final RegExp rxCoursesLessonParts = RegExp(
+        r'/([0-9a-z_-]+)/([0-9a-z_-]+)/([0-9a-z_-]+)/(readings|problems)/([0-9a-z_-]+)(/(statement|submissions|discussion))?');
     final RegExpMatch? lessonPartMatch = rxCoursesLessonParts.firstMatch(path);
     if (lessonPartMatch != null) {
       final String pathUrlPrefix = lessonPartMatch[1]!;
@@ -151,20 +160,24 @@ class AppState extends State<App> {
         if (courseUrlPrefix == pathUrlPrefix) {
           if (kind == 'readings') {
             return CourseReadingScreen(courseData.id, key, null);
+          } else if (kind == 'problems') {
+            String tab = 'statement';
+            if (lessonPartMatch[7] != null) {
+              tab = lessonPartMatch[7]!;
+            }
+            return CourseProblemScreen(courseData.id, key, null, tab);
           }
         }
       }
-
     }
-
-
 
     // courses have short links names by them ID's
     // Regexp to match:
     // - group 1: course url prefix
     // - group 3: section id
     // - group 5: level id
-    final RegExp rxCourses = RegExp(r'/([0-9a-z_-]+)(/([0-9a-z_-]*)(/([0-9a-z_-]+))?)?');
+    final RegExp rxCourses =
+        RegExp(r'/([0-9a-z_-]+)(/([0-9a-z_-]*)(/([0-9a-z_-]+))?)?');
     final RegExpMatch? coursesMatch = rxCourses.firstMatch(path);
     if (coursesMatch != null) {
       final int groupCount = coursesMatch.groupCount;
@@ -176,7 +189,9 @@ class AppState extends State<App> {
         final String courseUrlPrefix = courseEntry.course.urlPrefix;
         if (courseUrlPrefix == pathUrlPrefix) {
           return CourseScreen(
-            courseEntry.course.name, courseDataId, courseUrlPrefix,
+            courseEntry.course.name,
+            courseDataId,
+            courseUrlPrefix,
             sectionKey: sectionId,
             lessonKey: lessonId,
           );
@@ -184,33 +199,29 @@ class AppState extends State<App> {
       }
     }
     return Center(
-      child: Container(
-        margin: EdgeInsets.all(50),
-        padding: EdgeInsets.all(20),
-        constraints: BoxConstraints(
-          minWidth: 400,
-          maxHeight: 400,
-        ),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).errorColor, width: 2.0),
-        ),
-        child:Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Ошибка 404', style: Theme.of(context).textTheme.headline5),
-            Padding(
-                child: Text(path, style: Theme.of(context).textTheme.bodyText1),
-                padding: EdgeInsets.all(20)
+        child: Container(
+            margin: EdgeInsets.all(50),
+            padding: EdgeInsets.all(20),
+            constraints: BoxConstraints(
+              minWidth: 400,
+              maxHeight: 400,
             ),
-            YTextButton('Назад', () { Navigator.pop(context); },
-              color: Theme.of(context).errorColor)
-          ]
-        )
-      )
-    );
+            decoration: BoxDecoration(
+              border:
+                  Border.all(color: Theme.of(context).errorColor, width: 2.0),
+            ),
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text('Ошибка 404', style: Theme.of(context).textTheme.headline5),
+              Padding(
+                  child:
+                      Text(path, style: Theme.of(context).textTheme.bodyText1),
+                  padding: EdgeInsets.all(20)),
+              YTextButton('Назад', () {
+                Navigator.pop(context);
+              }, color: Theme.of(context).errorColor)
+            ])));
   }
-
-
 
   // This widget is the root of your application.
   @override
@@ -221,55 +232,34 @@ class AppState extends State<App> {
     } else {
       initialRoute = '/login';
     }
-    bool isCupertino = PlatformsUtils.getInstance().isCupertino;
 
-    if (isCupertino) {
-      return CupertinoApp(
-        title: _title,
-        theme: CupertinoThemeData(
-
-        ),
-        initialRoute: initialRoute,
-        routes: createRoutes(),
-        onGenerateRoute: (RouteSettings settings) {
-          return CupertinoPageRoute(
-              settings: settings,
-              builder: (BuildContext context) {
-                return generateWidgetForRoute(context, settings);
-              }
-          );
-        },
-      );
-    } else {
-      return MaterialApp(
-        title: _title,
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          accentColor: Colors.deepPurple
-        ),
-        initialRoute: initialRoute,
-        routes: createRoutes(),
-        onGenerateRoute: (RouteSettings settings) {
-          return MaterialPageRoute(
-              settings: settings,
-              builder: (BuildContext context) {
-                return generateWidgetForRoute(context, settings);
-              }
-          );
-        },
-      );
-    }
+    return MaterialApp(
+      title: _title,
+      theme: ThemeData(
+          primarySwatch: Colors.blue, accentColor: Colors.deepPurple),
+      initialRoute: initialRoute,
+      routes: createRoutes(),
+      onGenerateRoute: (RouteSettings settings) {
+        return MaterialPageRoute(
+            settings: settings,
+            builder: (BuildContext context) {
+              return generateWidgetForRoute(context, settings);
+            });
+      },
+    );
   }
 
   Future<CourseData> loadCourseData(String courseId) async {
-    CourseContentResponse? cached = await PlatformsUtils.getInstance().findCachedCourse(courseId);
-    CourseContentRequest request = CourseContentRequest()..courseDataId = courseId;
+    CourseContentResponse? cached =
+        await PlatformsUtils.getInstance().findCachedCourse(courseId);
+    CourseContentRequest request = CourseContentRequest()
+      ..courseDataId = courseId;
     if (cached != null) {
       request.cachedTimestamp = cached.lastModified;
     }
     late CourseContentResponse response;
     try {
-       response = await CoursesService.instance.getCoursePublicContent(request);
+      response = await CoursesService.instance.getCoursePublicContent(request);
     } catch (error) {
       return Future.error(error);
     }
@@ -281,4 +271,10 @@ class AppState extends State<App> {
       return Future.value(response.data);
     }
   }
+}
+
+class CupertinoNotAnimatedPageRoute extends CupertinoPageRoute {
+  WidgetBuilder builder;
+  CupertinoNotAnimatedPageRoute(this.builder) : super(builder: builder);
+
 }

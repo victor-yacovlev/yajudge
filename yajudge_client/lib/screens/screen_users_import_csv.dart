@@ -182,7 +182,7 @@ class UsersImportCSVScreenState extends BaseScreenState {
       int colsCount = _csvPreview![0].length;
       components.add(_buildReviewTableComponents(context, colsCount));
     }
-    components.add(SizedBox(height: 100));
+    // components.add(SizedBox(height: 100));
     return components;
   }
 
@@ -190,7 +190,7 @@ class UsersImportCSVScreenState extends BaseScreenState {
     return Column(children: _buildCentralWidgetComponents(context));
   }
 
-  Widget buildCentralWidgetMaterial(BuildContext context) {
+  Widget buildCentralWidget(BuildContext context) {
     return Column(children: _buildCentralWidgetComponents(context));
   }
 
@@ -243,16 +243,7 @@ class UsersImportCSVScreenState extends BaseScreenState {
         break;
       }
     }
-    if (noGroupChoosen && isCupertino) {
-      items.add(Row(children: [
-        Container(width: 250, child: Text('Назначить всем группу:')),
-        Container(width: 200, child: CupertinoTextField(
-          controller: _groupForAll,
-        )),
-        Spacer(),
-      ]));
-    }
-    if (noGroupChoosen && !isCupertino) {
+    if (noGroupChoosen) {
       items.add(TextField(
         controller: _groupForAll,
         decoration: InputDecoration(
