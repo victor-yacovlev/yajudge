@@ -320,6 +320,7 @@ func (service *CourseManagementService) GetEjudgeProblem(problemPrefix string) (
 		return nil, 0, fmt.Errorf("can't open '%s': %v", statementFileName, err)
 	}
 	data = &ProblemData{}
+	data.StatementContentType = "text/html";
 	data.StatementText, data.UniqueId, err = ParseEjudgeStatementXML(statementFile)
 	if err != nil {
 		return nil, 0, fmt.Errorf("while parsing '%s': %v", statementFileName, err)

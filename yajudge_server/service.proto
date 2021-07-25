@@ -127,17 +127,18 @@ message ProblemData {
 
   string          id                            = 1;  // string, but not int! id is a relative path to the problem directory
   string          unique_id                     = 2;  // problem id to match previous years cheaters matching
-  string          statement_text                = 3;
-  string          statement_content_type        = 4;  // text/mardown by default or text/html for legacy statements
-  FileSet         statement_files               = 5;  // public files for students
-  FileSet         solution_files                = 6;  // fileset meta-information to be filled by solution
-  FileSet         grader_files                  = 7;  // private files for grading
-  float           full_score_multiplier_propose = 8;  // 1.0 by default, >1 for hard problems, <1 for easy problems
-  GradingOptions  grading_options               = 9;
+  string          title                         = 3;
+  string          statement_text                = 4;
+  string          statement_content_type        = 5;  // text/mardown by default or text/html for legacy statements
+  FileSet         statement_files               = 6;  // public files for students
+  FileSet         solution_files                = 7;  // fileset meta-information to be filled by solution
+  FileSet         grader_files                  = 8;  // private files for grading
+  float           full_score_multiplier_propose = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
+  GradingOptions  grading_options               = 10;
 
   // This is problem property but not a problem usage in course/lesson property!
   // Cons: the problem solution might be demonstrated sometime in past at another course
-  bool            skip_plagiarism_check         = 10;
+  bool            skip_plagiarism_check         = 11;
 }
 
 message Problem {
