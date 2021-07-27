@@ -315,12 +315,12 @@ func (service *CourseManagementService) GetEjudgeProblem(problemPrefix string) (
 	if statementFileInfo.ModTime().Unix() > timestamp {
 		timestamp = statementFileInfo.ModTime().Unix()
 	}
-	statementFile, err := service.Root.Open(statementFileName);
+	statementFile, err := service.Root.Open(statementFileName)
 	if err != nil {
 		return nil, 0, fmt.Errorf("can't open '%s': %v", statementFileName, err)
 	}
 	data = &ProblemData{}
-	data.StatementContentType = "text/html";
+	data.StatementContentType = "text/html"
 	data.StatementText, data.UniqueId, err = ParseEjudgeStatementXML(statementFile)
 	if err != nil {
 		return nil, 0, fmt.Errorf("while parsing '%s': %v", statementFileName, err)
@@ -330,23 +330,227 @@ func (service *CourseManagementService) GetEjudgeProblem(problemPrefix string) (
 	return
 }
 
-func (service *CourseManagementService) GetProblemFromYaml(problemPrefix string) (data *ProblemData, timestamp int64, err error) {
-	return
+func (service *CourseManagementService) GetFileset(problemPrefix, problemId string, yamlEntries []interface{}, read bool) (fileset *FileSet, timestamp int64, err error) {
+	fileset = &FileSet{
+		Files: make([]*File, 0, len(yamlEntries)),
+	}
+	for _, object := range yamlEntries {
+		file := &File{}
+		src := ""
+		if sVal, isString := object.(string); isString {
+			file.Name = sVal
+		} else if mapVal, isMap := object.(map[interface{}]interface{}); isMap {
+			if fileName, hasName := mapVal["name"]; hasName {
+				file.Name = fileName.(string)
+			}
+			if fileSrc, hasSrc := mapVal["src"]; hasSrc {
+				src = fileSrc.(string)
+			} else {
+				src = file.Name
+			}
+			if fileDescription, hasDescription := mapVal["description"]; hasDescription {
+				file.Description = fileDescription.(string)
+			}
+		}
+		if strings.HasPrefix(file.Name, ".") && len(file.Name) <= 4 && !read {
+			file.Name = problemId + file.Name
+		}
+		if read {
+			fileName := problemPrefix + "/" + src
+			fileInfo, err := fs.Stat(service.Root, fileName)
+			if err != nil {
+				return nil, 0, fmt.Errorf("while accessing '%s': %v", fileName, err)
+			}
+			if fileInfo.ModTime().Unix() > timestamp {
+				timestamp = fileInfo.ModTime().Unix()
+			}
+			content, err := fs.ReadFile(service.Root, fileName)
+			if err != nil {
+				return nil, 0, fmt.Errorf("while reading '%s': %v", fileName, err)
+			}
+			file.Data = content
+			fileset.Files = append(fileset.Files, file)
+		} else {
+			file.Data = make([]byte, 0);
+		}
+	}
+	return fileset, timestamp, nil
 }
 
-func (service *CourseManagementService) GetLessonProblems(prefix string, parentDataMap map[string]interface{}) ([]*ProblemData, int64, error) {
+func (service *CourseManagementService) GetProblemFromYaml(problemPrefix string) (data *ProblemData, timestamp int64, err error) {
+	yamlFileName := problemPrefix + "/problem.yaml"
+	yamlFileInfo, err := fs.Stat(service.Root, yamlFileName)
+	if err != nil {
+		return nil, 0, fmt.Errorf("while acessing '%s': %v", yamlFileName, err)
+	}
+	timestamp = yamlFileInfo.ModTime().Unix()
+	problemYamlContent, err := fs.ReadFile(service.Root, yamlFileName)
+	if err != nil {
+		return nil, 0, fmt.Errorf("while reading '%s': %v", yamlFileName, err)
+	}
+	dataMap := make(map[string]interface{})
+	err = yaml.Unmarshal(problemYamlContent, &dataMap)
+	if err != nil {
+		return nil, 0, fmt.Errorf("while reading '%s':%v", yamlFileName, err)
+	}
+	statementValue, hasStatement := dataMap["statement"]
+	if !hasStatement {
+		return nil, 0, fmt.Errorf("no statement in '%s'", yamlFileName)
+	}
+	statementFileName, statementIsString := statementValue.(string)
+	if !statementIsString {
+		return nil, 0, fmt.Errorf("statement is not string value in '%s'", yamlFileName)
+	}
+	data = &ProblemData{Id: problemPrefix}
+	problemShortId := problemPrefix
+	if slashPos := strings.LastIndex(problemPrefix, "/"); slashPos != -1 {
+		problemShortId = problemShortId[slashPos+1:]
+	}
+	statementFileName = problemPrefix + "/" + statementFileName
+	if strings.HasSuffix(statementFileName, ".xml") {
+		statementFile, err := service.Root.Open(statementFileName)
+		if err != nil {
+			return nil, 0, fmt.Errorf("can't open '%s': %v", statementFileName, err)
+		}
+		data.StatementText, data.UniqueId, err = ParseEjudgeStatementXML(statementFile)
+		if err != nil {
+			return nil, 0, fmt.Errorf("can't parse '%s': %v", statementFileName, err)
+		}
+		data.StatementContentType = "text/html"
+	} else if strings.HasSuffix(statementFileName, ".md") {
+		statementContent, err := fs.ReadFile(service.Root, statementFileName)
+		if err != nil {
+			return nil, 0, fmt.Errorf("can't read '%s': %v", )
+		}
+		data.StatementText = string(statementContent)
+		data.StatementContentType = "text/markdown"
+	} else {
+		return nil, 0, fmt.Errorf("unknown statement type: '%s'", statementFileName)
+	}
+	statementFileInfo, err := fs.Stat(service.Root, statementFileName)
+	if err != nil {
+		return nil, 0, fmt.Errorf("while accessing '%s': %v", statementFileName, err)
+	}
+	if statementFileInfo.ModTime().Unix() > timestamp {
+		timestamp = statementFileInfo.ModTime().Unix()
+	}
+	uniqueIdValue, hasUniqueId := dataMap["unique_id"]
+	if hasUniqueId {
+		uniqueIdString, isString := uniqueIdValue.(string)
+		if !isString {
+			return nil, 0, fmt.Errorf("unique_id is not a string in '%s'", yamlFileName)
+		}
+		data.UniqueId = uniqueIdString
+	}
+	titleValue, hasTitleValue := dataMap["title"]
+	if hasTitleValue {
+		titleString, isString := titleValue.(string)
+		if !isString {
+			return nil, 0, fmt.Errorf("title is not a string in '%s'", yamlFileName)
+		}
+		data.Title = titleString
+	}
+	if solutionFiles, hasSolutionFiles := dataMap["solution_files"]; hasSolutionFiles {
+		entries := solutionFiles.([]interface{})
+		var solTime int64
+		data.SolutionFiles, solTime, err = service.GetFileset(problemPrefix, problemShortId, entries, false)
+		if err != nil {
+			return nil, 0, err
+		}
+		if solTime > timestamp {
+			timestamp = solTime
+		}
+	} else {
+		data.SolutionFiles = &FileSet{Files: make([]*File, 0)}
+	}
+	if publicFiles, hasPublicFiles := dataMap["public_files"]; hasPublicFiles {
+		entries := publicFiles.([]interface{})
+		var pubTime int64
+		data.StatementFiles, pubTime, err = service.GetFileset(problemPrefix, problemShortId, entries, true)
+		if err != nil {
+			return nil, 0, err
+		}
+		if pubTime > timestamp {
+			timestamp = pubTime
+		}
+	} else {
+		data.StatementFiles = &FileSet{Files: make([]*File, 0)}
+	}
+	return data, timestamp, nil
+}
+
+func getStringValueFromMap(m map[interface{}]interface{}, key string, def string) string {
+	obj, hasKey := m[key]
+	if !hasKey {
+		return def
+	}
+	sValue, isString := obj.(string)
+	if isString {
+		return sValue
+	}
+	return def
+}
+
+func getBoolValueFromMap(m map[interface{}]interface{}, key string, def bool) bool {
+	obj, hasKey := m[key]
+	if !hasKey {
+		return def
+	}
+	bValue, isBool := obj.(bool)
+	if isBool {
+		return bValue
+	}
+	sValue, isString := obj.(string)
+	if isString {
+		sValue = strings.TrimSpace(strings.ToLower(sValue))
+		return sValue=="yes" || sValue=="true" || sValue=="1"
+	}
+	iValue, isInt := obj.(int)
+	if isInt {
+		return  iValue > 0
+	}
+	return def
+}
+
+func getFloatValueFromMap(m map[interface{}]interface{}, key string, def float64) float64 {
+	obj, hasKey := m[key]
+	if !hasKey {
+		return def
+	}
+	fValue, isFloat := obj.(float64)
+	if isFloat {
+		return fValue
+	}
+	return def
+}
+
+func (service *CourseManagementService) GetLessonProblems(prefix string, parentDataMap map[string]interface{}) ([]*ProblemData, []*ProblemMetadata, int64, error) {
 	problemsValue := parentDataMap["problems"]
 	if problemsValue == nil {
-		return make([]*ProblemData, 0), 0, nil
+		return make([]*ProblemData, 0), make([]*ProblemMetadata, 0), 0, nil
 	}
 	problemIds := problemsValue.([]interface{})
-	result := make([]*ProblemData, 0, len(problemIds))
+	problems := make([]*ProblemData, 0, len(problemIds))
+	problemsMetadata := make([]*ProblemMetadata, 0, len(problemIds))
 	var lastModified int64 = 0
 	for _, problemObject := range problemIds {
+		metadata := &ProblemMetadata{FullScoreMultiplier: 1.0}
 		problemId, isString := problemObject.(string)
 		if !isString {
-			continue
+			problemProps, isMap := problemObject.(map[interface{}]interface{})
+			if !isMap {
+				continue
+			}
+			problemId = getStringValueFromMap(problemProps, "id", "")
+			if problemId == "" {
+				continue
+			}
+			metadata.BlocksNextProblems = getBoolValueFromMap(problemProps, "blocks_next", false)
+			metadata.SkipCodeReview = getBoolValueFromMap(problemProps, "no_review", false)
+			metadata.SkipSolutionDefence = getBoolValueFromMap(problemProps, "no_defence", false)
+			metadata.FullScoreMultiplier = getFloatValueFromMap(problemProps, "full_score", 1.0)
 		}
+		metadata.Id = problemId
 		problemPrefix := prefix + "/" + problemId
 		data := &ProblemData{}
 		yamlFileName := problemPrefix + "/problem.yaml"
@@ -366,15 +570,16 @@ func (service *CourseManagementService) GetLessonProblems(prefix string, parentD
 			data, problemLastModified, problemErr = service.GetProblemFromYaml(problemPrefix)
 		}
 		if problemErr != nil {
-			return nil, 0, problemErr
+			return nil, nil, 0, problemErr
 		}
 		data.Id = problemId
 		if problemLastModified > lastModified {
 			lastModified = problemLastModified
 		}
-		result = append(result, data)
+		problems = append(problems, data)
+		problemsMetadata = append(problemsMetadata, metadata)
 	}
-	return result, lastModified, nil
+	return problems, problemsMetadata, lastModified, nil
 }
 
 func (service *CourseManagementService) GetLessonReadings(prefix string, parentDataMap map[string]interface{}) ([]*TextReading, int64, error) {
@@ -530,14 +735,12 @@ func (service *CourseManagementService) GetSectionLessons(prefix string, parentD
 		if readingsLastModified > lastModified {
 			lastModified = readingsLastModified
 		}
-		problems, problemsLastModified, problemsErr := service.GetLessonProblems(lessonPrefix, dataMap)
+		problems, problemsMetadata, problemsLastModified, problemsErr := service.GetLessonProblems(lessonPrefix, dataMap)
 		if problemsErr != nil {
 			return nil, 0, problemsErr
 		}
 		data.Problems = problems
-		if data.Problems == nil {
-			panic("data problems is nil after no error catched")
-		}
+		data.ProblemsMetadata = problemsMetadata
 		if problemsLastModified > lastModified {
 			lastModified = problemsLastModified
 		}

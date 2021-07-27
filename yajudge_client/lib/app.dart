@@ -165,7 +165,7 @@ class AppState extends State<App> {
             if (lessonPartMatch[7] != null) {
               tab = lessonPartMatch[7]!;
             }
-            return CourseProblemScreen(courseData.id, key, null, tab);
+            return CourseProblemScreen(courseData.id, key, null, null, tab);
           }
         }
       }

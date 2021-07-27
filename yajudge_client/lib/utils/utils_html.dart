@@ -102,6 +102,21 @@ class WebPlatformUtils extends PlatformsUtils {
   }
 
   @override
+  void saveLocalFile(String suggestName, List<int> data) {
+    AnchorElement fileDownloadAnchor = querySelector("a#file-download-anchor") as AnchorElement;
+    Uint8List byteArray = Uint8List.fromList(data);
+    Blob blob = Blob([byteArray]);
+    fileDownloadAnchor.download = suggestName;
+    fileDownloadAnchor.href = Url.createObjectUrlFromBlob(blob);
+    fileDownloadAnchor.click();
+  }
+
+  @override
+  Future<LocalFile?> pickLocalFileSave(String suggestName) {
+    throw 'Not implemented';
+  }
+
+  @override
   Future<CourseContentResponse?> findCachedCourse(String courseId) {
     Storage storage = window.localStorage;
     final String key = 'cache/' + courseId;

@@ -27,6 +27,7 @@ dependencies:
   ffi: ^1.1.2
   archive: ^3.1.2
   simple_html_css: ^3.0.1
+  universal_html: ^2.0.8
   flutter:
     sdk: flutter
 

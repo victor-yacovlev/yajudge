@@ -60,8 +60,8 @@ message TextReading {
 
 message File {
   string      name        = 1;
-  string      content_type= 2;
-  bytes       data        = 3;
+  bytes       data        = 2;
+  string      description = 3;
 }
 
 message FileSet {
@@ -97,6 +97,8 @@ message GradingLimits {
   int64           memory_limit_mb     = 1;
   int64           cpu_time_limit_sec  = 2;
   int64           real_time_limit_sec = 3;
+  int64           procs_count_limit   = 4;
+  int64           fds_count_limit     = 5;
   // todo more options
 }
 
@@ -133,12 +135,20 @@ message ProblemData {
   FileSet         statement_files               = 6;  // public files for students
   FileSet         solution_files                = 7;  // fileset meta-information to be filled by solution
   FileSet         grader_files                  = 8;  // private files for grading
-  float           full_score_multiplier_propose = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
+  double          full_score_multiplier_propose = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
   GradingOptions  grading_options               = 10;
 
   // This is problem property but not a problem usage in course/lesson property!
   // Cons: the problem solution might be demonstrated sometime in past at another course
   bool            skip_plagiarism_check         = 11;
+}
+
+message ProblemMetadata {
+  string          id                      = 1; // matches problem data id
+  double          full_score_multiplier   = 2;
+  bool            blocks_next_problems    = 3;
+  bool            skip_solution_defence   = 4;
+  bool            skip_code_review        = 5;
 }
 
 message Problem {
@@ -152,7 +162,7 @@ message Problem {
   int64           hard_deadline           = 8;  // 0 for inherit from outer lesson
   float           full_score_multiplier   = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
   bool            blocks_positive_mark    = 10;
-  bool            blocks_next_problem     = 11;
+  bool            blocks_next_lesson      = 11;
   bool            accept_partial_tests    = 12;
   bool            skip_solution_defence   = 13;
   bool            skip_code_review        = 14;
@@ -206,14 +216,15 @@ message Solution {
 }
 
 message Lesson {
-  string                id            = 1;
-  string                name          = 3;
-  string                description   = 4;
-  repeated  TextReading readings      = 5;
-  repeated  ProblemData problems      = 6;
-  int64                 open_date     = 7;  // 0 for inherit from outer section
-  int64                 soft_deadline = 8;  // 0 for inherit from outer section
-  int64                 hard_deadline = 9;  // 0 for inherit from outer section
+  string                    id                = 1;
+  string                    name              = 3;
+  string                    description       = 4;
+  repeated TextReading      readings          = 5;
+  repeated ProblemData      problems          = 6;
+  repeated ProblemMetadata  problems_metadata = 7;
+  int64                     open_date         = 8;    // 0 for inherit from outer section
+  int64                     soft_deadline     = 9;    // 0 for inherit from outer section
+  int64                     hard_deadline     = 10;   // 0 for inherit from outer section
 }
 
 message Section {

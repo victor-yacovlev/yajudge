@@ -82,6 +82,10 @@ abstract class BaseScreenState extends State<BaseScreen> {
   final bool isLoginScreen;
   final bool isFirstScreen;
 
+  final double leftNavigationWidthThreshold = 750;
+  final double shortProfileNameWidthThreshold = 750;
+  final double leftNavigationPadding = 320;
+
   BaseScreenState({required String title, bool? isLoginScreen, bool? isFirstScreen})
       : this.title = title,
         this.isLoginScreen = isLoginScreen!=null? isLoginScreen : false,
@@ -126,20 +130,19 @@ abstract class BaseScreenState extends State<BaseScreen> {
     }
     String visibleName;
     double screenWidth = MediaQuery.of(context).size.width;
-    final double ShortNameWidth = 600;
     User user = AppState.instance.userProfile!;
     if (user.firstName != null &&
         user.firstName!.isNotEmpty &&
         user.lastName != null &&
         user.lastName!.isNotEmpty)
     {
-      if (screenWidth < ShortNameWidth) {
+      if (screenWidth < shortProfileNameWidthThreshold) {
         visibleName = user.firstName![0] + user.lastName![0];
       } else {
         visibleName = user.firstName! + ' ' + user.lastName!;
       }
     } else {
-      if (screenWidth < ShortNameWidth) {
+      if (screenWidth < shortProfileNameWidthThreshold) {
         visibleName = user.id.toString();
       } else {
         visibleName = 'ID (' + user.id.toString() + ')';
@@ -233,13 +236,52 @@ abstract class BaseScreenState extends State<BaseScreen> {
     return EdgeInsets.symmetric(horizontal: 8);
   }
 
-  final double leftNavigationWidthThreshold = 550;
-  final double leftNavigationPadding = 320;
-
   @override
   Widget build(BuildContext context) {
     Widget central = buildCentralWidget(context);
-    Widget titleItem = Text(title);
+    ThemeData theme = Theme.of(context);
+    TextStyle titleStyle = theme.textTheme.headline5!.merge(TextStyle(
+      fontWeight: FontWeight.w500,
+      color: Colors.white,
+    ));
+    // check for title text overflow on small screen
+    TextPainter textPainter = TextPainter(
+      maxLines: 1,
+      textAlign: TextAlign.left,
+      textDirection: TextDirection.ltr,
+      text: TextSpan(text: title, style: titleStyle),
+    );
+    double availableWidth = MediaQuery.of(context).size.width - 200;
+    textPainter.layout(maxWidth: availableWidth);
+    bool titleOverflow = textPainter.didExceedMaxLines;
+    int titleMaxLines = 1;
+    bool softWrap = false;
+    if (titleOverflow) {
+      titleStyle = titleStyle.merge(TextStyle(
+        fontSize: titleStyle.fontSize! * 0.7
+      ));
+      titleMaxLines = 2;
+      softWrap = true;
+    }
+    List<TextSpan> titleWordSpans = List.empty(growable: true);
+    List<String> titleWords = title.split(' ');
+    for (String titleWord in titleWords) {
+      if (titleWordSpans.isNotEmpty)
+        titleWordSpans.add(TextSpan(text: ' '));
+      titleWordSpans.add(TextSpan(text: titleWord));
+    }
+    Widget titleItem =
+      Container(
+        padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
+        width: MediaQuery.of(context).size.width - 200,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(title, style: titleStyle, maxLines: 2,),
+            )
+          ],
+        )
+      );
     Widget userProfileItem = _buildUserProfileWidget(context);
     Drawer? drawer;
     Widget? navItem = buildNavigationWidget(context);

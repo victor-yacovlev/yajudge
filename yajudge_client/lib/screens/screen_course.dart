@@ -170,6 +170,7 @@ class CourseScreenState extends BaseScreenState {
       Icon leadingIcon = Icon(
         Icons.article_outlined,
         color: Colors.grey,
+        size: 32,
       );
       result.add(Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 8),
@@ -193,21 +194,40 @@ class CourseScreenState extends BaseScreenState {
       style: Theme.of(context).textTheme.headline6,
     );
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
-    for (ProblemData problem in lesson.problems) {
+    for (int i=0; i<lesson.problems.length; i++) {
+      ProblemData problem = lesson.problems[i];
+      ProblemMetadata metadata = lesson.problemsMetadata[i];
       VoidCallback action = () {
         _navigateToProblem(section, lesson, problem);
       };
       bool problemPassed = false;  // TODO check for passed problems
-      Icon leadingIcon = Icon(
-        !problemPassed? Icons.radio_button_off_outlined : Icons.check_circle_outline,
-        color: Colors.grey,
-      );
+      bool problemIsRequired = metadata.blocksNextProblems;
+      bool problemBlocked = false;
+      IconData iconData;
+      String secondLineText = '';
+      if (problemPassed) {
+        iconData = Icons.check_circle;
+      } else {
+        if (problemBlocked) {
+          iconData = Icons.cancel_outlined;
+          secondLineText = 'Необходимо решить все предыдущие обязательные задачи';
+        } else if (problemIsRequired) {
+          secondLineText = 'Это обязательная задача';
+          iconData = Icons.error_outline;
+        }
+        else {
+          iconData = Icons.radio_button_off_outlined;
+        }
+      }
+      Icon leadingIcon = Icon(iconData, size: 36,
+          color: problemPassed? Theme.of(context).primaryColor : Colors.grey);
       result.add(Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 8),
         child: YCardLikeButton(
-          problem.id,
+          problem.title.isNotEmpty? problem.title : problem.id,
           action,
           leadingIcon: leadingIcon,
+          subtitle: secondLineText.isNotEmpty? secondLineText : null,
         ),
       ));
     }

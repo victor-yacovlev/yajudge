@@ -25,6 +25,7 @@ abstract class PlatformsUtils {
   String? getWsApiUrl() => throw 'Not implemented';
 
   Future<LocalFile?> pickLocalFileOpen(List<String>? allowedSuffices) => throw 'Not implemented';
+  void saveLocalFile(String suggestName, List<int> data) => throw 'Not implemented';
 
   Future<CourseContentResponse?> findCachedCourse(String courseId) => throw 'Not implemented';
   void storeCourseInCache(CourseContentResponse courseContent) => throw 'Not implemented';

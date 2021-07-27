@@ -9,6 +9,7 @@ import 'package:ffi/ffi.dart';
 import 'package:ini/ini.dart';
 
 typedef _OpenFileNative = Pointer<Utf8> Function(Pointer<Utf8> pattern);
+typedef _SaveFileNative = Pointer<Utf8> Function(Pointer<Utf8> name);
 typedef _FreeStringNative = Void Function(Pointer<Utf8> str);
 typedef _FreeString = void Function(Pointer<Utf8> str);
 
@@ -19,6 +20,12 @@ class NativeLocalFile extends LocalFile {
   Future<Uint8List> readContents() {
     File file = File(path);
     return file.readAsBytes();
+  }
+
+  @override
+  void writeContent(List<int> data) {
+    File file = File(path);
+    file.writeAsBytesSync(data);
   }
 }
 
@@ -155,6 +162,25 @@ class NativePlatformUtils extends PlatformsUtils {
     String filePath = nativeFilePath.toDartString();
     freeFunc(nativeFilePath);
     return Future.value(NativeLocalFile(filePath));
+  }
+
+  @override
+  void saveLocalFile(String suggestName, List<int> data) {
+    Pointer<Utf8> nameArgument = suggestName.toNativeUtf8();
+    DynamicLibrary library = DynamicLibrary.executable();
+    _SaveFileNative saveFileFunc =
+    library.lookupFunction<_OpenFileNative,_OpenFileNative>('file_picker_save_file');
+    _FreeString freeFunc =
+    library.lookupFunction<_FreeStringNative,_FreeString>('file_picker_free_string');
+    assert (saveFileFunc != null);
+    Pointer<Utf8> nativeFilePath = saveFileFunc(nameArgument);
+    if (nativeFilePath.address==0) {
+      return;
+    }
+    String filePath = nativeFilePath.toDartString();
+    freeFunc(nativeFilePath);
+    File file = File(filePath);
+    file.writeAsBytesSync(data);
   }
 
 }

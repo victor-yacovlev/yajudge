@@ -28,6 +28,28 @@ char* file_picker_open_file(char *pattern) {
 }
 
 extern __attribute__((visibility("default"))) __attribute__((used))
+char* file_picker_save_file(char *name) {
+        
+    __block char* result = NULL;
+    
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        NSSavePanel* saveDlg = [NSSavePanel savePanel];
+        NSString* newName = [NSString stringWithUTF8String:name];
+        [saveDlg setNameFieldStringValue:newName];
+
+        if ([saveDlg runModal] == NSModalResponseOK) {
+            NSURL* url = [saveDlg URL];
+            NSString* path = [url path];
+            const char* utf8 = [path UTF8String];
+            result = calloc(PATH_MAX, sizeof(char));
+            strncpy(result, utf8, PATH_MAX);
+        }
+    });
+    
+    return result;
+}
+
+extern __attribute__((visibility("default"))) __attribute__((used))
 void file_picker_free_string(char *str) {
     free(str);
 }

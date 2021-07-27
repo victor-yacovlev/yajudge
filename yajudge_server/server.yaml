@@ -18,5 +18,5 @@ rpc:
   private_token: zxcvbnmsdfsd
 
 locations:
-  courses_root: ./core_service/test_data/courses
-  web_static_root: ./yajudge_client/build/web
+  courses_root: ../../courses
+  web_static_root: ../yajudge_client/build/web
