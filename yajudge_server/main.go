@@ -1,5 +1,8 @@
 package main
 
+//go:generate protoc --go_out=./core_service -I. service.proto
+//go:generate protoc --go-grpc_out=./core_service -I. service.proto
+
 import (
 	"context"
 	"flag"

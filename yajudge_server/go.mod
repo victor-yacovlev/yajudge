@@ -1,4 +1,4 @@
-module yajudge/yajudge_server
+module yajudge_server
 
 go 1.16
 
