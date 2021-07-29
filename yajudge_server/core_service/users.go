@@ -21,8 +21,8 @@ import (
 var Capabilities = map[Role][][2]string {
 	Role_ROLE_UNAUTHORIZED: {
 		{"UserManagement", "Authorize"},
-		{"SubmissionsManagement", "ReceiveSubmissionsToGrade"},
-		{"SubmissionsManagement", "UpdateGraderOutput"},
+		{"SubmissionManagement", "ReceiveSubmissionsToGrade"},
+		{"SubmissionManagement", "UpdateGraderOutput"},
 	},
 	Role_ROLE_STUDENT: {
 		{"UserManagement", "Authorize"},
@@ -30,8 +30,9 @@ var Capabilities = map[Role][][2]string {
 		{"UserManagement", "ChangePassword"},
 		{"CourseManagement", "GetCourses"},
 		{"CourseManagement", "GetCoursePublicContent"},
-		{"SubmissionsManagement", "ReceiveSubmissionsToGrade"},
-		{"SubmissionsManagement", "UpdateGraderOutput"},
+		{"SubmissionManagement", "CheckSubmissionsCountLimit"},
+		{"SubmissionManagement", "SubmitProblemSolution"},
+		{"SubmissionManagement", "GetSubmissions"},
 	},
 }
 
@@ -420,6 +421,19 @@ func (service *UserManagementService) Authorize(ctx context.Context, user *User)
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	return &session, nil
+}
+
+func (service *UserManagementService) GetUserFromContext(ctx context.Context) (user *User, err error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	values := md.Get("session")
+	if len(values) == 0 {
+		return nil, fmt.Errorf("no session value in metadata")
+	}
+	session := values[0]
+	if session == "" {
+		return nil, fmt.Errorf("session value is empty")
+	}
+	return service.GetUserBySession(&Session{Cookie: session})
 }
 
 func (service *UserManagementService) CheckUserSession(ctx context.Context, requestMethod string) bool {

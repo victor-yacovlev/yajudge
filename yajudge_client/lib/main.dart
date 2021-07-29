@@ -1,3 +1,5 @@
+import 'package:yajudge_client/wsapi/submissions.dart';
+
 import 'wsapi/connection.dart';
 import 'wsapi/users.dart';
 import 'wsapi/courses.dart';
@@ -40,6 +42,7 @@ void main([List<String>? arguments]) {
   RpcConnection rpcConn = new RpcConnection(wsApiUrl);
   UsersService usersService = new UsersService(rpcConn);
   CoursesService coursesService = new CoursesService(rpcConn);
+  SubmissionService submissionService = new SubmissionService(rpcConn);
 
 
   App app = App(currentSessionCookie);

@@ -369,10 +369,10 @@ func (service *CourseManagementService) GetFileset(problemPrefix, problemId stri
 				return nil, 0, fmt.Errorf("while reading '%s': %v", fileName, err)
 			}
 			file.Data = content
-			fileset.Files = append(fileset.Files, file)
 		} else {
 			file.Data = make([]byte, 0);
 		}
+		fileset.Files = append(fileset.Files, file)
 	}
 	return fileset, timestamp, nil
 }
@@ -520,6 +520,18 @@ func getFloatValueFromMap(m map[interface{}]interface{}, key string, def float64
 	fValue, isFloat := obj.(float64)
 	if isFloat {
 		return fValue
+	}
+	return def
+}
+
+func getIntValueFromMap(m map[interface{}]interface{}, key string, def int) int {
+	obj, hasKey := m[key]
+	if !hasKey {
+		return def
+	}
+	iValue, isInt := obj.(int)
+	if isInt{
+		return iValue
 	}
 	return def
 }
@@ -812,6 +824,39 @@ func (service *CourseManagementService) GetCourseSections(prefix string,
 	return result, lastModified, nil
 }
 
+func (service *CourseManagementService) GetCourseCodeStyles(courseId string, dataMap map[interface{}]interface{}) (result []*CodeStyle, lastModified int64, err error) {
+	result = make([]*CodeStyle, 0, len(dataMap))
+	for suffixObject, entryObject := range dataMap {
+		suffix, suffixIsString := suffixObject.(string)
+		entry, entryIsString := entryObject.(string);
+		if suffixIsString && entryIsString {
+			if !strings.HasPrefix(suffix, ".") {
+				suffix = "." + suffix
+			}
+			srcFileName := courseId + "/" + entry
+			srcFileInfo, err := fs.Stat(service.Root, srcFileName)
+			if err != nil {
+				return nil, 0, fmt.Errorf("while accessing '%s': %v", srcFileName, err)
+			}
+			if srcFileInfo.ModTime().Unix() > lastModified {
+				lastModified = srcFileInfo.ModTime().Unix()
+			}
+			file := File{
+				Name: entry,
+			}
+			file.Data, err = fs.ReadFile(service.Root, srcFileName)
+			if err != nil {
+				return nil, 0, fmt.Errorf("while reading '%s': %v", srcFileName, err)
+			}
+			result = append(result, &CodeStyle{
+				SourceFileSuffix: suffix,
+				StyleFile: &file,
+			})
+		}
+	}
+	return result, lastModified, nil
+}
+
 func (service *CourseManagementService) LoadCourseIntoCache(courseId string) {
 	yamlFileName := courseId + "/course.yaml"
 	cache := CourseDataCacheItem{}
@@ -846,6 +891,30 @@ func (service *CourseManagementService) LoadCourseIntoCache(courseId string) {
 	}
 	if sectionsLastModified > lastModified {
 		lastModified = sectionsLastModified
+	}
+	if dataMap["max_submissions_per_hour"] != nil {
+		data.MaxSubmissionsPerHour = int32(dataMap["max_submissions_per_hour"].(int))
+	} else {
+		data.MaxSubmissionsPerHour = 10
+	}
+	if dataMap["max_submission_file_size"] != nil {
+		data.MaxSubmissionFileSize = int32(dataMap["max_submission_file_size"].(int))
+	} else {
+		data.MaxSubmissionFileSize = 100 * 1024;
+	}
+	if dataMap["codestyle_files"] != nil {
+		stylesMap, isMap := dataMap["codestyle_files"].(map[interface{}]interface{})
+		if isMap {
+			var stylesLastModified int64
+			data.CodeStyles, stylesLastModified, err = service.GetCourseCodeStyles(courseId, stylesMap)
+			if err != nil {
+				cache.Error = err
+				return
+			}
+			if stylesLastModified > lastModified {
+				lastModified = stylesLastModified
+			}
+		}
 	}
 	cache.Data = &data
 	cache.LastModified = lastModified
@@ -887,6 +956,7 @@ func (service *CourseManagementService) GetCoursePublicContent(ctx context.Conte
 func (service CourseManagementService) mustEmbedUnimplementedCourseManagementServer() {
 	panic("implement me")
 }
+
 
 func NewCourseManagementService(parent *Services, coursesRoot string) *CourseManagementService {
 	root := os.DirFS(coursesRoot)

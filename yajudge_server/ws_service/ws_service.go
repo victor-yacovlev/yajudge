@@ -345,12 +345,18 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 				fieldVal = reflect.MakeSlice(fieldType, itemsCount, itemsCount)
 				for index:=0; index<itemsCount; index++ {
 					jsonItem := sliceVal[index]
-					jsonItemAsMessage := jsonItem.(map[string]interface{})
-					itemVal, err := ArgumentMapToValue(fieldTargetType, jsonItemAsMessage)
-					if err != nil {
-						return res, err
+					if jsonItemAsMessage, isMap := jsonItem.(map[string]interface{}); isMap {
+						itemVal, err := ArgumentMapToValue(fieldTargetType, jsonItemAsMessage)
+						if err != nil {
+							return res, err
+						}
+						fieldVal.Index(index).Set(itemVal)
+					} else if jsonItemAsFloat, isFloat := jsonItem.(float64); isFloat {
+						typee := fieldVal.Index(index).Type()
+						if typee.Kind() == reflect.Uint8 {
+							fieldVal.Index(index).Set(reflect.ValueOf(uint8(jsonItemAsFloat)))
+						}
 					}
-					fieldVal.Index(index).Set(itemVal)
 				}
 			} else {
 				return res, fmt.Errorf("can't convert '%v' to '[]%s' for field '%s'",
@@ -438,9 +444,10 @@ func StartWebsocketHttpHandler(authToken string, grpcAddr string) (http.Handler,
 	}
 	users := core_service.NewUserManagementClient(grpcConn)
 	courses := core_service.NewCourseManagementClient(grpcConn)
-	_ = users
+	submissions := core_service.NewSubmissionManagementClient(grpcConn)
 	service := NewWsService(authToken)
 	service.RegisterService("UserManagement", users)
 	service.RegisterService("CourseManagement", courses)
+	service.RegisterService("SubmissionManagement", submissions)
 	return service, nil
 }

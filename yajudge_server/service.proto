@@ -124,6 +124,11 @@ message GradingOptions {
   FileSet           custom_interactor     = 7; // interactor soure files
 }
 
+message CodeStyle {
+  string  source_file_suffix  = 1;
+  File    style_file          = 2;
+}
+
 message ProblemData {
   // These data structures are not stored in database, but attached to courses via Problem records
 
@@ -151,33 +156,20 @@ message ProblemMetadata {
   bool            skip_code_review        = 5;
 }
 
-message Problem {
-  int64           id                      = 1;
-  int64           lessons_id              = 2;
-  string          name                    = 3;
-  int64           show_atfer_id           = 4;
-  ProblemData     problem_data            = 5;  // to be found at some know place in filesystem
-  int64           open_date               = 6;  // 0 for inherit from outer lesson
-  int64           soft_deadline           = 7;  // 0 for inherit from outer lesson
-  int64           hard_deadline           = 8;  // 0 for inherit from outer lesson
-  float           full_score_multiplier   = 9;  // 1.0 by default, >1 for hard problems, <1 for easy problems
-  bool            blocks_positive_mark    = 10;
-  bool            blocks_next_lesson      = 11;
-  bool            accept_partial_tests    = 12;
-  bool            skip_solution_defence   = 13;
-  bool            skip_code_review        = 14;
-}
 
 enum SolutionStatus {
-  SUBMITTED           = 0;
-  GRADE_IN_PROGRESS   = 1;
-  COMPILATION_ERROR   = 2;
-  VERY_BAD            = 3;  // no one test passed
-  ACCEPTABLE          = 4;  // grade score > 0 (if accept partial solution) or score is full
-  CODE_REVIEW_REJECTED= 5;
-  DEFENCE_FAILED      = 6;
-  PLAGIARISM_DETECTED = 7;
-  DISQUALIFIED        = 8;
+  ANY_STATUS          = 0;
+  SUBMITTED           = 1;
+  GRADE_IN_PROGRESS   = 2;
+  STYLE_CHECK_ERROR   = 3;
+  COMPILATION_ERROR   = 4;
+  VERY_BAD            = 5;  // no one test passed
+  ACCEPTABLE          = 6;  // grade score > 0 (if accept partial solution) or score is full
+  PENDING_REVIEW      = 7;
+  CODE_REVIEW_REJECTED= 8;
+  DEFENCE_FAILED      = 10;
+  PLAGIARISM_DETECTED = 11;
+  DISQUALIFIED        = 12;
   OK                  = 100;
 }
 
@@ -199,14 +191,17 @@ message CodeReview {
 
 message Submission {
   int64               id            = 1;
-  FileSet             solution_files= 2;
-  SolutionStatus      status        = 3;
-  float               grader_score  = 4;
-  string              grader_name   = 5;  // id of grader that processed submission
-  string              grader_output = 6;  // stdout output by testing system
-  string              grader_errors = 7;  // stderr output by testing system
-  CodeReview          code_review   = 8;
-  ProblemData         problem       = 9;  // just references Problem.id in most cases, but contains full data for grader
+  User                user          = 2;
+  Course              course        = 3;
+  int64               timestamp     = 4;
+  FileSet             solution_files= 5;
+  SolutionStatus      status        = 6;
+  double              grader_score  = 7;
+  string              grader_name   = 8;  // id of grader that processed submission
+  string              grader_output = 9;  // stdout output by testing system
+  string              grader_errors = 10;  // stderr output by testing system
+  CodeReview          code_review   = 11;
+  ProblemData         problem       = 12; // just references Problem.id in most cases, but contains full data for grader
 }
 
 message Solution {
@@ -240,9 +235,12 @@ message Section {
 // Courses are stored in filesystem directories but not in database.
 // ID is a string path after the courses root directory.
 message CourseData {
-  string            id          = 1;
-  string            description = 2;
-  repeated Section  sections    = 3;
+  string                  id                      = 1;
+  string                  description             = 2;
+  repeated Section        sections                = 3;
+  int32                   max_submissions_per_hour= 4;
+  int32                   max_submission_file_size= 5;
+  repeated CodeStyle      code_styles             = 6;
 }
 
 message Course {
@@ -263,6 +261,7 @@ message UserRole {
   User        user        = 1;
   Role        role        = 2;
 }
+
 
 
 service UserManagement {
@@ -340,10 +339,37 @@ message GraderProperties {
   GradingPlatform platform    = 2;
 }
 
-service SubmissionsManagement {
+message SubmissionsCountLimit {
+  int32   attempts_left   = 1;
+  int64   next_time_reset = 2;
+  int64   server_time     = 3;
+}
+
+message CheckSubmissionsLimitRequest {
+  User    user            = 1;  // just user id
+  Course  course          = 2;  // just course id
+  string  problem_id      = 3;
+}
+
+message SubmissionList {
+  repeated Submission   submissions = 1;
+}
+
+message SubmissionFilter {
+  User            user            = 1;
+  Course          course          = 2;
+  string          problem_id      = 3;
+  SolutionStatus  status          = 4;
+}
+
+service SubmissionManagement {
+  rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
+  rpc SubmitProblemSolution(Submission) returns (Submission) {}
+  rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
+
   // anounce grader alive and receive stream of submissions to be graded
   rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}
-
   // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
   rpc UpdateGraderOutput(Submission) returns (Submission) {}
 }
+

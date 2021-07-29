@@ -403,10 +403,11 @@ abstract class BaseScreenState extends State<BaseScreen> {
           backgroundColor: MaterialStateProperty.all<Color>(buttonColor),
           mouseCursor: MaterialStateProperty.all<MouseCursor>(mouseCursor),
         ),
-        child: Text(submit.title,
-          style: TextStyle(
-            // fontSize: 11
-              color: Colors.white
+        child: Container(
+          height: 48,
+          padding: EdgeInsets.all(8),
+          child: Center(
+            child: Text(submit.title, style: TextStyle(fontSize: 20, color: Colors.white))
           ),
         ),
         onPressed: submit.onAction,

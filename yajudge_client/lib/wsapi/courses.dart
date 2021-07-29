@@ -10,7 +10,7 @@ part 'courses.g.dart';
 class YFile {
   String name = '';
   List<int> data = List.empty(growable: true);
-  String description = '';
+  String? description;
 
   YFile();
   factory YFile.fromJson(Map<String,dynamic> json) => _$YFileFromJson(json);
@@ -24,6 +24,15 @@ class FileSet {
   FileSet();
   factory FileSet.fromJson(Map<String,dynamic> json) => _$FileSetFromJson(json);
   Map<String,dynamic> toJson() => _$FileSetToJson(this);
+
+  factory FileSet.copyOf(FileSet other) {
+    FileSet fs = FileSet();
+    for (YFile f in other.files) {
+      YFile f2 = YFile()..name=f.name..description=f.description;
+      fs.files.add(f2);
+    }
+    return fs;
+  }
 }
 
 
@@ -34,8 +43,8 @@ class ProblemData {
   String uniqueId = '';
   String statementText = '';
   String statementContentType = '';
-  FileSet statementFiles = FileSet();
-  FileSet solutionFiles = FileSet();
+  FileSet? statementFiles = FileSet();
+  FileSet? solutionFiles = FileSet();
 
   ProblemData();
   factory ProblemData.fromJson(Map<String,dynamic> json) => _$ProblemDataFromJson(json);
@@ -100,10 +109,23 @@ class Section {
 }
 
 @JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
+class CodeStyle {
+  String sourceFileSuffix = '';
+  YFile styleFile = YFile();
+
+  CodeStyle() ;
+  factory CodeStyle.fromJson(Map<String,dynamic> json) => _$CodeStyleFromJson(json);
+  Map<String,dynamic> toJson() => _$CodeStyleToJson(this);
+}
+
+@JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
 class CourseData {
   String id = '';
   String? description;
   List<Section> sections = List.empty(growable: true);
+  int maxSubmissionsPerHour = 10;
+  int maxSubmissionFileSize = 100 * 1024;
+  List<CodeStyle>? codeStyles;
 
   CourseData();
   factory CourseData.fromJson(Map<String,dynamic> json) => _$CourseDataFromJson(json);
@@ -172,7 +194,7 @@ class CourseData {
 class Course {
   int id;
   String name;
-  CourseData courseData;
+  CourseData? courseData;
   String urlPrefix;
 
   Course() : id=0, name='', courseData=CourseData(), urlPrefix='';

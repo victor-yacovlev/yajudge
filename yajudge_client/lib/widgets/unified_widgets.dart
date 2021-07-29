@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:yajudge_client/utils/utils.dart';
@@ -103,11 +104,17 @@ class YCardLikeButton extends StatelessWidget {
       style: Theme.of(context).textTheme.headline6,
     ));
     if (subtitle != null) {
+      FontWeight? weight;
+      if (kIsWeb) {
+        // browser shows this text too light, so make it bolder
+        weight = FontWeight.bold;
+      }
       columnItems.add(Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
         child: Text(subtitle!,
             style: Theme.of(context).textTheme.subtitle2!.copyWith(
-              color: Colors.black45
+              color: Colors.black45,
+              fontWeight: weight,
             )
         ),
       ));

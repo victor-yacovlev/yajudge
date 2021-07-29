@@ -29,6 +29,7 @@ type Services struct {
 	DB						*sql.DB
 	UserManagement			*UserManagementService
 	CourseManagement		*CourseManagementService
+	SubmissionManagement	*SubmissionManagementService
 }
 
 //go:embed create_database_tables.sql
@@ -130,13 +131,14 @@ func StartServices(ctx context.Context,
 
 	res.UserManagement = NewUserManagementService(res)
 	res.CourseManagement = NewCourseManagementService(res, coursesRoot)
-
+	res.SubmissionManagement = NewSubmissionsManagementService(res)
 
 
 	server := grpc.NewServer(res.createAuthMiddlewares(genericAuthToken, gradersAuthToken)...)
 
 	RegisterUserManagementServer(server, res.UserManagement)
 	RegisterCourseManagementServer(server, res.CourseManagement)
+	RegisterSubmissionManagementServer(server, res.SubmissionManagement)
 
 	lis, err := net.Listen("tcp", listenAddress)
 	if err != nil {
