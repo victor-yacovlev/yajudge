@@ -114,14 +114,20 @@ message TestCase {
   FileSet         output_reference_extra_files= 9;
 }
 
+message GradingBuildScript {
+  string            target_file_name      = 1;
+  repeated string   build_commands        = 2;
+}
+
 message GradingOptions {
-  GradingPlatform   platform_required     = 1; // to match corresponding grader client
-  GradingLimits     limits                = 2;
-  repeated TestCase test_cases            = 3;
-  string            standard_checker      = 4; // named by ejudge checkers name
-  string            standard_checker_opts = 5; // like ejudge checker environment
-  FileSet           custom_checker        = 6; // checker source files
-  FileSet           custom_interactor     = 7; // interactor soure files
+  GradingPlatform     platform_required     = 1; // to match corresponding grader client
+  GradingBuildScript  build_script          = 2;
+  GradingLimits       limits                = 3;
+  repeated TestCase   test_cases            = 4;
+  string              standard_checker      = 5; // named by ejudge checkers name
+  string              standard_checker_opts = 6; // like ejudge checker environment
+  FileSet             custom_checker        = 7; // checker source files
+  FileSet             custom_interactor     = 8; // interactor soure files
 }
 
 message CodeStyle {

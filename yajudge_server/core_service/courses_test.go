@@ -16,7 +16,14 @@ type ServiceTestClients struct {
 func createCoursesTestClientAndAdminContext(t *testing.T) ServiceTestClients {
 	var err error
 	servicesContext, finish := context.WithCancel(context.Background())
-	services, err := StartServices(servicesContext, listenAddress, genericAuthorizationToken, graderAuthorizationToken, testDatabaseProps)
+	services, err := StartServices(
+		servicesContext,
+		listenAddress,
+		genericAuthorizationToken,
+		graderAuthorizationToken,
+		testDatabaseProps,
+		"",
+		)
 	if err != nil {
 		t.Fatalf("Can't start core_service: %v", err)
 	}
