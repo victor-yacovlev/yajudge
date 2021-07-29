@@ -131,6 +131,31 @@ func (service SubmissionManagementService) SubmitProblemSolution(ctx context.Con
 		return nil, status.Errorf(codes.PermissionDenied, "user %v not enrolled to course %v",
 			submission.User.Id, submission.Course.Id)
 	}
+	limit, err := service.CheckSubmissionsCountLimit(ctx, &CheckSubmissionsLimitRequest{
+		User: currentUser,
+		Course: submission.Course,
+		ProblemId: submission.Problem.Id,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if limit.AttemptsLeft == 0 {
+		return nil, status.Errorf(codes.ResourceExhausted, "submission attempts left")
+	}
+	courseData, err := service.Services.CourseManagement.GetCoursePublicContent(
+		ctx, &CourseContentRequest{
+			CourseDataId: submission.Course.CourseData.Id,
+		})
+	if err != nil {
+		return nil, err
+	}
+	maxFileSize := int(courseData.Data.MaxSubmissionFileSize)
+	for _, file := range submission.SolutionFiles.Files {
+		fileSize := len(file.Data)
+		if fileSize > maxFileSize {
+			return nil, status.Errorf(codes.ResourceExhausted, "max file size limit exceeded")
+		}
+	}
 	query := `
 insert into submissions(users_id,courses_id,problem_id,status,timestamp)
 values ($1,$2,$3,$4,$5)
