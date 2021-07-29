@@ -3,15 +3,12 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
-import 'package:simple_html_css/simple_html_css.dart';
 import 'package:yajudge_client/screens/screen_base.dart';
 import 'package:yajudge_client/utils/utils.dart';
 import 'package:yajudge_client/widgets/rich_text_viewer.dart';
 import 'package:yajudge_client/widgets/unified_widgets.dart';
 import 'package:yajudge_client/wsapi/courses.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:yajudge_client/wsapi/submissions.dart';
 import '../app.dart';
 
@@ -413,7 +410,7 @@ class CourseProblemScreenState extends BaseScreenState {
     screen = widget as CourseProblemScreen;
     request.course.id = screen.courseId;
     request.user = AppState.instance.userProfile!;
-    request.problem = _problemData!;
+    request.problemId = _problemData!.id;
     request.solutionFiles = _submissionFiles!;
     SubmissionService.instance.submitProblemSolution(request).then((Submission ok) {
       _loadSubmissions();

@@ -98,7 +98,7 @@ where
 			Id: int64(id),
 			User: submUser,
 			Course: courseEnroll.Course,
-			Problem: &ProblemData{Id: problemId},
+			ProblemId: problemId,
 			Timestamp: timestamp,
 			Status: SolutionStatus(problemStatus),
 			SolutionFiles: &FileSet{Files: make([]*File, 0)},
@@ -134,7 +134,7 @@ func (service SubmissionManagementService) SubmitProblemSolution(ctx context.Con
 	limit, err := service.CheckSubmissionsCountLimit(ctx, &CheckSubmissionsLimitRequest{
 		User: currentUser,
 		Course: submission.Course,
-		ProblemId: submission.Problem.Id,
+		ProblemId: submission.ProblemId,
 	})
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ values ($1,$2,$3,$4,$5)
 returning id
 `
 	err = service.DB.QueryRow(query, currentUser.Id, submission.Course.Id,
-		submission.Problem.Id, SolutionStatus_SUBMITTED, time.Now().Unix()).Scan(&submission.Id)
+		submission.ProblemId, SolutionStatus_SUBMITTED, time.Now().Unix()).Scan(&submission.Id)
 	if err != nil {
 		return nil, err
 	}

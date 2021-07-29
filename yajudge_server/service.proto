@@ -201,7 +201,7 @@ message Submission {
   string              grader_output = 9;  // stdout output by testing system
   string              grader_errors = 10;  // stderr output by testing system
   CodeReview          code_review   = 11;
-  ProblemData         problem       = 12; // just references Problem.id in most cases, but contains full data for grader
+  string              problem_id    = 12; // just references Problem.id in most cases, but contains full data for grader
 }
 
 message Solution {

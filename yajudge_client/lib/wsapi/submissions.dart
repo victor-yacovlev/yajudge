@@ -28,7 +28,7 @@ class Submission {
   Course course = Course();
   int timestamp = 0;
   int status = 0;
-  ProblemData? problem = ProblemData();
+  String problemId = '';
   FileSet solutionFiles = FileSet();
 
   Submission();
