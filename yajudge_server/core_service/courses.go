@@ -12,26 +12,28 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type CourseDataCacheItem struct {
-	Data			*CourseData
-	LastModified	int64
-	LastChecked		int64
-	Error			error
+	Data         *CourseData
+	LastModified int64
+	LastChecked  int64
+	Error        error
 }
 
 type CourseManagementService struct {
-	DB 			*sql.DB
-	Parent		*Services
-	Root		fs.FS
-	Courses		map[string]CourseDataCacheItem
+	DB      *sql.DB
+	Parent  *Services
+	Root    fs.FS
+	Courses map[string]CourseDataCacheItem
 }
 
 func (service *CourseManagementService) DeleteCourse(ctx context.Context, course *Course) (*Nothing, error) {
-	if course.Id==0 {
+	if course.Id == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "course id required")
 	}
 	_, err := service.DB.Exec(`delete from courses where id=$1`, course.Id)
@@ -63,7 +65,7 @@ func (service *CourseManagementService) GetUserEnrollments(user *User) (res []*E
 			return nil, err
 		}
 		res = append(res, &Enrolment{
-			Role: Role(role),
+			Role:   Role(role),
 			Course: course,
 		})
 	}
@@ -87,8 +89,7 @@ func (service *CourseManagementService) GetCourses(ctx context.Context, filter *
 	res.Courses = make([]*CoursesList_CourseListEntry, 0, 10)
 	for allCourses.Next() {
 		candidate := &Course{}
-		candidate.CourseData = &CourseData{}
-		err = allCourses.Scan(&candidate.Id, &candidate.Name, &candidate.CourseData.Id, &candidate.UrlPrefix)
+		err = allCourses.Scan(&candidate.Id, &candidate.Name, &candidate.DataId, &candidate.UrlPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -125,23 +126,19 @@ func (service *CourseManagementService) GetCourses(ctx context.Context, filter *
 		}
 		res.Courses = append(res.Courses, &CoursesList_CourseListEntry{
 			Course: candidate,
-			Role: courseRole,
+			Role:   courseRole,
 		})
 	}
 	return res, err
 }
 
-
 func (service *CourseManagementService) CloneCourse(ctx context.Context, course *Course) (res *Course, err error) {
 	// todo make deep contents copy
-	if course.Id==0 {
+	if course.Id == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "course id required")
 	}
-	if course.CourseData == nil {
-		course.CourseData = &CourseData{}
-	}
-	if course.Name=="" {
-		err = service.DB.QueryRow(`select name,course_data from courses where id=$1`, course.Id).Scan(&course.Name, &course.CourseData.Id)
+	if course.Name == "" {
+		err = service.DB.QueryRow(`select name,course_data from courses where id=$1`, course.Id).Scan(&course.Name, &course.DataId)
 		if err != nil {
 			return nil, err
 		}
@@ -151,13 +148,12 @@ func (service *CourseManagementService) CloneCourse(ctx context.Context, course 
 		return nil, err
 	}
 	res = &Course{Name: newName}
-	err = service.DB.QueryRow(`insert into courses(name,course_data) values ($1,$2) returning id`, newName, course.CourseData.Id).Scan(&res.Id)
+	err = service.DB.QueryRow(`insert into courses(name,course_data) values ($1,$2) returning id`, newName, course.DataId).Scan(&res.Id)
 	if err != nil {
 		return nil, err
 	}
 	return res, err
 }
-
 
 func (service *CourseManagementService) CreateOrUpdateCourse(ctx context.Context, course *Course) (res *Course, err error) {
 	var query string
@@ -171,7 +167,7 @@ func (service *CourseManagementService) CreateOrUpdateCourse(ctx context.Context
 		return res, nil
 	} else {
 		query = `insert into courses(name,course_data) values ($1,$2) returning id`
-		err := service.DB.QueryRow(query, course.Name, course.CourseData.Id).Scan(&res.Id)
+		err := service.DB.QueryRow(query, course.Name, course.DataId).Scan(&res.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -183,9 +179,9 @@ func (service *CourseManagementService) EnrollUser(ctx context.Context, request 
 	user := request.User
 	course = request.Course
 	role := request.Role
-	if user.Id==0 && user.Email=="" {
+	if user.Id == 0 && user.Email == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "user id or email required")
-	} else if request.User.Id==0 {
+	} else if request.User.Id == 0 {
 		err = service.DB.QueryRow(`select id from users where email=$1`, user.Email).Scan(&user.Id)
 		if err != nil {
 			return nil, err
@@ -194,16 +190,16 @@ func (service *CourseManagementService) EnrollUser(ctx context.Context, request 
 	if role == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "role id or name required")
 	}
-	if course.Id==0 && course.Name=="" {
+	if course.Id == 0 && course.Name == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "course id or name required")
 	}
-	if course.Id==0 {
+	if course.Id == 0 {
 		err = service.DB.QueryRow(`select id from courses where name=$1`, course.Name).Scan(&course.Id)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if course.Name=="" {
+	if course.Name == "" {
 		err = service.DB.QueryRow(`select name from courses where id=$1`, course.Id).Scan(&course.Name)
 		if err != nil {
 			return nil, err
@@ -220,9 +216,9 @@ func GuessContentType(fileName string) string {
 		return ""
 	}
 	suffix := fileName[lastDotIndex:]
-	KnownTypes := map[string]string {
-		".md": "text/markdown",
-		".txt": "text/plain",
+	KnownTypes := map[string]string{
+		".md":   "text/markdown",
+		".txt":  "text/plain",
 		".html": "text/html",
 	}
 	typee, found := KnownTypes[suffix]
@@ -234,7 +230,7 @@ func GuessContentType(fileName string) string {
 
 func GuessMarkdownTitle(textContent string) string {
 	lines := strings.Split(textContent, "\n")
-	for i:=0; i<len(lines) ; i++ {
+	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 		if strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "##") {
 			title := strings.TrimSpace(line[1:])
@@ -252,8 +248,6 @@ func GuessTitle(textContent string, contentType string) string {
 	}
 	return ""
 }
-
-
 
 func ParseEjudgeStatementXML(xmlFile fs.File) (statement string, id string, err error) {
 	xmlInfo, _ := xmlFile.Stat()
@@ -303,7 +297,6 @@ func ParseEjudgeStatementXML(xmlFile fs.File) (statement string, id string, err 
 	_, _ = textStart, textEnd
 	return
 }
-
 
 func (service *CourseManagementService) GetEjudgeProblem(problemPrefix string) (data *ProblemData, timestamp int64, err error) {
 	// 1. Get statement
@@ -370,7 +363,7 @@ func (service *CourseManagementService) GetFileset(problemPrefix, problemId stri
 			}
 			file.Data = content
 		} else {
-			file.Data = make([]byte, 0);
+			file.Data = make([]byte, 0)
 		}
 		fileset.Files = append(fileset.Files, file)
 	}
@@ -420,7 +413,7 @@ func (service *CourseManagementService) GetProblemFromYaml(problemPrefix string)
 	} else if strings.HasSuffix(statementFileName, ".md") {
 		statementContent, err := fs.ReadFile(service.Root, statementFileName)
 		if err != nil {
-			return nil, 0, fmt.Errorf("can't read '%s': %v", )
+			return nil, 0, fmt.Errorf("can't read '%s': %v")
 		}
 		data.StatementText = string(statementContent)
 		data.StatementContentType = "text/markdown"
@@ -476,7 +469,152 @@ func (service *CourseManagementService) GetProblemFromYaml(problemPrefix string)
 	} else {
 		data.StatementFiles = &FileSet{Files: make([]*File, 0)}
 	}
+	data.GradingOptions = &GradingOptions{
+		PlatformRequired: &GradingPlatform{Arch: Arch_ARCH_ANY, Os: OS_OS_ANY},
+	}
+	if runtimes, hasRuntimes := dataMap["runtimes"]; hasRuntimes {
+		if entriesMap, isMap := runtimes.([]interface{}); isMap {
+			data.GradingOptions.Runtimes = make([]*GradingRuntime, 0, len(entriesMap))
+			for _, entry := range entriesMap {
+				name := entry.(string)
+				rt := &GradingRuntime{}
+				if strings.HasSuffix(name, "*") || strings.HasSuffix(name, "?") {
+					rt.Name = name[0 : len(name)-1]
+					rt.Optional = true
+				} else {
+					rt.Name = name
+				}
+				data.GradingOptions.Runtimes = append(data.GradingOptions.Runtimes, rt)
+			}
+		}
+		if entriesString, isString := runtimes.(string); isString {
+			entries := strings.Split(entriesString, " ")
+			data.GradingOptions.Runtimes = make([]*GradingRuntime, 0, len(entries))
+			for _, name := range entries {
+				if name == "" {
+					continue
+				}
+				rt := &GradingRuntime{}
+				if strings.HasSuffix(name, "*") || strings.HasSuffix(name, "?") {
+					rt.Name = name[0 : len(name)-1]
+					rt.Optional = true
+				} else {
+					rt.Name = name
+				}
+				data.GradingOptions.Runtimes = append(data.GradingOptions.Runtimes, rt)
+			}
+		}
+	}
+	if compileOpts, hasCompileOpts := dataMap["extra_compile_options"]; hasCompileOpts {
+		value := compileOpts.(string)
+		data.GradingOptions.ExtraCompileOptions = strings.Split(value, " ")
+	}
+	if linkOpts, hasLinkOpts := dataMap["extra_link_options"]; hasLinkOpts {
+		value := linkOpts.(string)
+		data.GradingOptions.ExtraLinkOptions = strings.Split(value, " ")
+	}
+	if arch, hasArch := dataMap["arch"]; hasArch {
+		value := arch.(string)
+		switch value {
+		case "any":
+			data.GradingOptions.PlatformRequired.Arch = Arch_ARCH_ANY
+		case "arm", "arm32":
+			data.GradingOptions.PlatformRequired.Arch = Arch_ARCH_ARMV7
+		case "arm64", "aarch64":
+			data.GradingOptions.PlatformRequired.Arch = Arch_ARCH_AARCH64
+		case "x86_64", "x86-64", "x64", "amd64", "ia64":
+			data.GradingOptions.PlatformRequired.Arch = Arch_ARCH_X86_64
+		case "x86", "i386", "i686", "x86-32", "ia32":
+			data.GradingOptions.PlatformRequired.Arch = Arch_ARCH_X86
+		}
+	}
+	if os, hasOs := dataMap["os"]; hasOs {
+		value := os.(string)
+		switch value {
+		case "any":
+			data.GradingOptions.PlatformRequired.Os = OS_OS_ANY
+		case "windows":
+			data.GradingOptions.PlatformRequired.Os = OS_OS_WINDOWS
+		case "linux":
+			data.GradingOptions.PlatformRequired.Os = OS_OS_LINUX
+		case "darwin", "macos":
+			data.GradingOptions.PlatformRequired.Os = OS_OS_DARWIN
+		case "bsd":
+			data.GradingOptions.PlatformRequired.Os = OS_OS_BSD
+		case "posix":
+			data.GradingOptions.PlatformRequired.Os = OS_OS_POSIX
+		}
+	}
+	if tests, hasTests := dataMap["tests"]; hasTests {
+		// TODO parse tests from yaml
+		_ = tests
+	} else {
+		// get tests from ejudge format
+		data.GradingOptions.TestCases, err = service.GetEjudgeTestCases(problemPrefix)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	if checker, hasChecker := dataMap["checker"]; hasChecker {
+		value := checker.(string)
+		data.GradingOptions.StandardChecker = value
+	}
+	if checkerOpts, hasCheckerOpts := dataMap["checker_options"]; hasCheckerOpts {
+		value := checkerOpts.(string)
+		data.GradingOptions.StandardCheckerOpts = value
+	}
 	return data, timestamp, nil
+}
+
+func (service *CourseManagementService) GetEjudgeTestCases(rootDir string) (res []*TestCase, err error) {
+	testsDir := rootDir + "/tests"
+	res = make([]*TestCase, 0, 20)
+	dirEntries, err := fs.ReadDir(service.Root, testsDir)
+	if err != nil {
+		err = nil // not an error
+		return
+	}
+	testFilePattern := regexp.MustCompile(`(\d\d\d)\.(dat|ans|inf)`)
+	for _, entry := range dirEntries {
+		if testFilePattern.MatchString(entry.Name()) {
+			parts := testFilePattern.FindStringSubmatch(entry.Name())
+			testNumber, _ := strconv.ParseInt(parts[1], 10, 31)
+			if testNumber < 1 {
+				continue
+			}
+			testIndex := int(testNumber) - 1
+			fileType := parts[2]
+			for testIndex >= len(res) {
+				res = append(res, &TestCase{})
+			}
+			test := res[testIndex]
+			fileName := testsDir + "/" + entry.Name()
+			var infContent []byte
+			switch fileType {
+			case "dat":
+				test.StdinData = &File{Name: entry.Name()}
+				test.StdinData.Data, err = fs.ReadFile(service.Root, fileName)
+			case "ans":
+				test.StdoutReference = &File{Name: entry.Name()}
+				test.StdoutReference.Data, err = fs.ReadFile(service.Root, fileName)
+			case "inf":
+				infContent, err = fs.ReadFile(service.Root, fileName)
+			}
+			if err != nil {
+				return
+			}
+			if infContent != nil {
+				infLines := strings.Split(string(infContent), "\n")
+				for _, line := range infLines {
+					line = strings.TrimSpace(line)
+					if strings.HasPrefix(line, "params =") {
+						test.CommandLineArguments = strings.TrimSpace(line[8:])
+					}
+				}
+			}
+		}
+	}
+	return
 }
 
 func getStringValueFromMap(m map[interface{}]interface{}, key string, def string) string {
@@ -503,11 +641,11 @@ func getBoolValueFromMap(m map[interface{}]interface{}, key string, def bool) bo
 	sValue, isString := obj.(string)
 	if isString {
 		sValue = strings.TrimSpace(strings.ToLower(sValue))
-		return sValue=="yes" || sValue=="true" || sValue=="1"
+		return sValue == "yes" || sValue == "true" || sValue == "1"
 	}
 	iValue, isInt := obj.(int)
 	if isInt {
-		return  iValue > 0
+		return iValue > 0
 	}
 	return def
 }
@@ -530,7 +668,7 @@ func getIntValueFromMap(m map[interface{}]interface{}, key string, def int) int 
 		return def
 	}
 	iValue, isInt := obj.(int)
-	if isInt{
+	if isInt {
 		return iValue
 	}
 	return def
@@ -588,6 +726,23 @@ func (service *CourseManagementService) GetLessonProblems(prefix string, parentD
 		if problemLastModified > lastModified {
 			lastModified = problemLastModified
 		}
+		if data.GraderFiles == nil {
+			data.GraderFiles = &FileSet{
+				Files: make([]*File, 0), // TODO read grader files
+			}
+		}
+		if data.GradingOptions == nil {
+			data.GradingOptions = &GradingOptions{
+				Targets:             make([]*GradingTarget, 0),
+				ExtraCompileOptions: make([]string, 0),
+				ExtraLinkOptions:    make([]string, 0),
+				PlatformRequired: &GradingPlatform{
+					Arch: Arch_ARCH_ANY,
+					Os:   OS_OS_ANY,
+				},
+				Limits: &GradingLimits{},
+			}
+		} // TODO parse targets and options
 		problems = append(problems, data)
 		problemsMetadata = append(problemsMetadata, metadata)
 	}
@@ -800,7 +955,7 @@ func (service *CourseManagementService) GetCourseSections(prefix string,
 		if dataMap["name"] != nil {
 			data.Name = dataMap["name"].(string)
 		} else {
-			data.Name = ""  // unnamed top-level section
+			data.Name = "" // unnamed top-level section
 		}
 		if dataMap["description"] != nil {
 			data.Description = dataMap["description"].(string)
@@ -828,7 +983,7 @@ func (service *CourseManagementService) GetCourseCodeStyles(courseId string, dat
 	result = make([]*CodeStyle, 0, len(dataMap))
 	for suffixObject, entryObject := range dataMap {
 		suffix, suffixIsString := suffixObject.(string)
-		entry, entryIsString := entryObject.(string);
+		entry, entryIsString := entryObject.(string)
 		if suffixIsString && entryIsString {
 			if !strings.HasPrefix(suffix, ".") {
 				suffix = "." + suffix
@@ -850,7 +1005,7 @@ func (service *CourseManagementService) GetCourseCodeStyles(courseId string, dat
 			}
 			result = append(result, &CodeStyle{
 				SourceFileSuffix: suffix,
-				StyleFile: &file,
+				StyleFile:        &file,
 			})
 		}
 	}
@@ -900,7 +1055,7 @@ func (service *CourseManagementService) LoadCourseIntoCache(courseId string) {
 	if dataMap["max_submission_file_size"] != nil {
 		data.MaxSubmissionFileSize = int32(dataMap["max_submission_file_size"].(int))
 	} else {
-		data.MaxSubmissionFileSize = 100 * 1024;
+		data.MaxSubmissionFileSize = 100 * 1024
 	}
 	if dataMap["codestyle_files"] != nil {
 		stylesMap, isMap := dataMap["codestyle_files"].(map[interface{}]interface{})
@@ -922,10 +1077,10 @@ func (service *CourseManagementService) LoadCourseIntoCache(courseId string) {
 	service.Courses[courseId] = cache
 }
 
-func (service *CourseManagementService) GetCoursePublicContent(ctx context.Context, request *CourseContentRequest) (response *CourseContentResponse, err error) {
+func (service *CourseManagementService) GetCourseFullContent(ctx context.Context, request *CourseContentRequest) (response *CourseContentResponse, err error) {
 	courseId := request.CourseDataId
 	if courseId == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "course data id required");
+		return nil, status.Errorf(codes.InvalidArgument, "course data id required")
 	}
 	const ReloadCourseInterval = 15
 	now := time.Now().Unix()
@@ -934,7 +1089,7 @@ func (service *CourseManagementService) GetCoursePublicContent(ctx context.Conte
 		service.LoadCourseIntoCache(courseId)
 		cached, _ = service.Courses[courseId]
 	}
-	if cached.LastChecked >= (now + ReloadCourseInterval) || cached.Error != nil {
+	if cached.LastChecked >= (now+ReloadCourseInterval) || cached.Error != nil {
 		service.LoadCourseIntoCache(courseId)
 		cached, _ = service.Courses[courseId]
 	}
@@ -945,25 +1100,101 @@ func (service *CourseManagementService) GetCoursePublicContent(ctx context.Conte
 		return &CourseContentResponse{CourseDataId: request.CourseDataId, Status: CourseContentStatus_NOT_CHANGED}, nil
 	}
 	return &CourseContentResponse{
-		Status: CourseContentStatus_HAS_DATA,
+		Status:       CourseContentStatus_HAS_DATA,
 		CourseDataId: courseId,
-		Data: cached.Data,
+		Data:         cached.Data,
 		LastModified: cached.LastModified,
 	}, nil
 }
 
+func (service *CourseManagementService) GetCoursePublicContent(ctx context.Context, request *CourseContentRequest) (response *CourseContentResponse, err error) {
+	fullResponse, err := service.GetCourseFullContent(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if fullResponse.Data == nil {
+		return fullResponse, nil
+	}
+	fullContent := fullResponse.Data
+	content := &CourseData{
+		Id:                    fullContent.Id,
+		Description:           fullContent.Description,
+		CodeStyles:            fullContent.CodeStyles,
+		MaxSubmissionFileSize: fullContent.MaxSubmissionFileSize,
+		MaxSubmissionsPerHour: fullContent.MaxSubmissionsPerHour,
+		Sections:              make([]*Section, 0, len(fullContent.Sections)),
+	}
+	// Copy all content but not private problem files
+	for _, fullSection := range fullContent.Sections {
+		section := &Section{
+			Id:           fullSection.Id,
+			Name:         fullSection.Name,
+			Description:  fullSection.Description,
+			OpenDate:     fullSection.OpenDate,
+			SoftDeadline: fullSection.SoftDeadline,
+			HardDeadline: fullSection.HardDeadline,
+			Lessons:      make([]*Lesson, 0, len(fullSection.Lessons)),
+		}
+		for _, fullLesson := range fullSection.Lessons {
+			lesson := &Lesson{
+				Id:               fullLesson.Id,
+				Name:             fullLesson.Name,
+				Description:      fullLesson.Description,
+				OpenDate:         fullLesson.OpenDate,
+				SoftDeadline:     fullLesson.SoftDeadline,
+				HardDeadline:     fullLesson.HardDeadline,
+				Readings:         fullLesson.Readings,
+				ProblemsMetadata: fullLesson.ProblemsMetadata,
+				Problems:         make([]*ProblemData, 0, len(fullLesson.Problems)),
+			}
+			for _, fullProblem := range fullLesson.Problems {
+				problem := &ProblemData{
+					Id:                         fullProblem.Id,
+					UniqueId:                   fullProblem.UniqueId,
+					Title:                      fullProblem.Title,
+					StatementText:              fullProblem.StatementText,
+					StatementContentType:       fullProblem.StatementContentType,
+					StatementFiles:             fullProblem.StatementFiles,
+					SolutionFiles:              fullProblem.SolutionFiles,
+					FullScoreMultiplierPropose: fullProblem.FullScoreMultiplierPropose,
+				}
+				lesson.Problems = append(lesson.Problems, problem)
+			}
+			section.Lessons = append(section.Lessons, lesson)
+		}
+		content.Sections = append(content.Sections, section)
+	}
+	return &CourseContentResponse{
+		Status:       CourseContentStatus_HAS_DATA,
+		CourseDataId: fullResponse.CourseDataId,
+		Data:         content,
+		LastModified: fullResponse.LastModified,
+	}, nil
+}
+
+func FindProblemInCourseData(course *CourseData, problemId string) *ProblemData {
+	for _, section := range course.Sections {
+		for _, lesson := range section.Lessons {
+			for _, problem := range lesson.Problems {
+				if problem.Id == problemId {
+					return problem
+				}
+			}
+		}
+	}
+	return nil
+}
 
 func (service CourseManagementService) mustEmbedUnimplementedCourseManagementServer() {
 	panic("implement me")
 }
 
-
 func NewCourseManagementService(parent *Services, coursesRoot string) *CourseManagementService {
 	root := os.DirFS(coursesRoot)
 	return &CourseManagementService{
-		DB: parent.DB,
-		Parent: parent,
-		Root: root,
+		DB:      parent.DB,
+		Parent:  parent,
+		Root:    root,
 		Courses: make(map[string]CourseDataCacheItem),
 	}
 }

@@ -18,11 +18,9 @@ import (
 	"time"
 )
 
-var Capabilities = map[Role][][2]string {
+var Capabilities = map[Role][][2]string{
 	Role_ROLE_UNAUTHORIZED: {
 		{"UserManagement", "Authorize"},
-		{"SubmissionManagement", "ReceiveSubmissionsToGrade"},
-		{"SubmissionManagement", "UpdateGraderOutput"},
 	},
 	Role_ROLE_STUDENT: {
 		{"UserManagement", "Authorize"},
@@ -37,8 +35,8 @@ var Capabilities = map[Role][][2]string {
 }
 
 type UserManagementService struct {
-	Parent			*Services
-	DB 				*sql.DB
+	Parent *Services
+	DB     *sql.DB
 }
 
 func (service *UserManagementService) GenerateRandomPassword() (password string) {
@@ -95,13 +93,13 @@ func (service *UserManagementService) BatchCreateStudents(ctx context.Context, u
 		user.Password = service.GenerateRandomPassword()
 		user, err = service.CreateOrUpdateUser(ctx, user)
 		if err != nil {
-			err = fmt.Errorf("while creating '%s' '%s': %s'", user.LastName, user.FirstName, err.Error());
+			err = fmt.Errorf("while creating '%s' '%s': %s'", user.LastName, user.FirstName, err.Error())
 			return
 		}
 		user.DefaultRole = Role_ROLE_STUDENT
 		_, err = service.SetUserDefaultRole(ctx, &UserRole{User: user, Role: user.DefaultRole})
 		if err != nil {
-			err = fmt.Errorf("while creating '%s' '%s': %s'", user.LastName, user.FirstName, err.Error());
+			err = fmt.Errorf("while creating '%s' '%s': %s'", user.LastName, user.FirstName, err.Error())
 			return
 		}
 		res.Users[index] = user
@@ -120,7 +118,7 @@ func (service *UserManagementService) BatchDeleteUsers(ctx context.Context, user
 }
 
 func (service *UserManagementService) DeleteUser(ctx context.Context, user *User) (res *Nothing, err error) {
-	if user.Id==0 {
+	if user.Id == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "user id required")
 	}
 	_, err = service.DB.Exec(`delete from users where id=$1`, user.Id)
@@ -212,7 +210,6 @@ func (service *UserManagementService) CreateOrUpdateUser(ctx context.Context, us
 	}
 	return res, err
 }
-
 
 func (service *UserManagementService) GetUsers(ctx context.Context, filter *UsersFilter) (*UsersList, error) {
 
@@ -346,8 +343,6 @@ func (service *UserManagementService) SetUserDefaultRole(ctx context.Context, ar
 	return arg, err
 }
 
-
-
 func (service *UserManagementService) Authorize(ctx context.Context, user *User) (sess *Session, err error) {
 	if user.Id == 0 && user.Email == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "id or email not provided")
@@ -471,7 +466,7 @@ func (service *UserManagementService) CheckUserSession(ctx context.Context, requ
 			for _, capEntry := range caps {
 				capSubsystem := capEntry[0]
 				capMethod := capEntry[1]
-				if capSubsystem==subsystem && capMethod==method {
+				if capSubsystem == subsystem && capMethod == method {
 					foundCap = true
 					break
 				}
@@ -481,7 +476,6 @@ func (service *UserManagementService) CheckUserSession(ctx context.Context, requ
 	}
 	return true
 }
-
 
 func (service *UserManagementService) GetUserBySession(session *Session) (user *User, err error) {
 	if session.UserId == 0 {
@@ -553,7 +547,6 @@ func (service *UserManagementService) GetDefaultRole(user *User) (role Role, err
 	err = service.DB.QueryRow(`select default_role from users where id=$1`, user.Id).Scan(&role)
 	return role, err
 }
-
 
 func NewUserManagementService(parent *Services) *UserManagementService {
 	result := new(UserManagementService)

@@ -14,8 +14,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"yajudge/service"
-	"yajudge/ws_service"
+	"yajudge_server/core_service"
+	"yajudge_server/ws_service"
 )
 
 func main() {
@@ -46,38 +46,38 @@ func main() {
 }
 
 type DatabaseConfig struct {
-	Host				string `yaml:"host"`
-	Port				uint16 `yaml:"port"`
-	Name				string `yaml:"name"`
-	User				string `yaml:"user"`
-	Password			string `yaml:"password"`
+	Host     string `yaml:"host"`
+	Port     uint16 `yaml:"port"`
+	Name     string `yaml:"name"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
 }
 
 type RpcConfig struct {
-	Host				string `yaml:"host"`
-	Port				uint16 `yaml:"port"`
-	PublicToken			string `yaml:"public_token"`
-	PrivateToken		string `yaml:"private_token"`
+	Host         string `yaml:"host"`
+	Port         uint16 `yaml:"port"`
+	PublicToken  string `yaml:"public_token"`
+	PrivateToken string `yaml:"private_token"`
 }
 
 type WebConfig struct {
-	Host			string `yaml:"host"`
-	Port			uint16 `yaml:"port"`
-	Root			string `yaml:"root"`
-	StaticDir		string `yaml:"static_dir"`
-	WsApi			string `yaml:"ws_api"`
+	Host      string `yaml:"host"`
+	Port      uint16 `yaml:"port"`
+	Root      string `yaml:"root"`
+	StaticDir string `yaml:"static_dir"`
+	WsApi     string `yaml:"ws_api"`
 }
 
 type LocationsConfig struct {
-	CoursesRoot		string `yaml:"courses_root"`
-	WebStaticRoot	string `yaml:"web_static_root"`
+	CoursesRoot   string `yaml:"courses_root"`
+	WebStaticRoot string `yaml:"web_static_root"`
 }
 
 type YajudgeServerConfig struct {
-	Database  		DatabaseConfig  `yaml:"database"`
-	Rpc       		RpcConfig       `yaml:"rpc"`
-	Web       		WebConfig       `yaml:"web"`
-	Locations 		LocationsConfig `yaml:"locations"`
+	Database  DatabaseConfig  `yaml:"database"`
+	Rpc       RpcConfig       `yaml:"rpc"`
+	Web       WebConfig       `yaml:"web"`
+	Locations LocationsConfig `yaml:"locations"`
 }
 
 func ParseConfig(fileName string) (*YajudgeServerConfig, error) {
@@ -94,14 +94,14 @@ func ParseConfig(fileName string) (*YajudgeServerConfig, error) {
 			Host: "localhost",
 			Port: 5432,
 		},
-		Rpc:      RpcConfig{
+		Rpc: RpcConfig{
 			Host: "localhost",
 			Port: 9095,
 		},
-		Web:      WebConfig{
-			Host: "localhost",
-			Port: 8080,
-			Root: "/",
+		Web: WebConfig{
+			Host:  "localhost",
+			Port:  8080,
+			Root:  "/",
 			WsApi: "/api-ws",
 		},
 	}
@@ -117,14 +117,14 @@ func Serve(config *YajudgeServerConfig) error {
 	defer finish()
 	mux := http.DefaultServeMux
 	listenAddr := config.Web.Host + ":" + strconv.Itoa(int(config.Web.Port))
-	srv := http.Server { Handler: mux, Addr: listenAddr }
+	srv := http.Server{Handler: mux, Addr: listenAddr}
 	defer srv.Shutdown(context.Background())
 
 	signalsChan := make(chan interface{})
 	go func() {
 		sigIntChan := make(chan os.Signal, 1)
 		signal.Notify(sigIntChan, os.Interrupt)
-		<- sigIntChan
+		<-sigIntChan
 		close(signalsChan)
 	}()
 	defer finish()
@@ -152,7 +152,7 @@ func Serve(config *YajudgeServerConfig) error {
 	ws, err := ws_service.StartWebsocketHttpHandler(
 		config.Rpc.PublicToken,
 		rpcAddr,
-		)
+	)
 	if err != nil {
 		return err
 	}
@@ -161,11 +161,11 @@ func Serve(config *YajudgeServerConfig) error {
 	mux.Handle(config.Web.Root,
 		http.StripPrefix(config.Web.Root, http.FileServer(http.Dir(config.Web.StaticDir))))
 
-	err = srv.ListenAndServe();
+	err = srv.ListenAndServe()
 	if err != nil {
 		return err
 	}
-	<- signalsChan
+	<-signalsChan
 	return nil
 }
 
@@ -174,7 +174,7 @@ func InitializeEmptyDatabase(config *YajudgeServerConfig) error {
 	defer finish()
 	rpcServices, err := core_service.StartServices(
 		ctx,
-		config.Rpc.Host + ":" + string(config.Rpc.Port),
+		config.Rpc.Host+":"+string(config.Rpc.Port),
 		config.Rpc.PublicToken, config.Rpc.PrivateToken, core_service.DatabaseProperties{
 			Engine:   "postgres",
 			Host:     config.Database.Host,

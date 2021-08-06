@@ -155,17 +155,17 @@ class AppState extends State<App> {
       final String key = '/' + sectionId + '/' + lessonId + '/' + name;
 
       for (final CourseListEntry courseEntry in _coursesList.courses) {
-        final CourseData courseData = courseEntry.course.courseData!;
+        final String courseDataId = courseEntry.course.dataId;
         final String courseUrlPrefix = courseEntry.course.urlPrefix;
         if (courseUrlPrefix == pathUrlPrefix) {
           if (kind == 'readings') {
-            return CourseReadingScreen(courseData.id, key, null);
+            return CourseReadingScreen(courseDataId, key, null);
           } else if (kind == 'problems') {
             String tab = 'statement';
             if (lessonPartMatch[7] != null) {
               tab = lessonPartMatch[7]!;
             }
-            return CourseProblemScreen(courseEntry.course.id, courseData.id, key, null, null, tab);
+            return CourseProblemScreen(courseEntry.course.id, courseDataId, key, null, null, tab);
           }
         }
       }
@@ -185,7 +185,7 @@ class AppState extends State<App> {
       final String? sectionId = groupCount >= 3 ? coursesMatch[3] : null;
       final String? lessonId = groupCount >= 5 ? coursesMatch[5] : null;
       for (final CourseListEntry courseEntry in _coursesList.courses) {
-        final String courseDataId = courseEntry.course.courseData!.id;
+        final String courseDataId = courseEntry.course.dataId;
         final String courseUrlPrefix = courseEntry.course.urlPrefix;
         if (courseUrlPrefix == pathUrlPrefix) {
           return CourseScreen(

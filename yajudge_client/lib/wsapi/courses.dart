@@ -192,12 +192,12 @@ class CourseData {
 
 @JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
 class Course {
-  int id;
-  String name;
-  CourseData? courseData;
-  String urlPrefix;
+  int id = 0;
+  String name = '';
+  String dataId = '';
+  String urlPrefix = '';
 
-  Course() : id=0, name='', courseData=CourseData(), urlPrefix='';
+  Course() ;
   factory Course.fromJson(Map<String,dynamic> json) => _$CourseFromJson(json);
   Map<String,dynamic> toJson() => _$CourseToJson(this);
 }

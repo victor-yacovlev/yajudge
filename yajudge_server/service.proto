@@ -82,23 +82,26 @@ enum OS {
   OS_LINUX    = 2;
   OS_BSD      = 3;
   OS_WINDOWS  = 4;
+  OS_DARWIN   = 5;
 }
 
 
 message GradingPlatform {
   Arch            arch        = 1; // ARCH_ANY for generic problems
   OS              os          = 2; // OS_ANY for too generic problems, OS_POSIX for most common
-  repeated string compilers   = 3; // gcc, g++, gas, javac, and so on
-  repeated string tools       = 4; // additional tools required like cmake
-  repeated string libraries   = 5; // additional libraries required (in terms of pkg-config for C/C++)
+  repeated string runtimes    = 3; // additional runtimes like valgrind, qemu-arm, wine etc.
+  repeated string compilers   = 4; // gcc, g++, gas, javac, and so on
+  repeated string tools       = 5; // additional tools required like cmake
+  repeated string libraries   = 6; // additional libraries required (in terms of pkg-config for C/C++)
 }
 
 message GradingLimits {
-  int64           memory_limit_mb     = 1;
-  int64           cpu_time_limit_sec  = 2;
-  int64           real_time_limit_sec = 3;
-  int64           procs_count_limit   = 4;
-  int64           fds_count_limit     = 5;
+  int64           stack_size_limit_mb = 1;
+  int64           vm_size_limit_mb    = 2;
+  int64           cpu_time_limit_sec  = 3;
+  int64           real_time_limit_sec = 4;
+  int64           proc_count_limit    = 5;
+  int64           fd_count_limit      = 6;
   // todo more options
 }
 
@@ -114,20 +117,29 @@ message TestCase {
   FileSet         output_reference_extra_files= 9;
 }
 
-message GradingBuildScript {
+message GradingTarget {
   string            target_file_name      = 1;
   repeated string   build_commands        = 2;
 }
 
+message GradingRuntime {
+  string            name                  = 1;
+  bool              optional              = 2;
+}
+
+
 message GradingOptions {
   GradingPlatform     platform_required     = 1; // to match corresponding grader client
-  GradingBuildScript  build_script          = 2;
-  GradingLimits       limits                = 3;
-  repeated TestCase   test_cases            = 4;
-  string              standard_checker      = 5; // named by ejudge checkers name
-  string              standard_checker_opts = 6; // like ejudge checker environment
-  FileSet             custom_checker        = 7; // checker source files
-  FileSet             custom_interactor     = 8; // interactor soure files
+  repeated GradingRuntime runtimes          = 2; // additional runtimes like valgrind or wine
+  repeated GradingTarget  targets           = 3; // custom build steps or empty to be generated from runtimes
+  repeated string     extra_compile_options = 4;
+  repeated string     extra_link_options    = 5;
+  GradingLimits       limits                = 6;
+  repeated TestCase   test_cases            = 7;
+  string              standard_checker      = 8; // named by ejudge checkers name
+  string              standard_checker_opts = 9; // like ejudge checker environment
+  FileSet             custom_checker        = 10;// checker source files
+  FileSet             custom_interactor     = 11;// interactor source files
 }
 
 message CodeStyle {
@@ -177,6 +189,9 @@ enum SolutionStatus {
   PLAGIARISM_DETECTED = 11;
   DISQUALIFIED        = 12;
   OK                  = 100;
+
+  // INTERNAL STATUSES
+  GRADER_ASSIGNED     = 201;
 }
 
 message ReviewComment {
@@ -195,6 +210,16 @@ message CodeReview {
   string                  global_comment= 5;
 }
 
+message TestResult {
+  string              target        = 1;
+  int32               test_number   = 2;
+  string              stdout        = 3;
+  string              stderr        = 4;
+  int32               status        = 5;
+  bool                exited        = 6;
+  bool                standard_match= 7;
+}
+
 message Submission {
   int64               id            = 1;
   User                user          = 2;
@@ -204,10 +229,12 @@ message Submission {
   SolutionStatus      status        = 6;
   double              grader_score  = 7;
   string              grader_name   = 8;  // id of grader that processed submission
-  string              grader_output = 9;  // stdout output by testing system
-  string              grader_errors = 10;  // stderr output by testing system
+  string              style_failed_name = 9;
+  string              build_errors  = 10;
   CodeReview          code_review   = 11;
-  string              problem_id    = 12; // just references Problem.id in most cases, but contains full data for grader
+  string              problem_id    = 12;
+  repeated TestResult test_result   = 13;
+
 }
 
 message Solution {
@@ -252,7 +279,7 @@ message CourseData {
 message Course {
   int64             id            = 1;
   string            name          = 2;
-  CourseData        course_data   = 3;
+  string            data_id       = 3;
   int64             course_start  = 4;  // UTC timestamp for course start, other times are relative
   string            url_prefix    = 5;
 }
@@ -338,6 +365,7 @@ service CourseManagement {
   rpc DeleteCourse(Course) returns (Nothing) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
   rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
+  rpc GetCourseFullContent(CourseContentRequest) returns (CourseContentResponse) {}
 }
 
 message GraderProperties {

@@ -83,7 +83,7 @@ class CourseProblemScreenState extends BaseScreenState {
     CheckSubmissionsLimitRequest request = CheckSubmissionsLimitRequest();
     CourseProblemScreen w = widget as CourseProblemScreen;
     request.course.id = w.courseId;
-    request.course.courseData!.id = w.courseDataId;
+    request.course.dataId = w.courseDataId;
     request.problemId = _problemData!.id;
     request.user = AppState.instance.userProfile!;
     SubmissionService.instance.checkSubmissionsCountLimit(request).then((value) {
@@ -409,6 +409,7 @@ class CourseProblemScreenState extends BaseScreenState {
     Submission request = Submission();
     screen = widget as CourseProblemScreen;
     request.course.id = screen.courseId;
+    request.course.dataId = screen.courseDataId;
     request.user = AppState.instance.userProfile!;
     request.problemId = _problemData!.id;
     request.solutionFiles = _submissionFiles!;

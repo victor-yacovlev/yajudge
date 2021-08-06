@@ -12,11 +12,63 @@ import (
 )
 
 type SubmissionManagementService struct {
-	DB					*sql.DB
-	Services			*Services
+	DB       *sql.DB
+	Services *Services
 }
 
-func (service SubmissionManagementService) GetSubmissions(ctx context.Context, filter *SubmissionFilter) (*SubmissionList, error) {
+func (service *SubmissionManagementService) GetSubmissionsToGrade() ([]*Submission, error) {
+	query := `
+select id, users_id, courses_id, problem_id from submissions 
+where status=$1
+order by timestamp
+`
+	rows, err := service.DB.Query(query, SolutionStatus_SUBMITTED)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*Submission, 0, 1000)
+	for rows.Next() {
+		sub := &Submission{
+			Course: &Course{},
+			User:   &User{},
+		}
+		err := rows.Scan(&sub.Id, &sub.User.Id, &sub.Course.Id, &sub.ProblemId)
+		if err != nil {
+			return nil, err
+		}
+		sub.SolutionFiles, err = service.GetSubmissionFiles(sub)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, sub)
+	}
+	return result, nil
+}
+
+func (service *SubmissionManagementService) GetSubmissionFiles(submission *Submission) (*FileSet, error) {
+	query := `
+select file_name, content from submission_files
+where submissions_id=$1
+`
+	rows, err := service.DB.Query(query, submission.Id)
+	if err != nil {
+		return nil, err
+	}
+	result := &FileSet{Files: make([]*File, 0, 10)}
+	for rows.Next() {
+		file := &File{}
+		var content string
+		err := rows.Scan(&file.Name, &content)
+		if err != nil {
+			return nil, err
+		}
+		file.Data = []byte(content)
+		result.Files = append(result.Files, file)
+	}
+	return result, nil
+}
+
+func (service *SubmissionManagementService) GetSubmissions(ctx context.Context, filter *SubmissionFilter) (*SubmissionList, error) {
 	// Check user enrollments for specific course
 	currentUser, err := service.Services.UserManagement.GetUserFromContext(ctx)
 	if err != nil {
@@ -87,23 +139,26 @@ where
 		if err != nil {
 			return nil, err
 		}
-		submUser := &User{Id: int64(usersId), FirstName: firstName, LastName: lastName}
+		subUser := &User{Id: int64(usersId), FirstName: firstName, LastName: lastName}
 		if midName.Valid {
-			submUser.MidName = midName.String
+			subUser.MidName = midName.String
 		}
 		if groupName.Valid {
-			submUser.GroupName = groupName.String
+			subUser.GroupName = groupName.String
 		}
-		subm := Submission{
-			Id: int64(id),
-			User: submUser,
-			Course: courseEnroll.Course,
+		sub := &Submission{
+			Id:        int64(id),
+			User:      subUser,
+			Course:    courseEnroll.Course,
 			ProblemId: problemId,
 			Timestamp: timestamp,
-			Status: SolutionStatus(problemStatus),
-			SolutionFiles: &FileSet{Files: make([]*File, 0)},
+			Status:    SolutionStatus(problemStatus),
 		}
-		result.Submissions = append(result.Submissions, &subm)
+		sub.SolutionFiles, err = service.GetSubmissionFiles(sub)
+		if err != nil {
+			return nil, err
+		}
+		result.Submissions = append(result.Submissions, sub)
 	}
 	return result, nil
 }
@@ -132,8 +187,8 @@ func (service SubmissionManagementService) SubmitProblemSolution(ctx context.Con
 			submission.User.Id, submission.Course.Id)
 	}
 	limit, err := service.CheckSubmissionsCountLimit(ctx, &CheckSubmissionsLimitRequest{
-		User: currentUser,
-		Course: submission.Course,
+		User:      currentUser,
+		Course:    submission.Course,
 		ProblemId: submission.ProblemId,
 	})
 	if err != nil {
@@ -144,7 +199,7 @@ func (service SubmissionManagementService) SubmitProblemSolution(ctx context.Con
 	}
 	courseData, err := service.Services.CourseManagement.GetCoursePublicContent(
 		ctx, &CourseContentRequest{
-			CourseDataId: submission.Course.CourseData.Id,
+			CourseDataId: submission.Course.DataId,
 		})
 	if err != nil {
 		return nil, err
@@ -183,11 +238,40 @@ returning id
 }
 
 func (service SubmissionManagementService) ReceiveSubmissionsToGrade(properties *GraderProperties, server SubmissionManagement_ReceiveSubmissionsToGradeServer) error {
-	panic("implement me")
+	grader, err := service.Services.GradingManager.RegisterNewGrader(properties)
+	defer service.Services.GradingManager.DeregisterGrader(grader)
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case <-server.Context().Done():
+			return nil
+		case sub := <-grader.Queue:
+			sub.Status = SolutionStatus_GRADE_IN_PROGRESS
+			sub, err = service.UpdateGraderOutput(server.Context(), sub)
+			if err != nil {
+				return err
+			}
+			err = server.Send(sub)
+			if err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (service SubmissionManagementService) UpdateGraderOutput(ctx context.Context, submission *Submission) (*Submission, error) {
-	panic("implement me")
+	query := `
+update submissions set status=$1, grader_name=$2 
+where id=$3
+`
+	_, err := service.DB.Exec(query, submission.Status,
+		submission.GraderName, submission.Id)
+	if err != nil {
+		return nil, err
+	}
+	return submission, nil
 }
 
 func (service SubmissionManagementService) mustEmbedUnimplementedSubmissionManagementServer() {
@@ -196,17 +280,17 @@ func (service SubmissionManagementService) mustEmbedUnimplementedSubmissionManag
 
 func NewSubmissionsManagementService(services *Services) *SubmissionManagementService {
 	return &SubmissionManagementService{
-		DB: services.DB,
+		DB:       services.DB,
 		Services: services,
 	}
 }
 
-func (service* SubmissionManagementService) CheckSubmissionsCountLimit(ctx context.Context, request *CheckSubmissionsLimitRequest) (*SubmissionsCountLimit, error) {
+func (service *SubmissionManagementService) CheckSubmissionsCountLimit(ctx context.Context, request *CheckSubmissionsLimitRequest) (*SubmissionsCountLimit, error) {
 	userId := request.User.Id
 	courseId := request.Course.Id
 	problemId := request.ProblemId
 	currentTime := time.Now().Unix()
-	minTime := currentTime - 60*60  // minus one hour
+	minTime := currentTime - 60*60 // minus one hour
 	query := `select timestamp from submissions where users_id=$1 and courses_id=$2 and problem_id=$3 and timestamp>=$4 order by timestamp`
 	rows, err := service.DB.Query(query, userId, courseId, problemId, minTime)
 	if err != nil {
@@ -221,11 +305,11 @@ func (service* SubmissionManagementService) CheckSubmissionsCountLimit(ctx conte
 		if err != nil {
 			return nil, err
 		}
-		if currentSubmission>=minTime && (currentSubmission<=earliestSubmission || earliestSubmission==0) {
+		if currentSubmission >= minTime && (currentSubmission <= earliestSubmission || earliestSubmission == 0) {
 			earliestSubmission = currentSubmission
 		}
 	}
-	courseContent, err := service.Services.CourseManagement.GetCoursePublicContent(ctx, &CourseContentRequest{CourseDataId: request.Course.CourseData.Id})
+	courseContent, err := service.Services.CourseManagement.GetCoursePublicContent(ctx, &CourseContentRequest{CourseDataId: request.Course.DataId})
 	if err != nil {
 		return nil, err
 	}
@@ -236,12 +320,12 @@ func (service* SubmissionManagementService) CheckSubmissionsCountLimit(ctx conte
 	}
 	nextTimeReset := earliestSubmission
 	if nextTimeReset != 0 {
-		nextTimeReset += 60*60
+		nextTimeReset += 60 * 60
 	}
-	result := &SubmissionsCountLimit {
-		AttemptsLeft: int32(limit),
+	result := &SubmissionsCountLimit{
+		AttemptsLeft:  int32(limit),
 		NextTimeReset: nextTimeReset,
-		ServerTime: time.Now().Unix(),
+		ServerTime:    time.Now().Unix(),
 	}
 	return result, nil
 }

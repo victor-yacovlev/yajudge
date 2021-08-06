@@ -11,30 +11,36 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"net"
-	"strings"
+	"regexp"
 	"time"
 )
 
+var PrivateTokenCapabilities = [...][2]string{
+	{"CourseManagement", "GetCourseFullContent"},
+	{"SubmissionManagement", "ReceiveSubmissionsToGrade"},
+	{"SubmissionManagement", "UpdateGraderOutput"},
+}
+
 type DatabaseProperties struct {
-	Engine		string		`json:"engine"`  	// default is postgres
-	Host		string		`json:"host"`		// default is localhost
-	Port		uint16		`json:"port"`		// default is 5432
-	User		string		`json:"user"`
-	Password	string		`json:"password"`
-	DBName		string		`json:"db_name"`
-	SSLMode		string		`json:"ssl_mode"`	// default is disable
+	Engine   string `json:"engine"` // default is postgres
+	Host     string `json:"host"`   // default is localhost
+	Port     uint16 `json:"port"`   // default is 5432
+	User     string `json:"user"`
+	Password string `json:"password"`
+	DBName   string `json:"db_name"`
+	SSLMode  string `json:"ssl_mode"` // default is disable
 }
 
 type Services struct {
-	DB						*sql.DB
-	UserManagement			*UserManagementService
-	CourseManagement		*CourseManagementService
-	SubmissionManagement	*SubmissionManagementService
+	DB                   *sql.DB
+	UserManagement       *UserManagementService
+	CourseManagement     *CourseManagementService
+	SubmissionManagement *SubmissionManagementService
+	GradingManager       *GradingManager
 }
 
 //go:embed create_database_tables.sql
 var createTablesQuerySql string
-
 
 func (service *Services) CreateEmptyDatabase() {
 	_, err := service.DB.Exec(createTablesQuerySql)
@@ -42,7 +48,6 @@ func (service *Services) CreateEmptyDatabase() {
 		panic(err)
 	}
 }
-
 
 func NewPostgresDatabaseProperties() DatabaseProperties {
 	return DatabaseProperties{
@@ -62,28 +67,40 @@ func MakeDatabaseConnection(p DatabaseProperties) (*sql.DB, error) {
 }
 
 func (services *Services) createAuthMiddlewares(genericAuthToken, gradersAuthToken string) []grpc.ServerOption {
-	checkAuth := func(ctx context.Context, genericAuthToken string, graderOutToken, method string) bool {
+	checkAuth := func(ctx context.Context, genericAuthToken string, graderOutToken, fullMethod string) error {
 		md, _ := metadata.FromIncomingContext(ctx)
 		values := md.Get("auth")
 		if len(values) == 0 {
-			return false
+			return status.Errorf(codes.Unauthenticated, "not authorized")
 		}
 		auth := values[0]
-		if strings.Contains(method, "ReceiveSubmissionsToGrade") || strings.Contains(method, "UpdateGraderOutput") {
-			return auth == gradersAuthToken
+		pattern := regexp.MustCompile(`/([a-zA-Z0-9]+)\.([a-zA-Z0-9]+)/([a-zA-Z0-9]+)`)
+		parts := pattern.FindStringSubmatch(fullMethod)
+		subsystem := parts[2]
+		method := parts[3]
+		if auth == gradersAuthToken {
+			for _, allowedApi := range PrivateTokenCapabilities {
+				allowedSubsystem := allowedApi[0]
+				allowedMethod := allowedApi[1]
+				if subsystem == allowedSubsystem && method == allowedMethod {
+					return nil
+				}
+			}
+			return status.Errorf(codes.PermissionDenied, "permission denied")
 		}
 		if auth != genericAuthToken {
-			return false
+			return status.Errorf(codes.Unauthenticated, "not authorized")
 		}
-		return true
+		if !services.UserManagement.CheckUserSession(ctx, fullMethod) {
+			return status.Errorf(codes.PermissionDenied, "permission denied")
+		}
+		return nil
 	}
 	result := make([]grpc.ServerOption, 2)
 	result[0] = grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		if !checkAuth(ctx, genericAuthToken, gradersAuthToken, info.FullMethod) {
-			return nil, status.Errorf(codes.Unauthenticated, "not authorized")
-		}
-		if !services.UserManagement.CheckUserSession(ctx, info.FullMethod) {
-			return nil, status.Errorf(codes.PermissionDenied, "permission denied")
+		err = checkAuth(ctx, genericAuthToken, gradersAuthToken, info.FullMethod)
+		if err != nil {
+			return nil, err
 		}
 		res, err := handler(ctx, req)
 		_, isGrpcErr := status.FromError(err)
@@ -95,14 +112,12 @@ func (services *Services) createAuthMiddlewares(genericAuthToken, gradersAuthTok
 			return res, nil
 		}
 	})
-	result[1] = grpc.StreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if !checkAuth(ss.Context(), genericAuthToken, gradersAuthToken, info.FullMethod) {
-			return status.Errorf(codes.Unauthenticated, "not authorized")
+	result[1] = grpc.StreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		err = checkAuth(ss.Context(), genericAuthToken, gradersAuthToken, info.FullMethod)
+		if err != nil {
+			return err
 		}
-		if !services.UserManagement.CheckUserSession(ss.Context(), info.FullMethod) {
-			return status.Errorf(codes.PermissionDenied, "permission denied")
-		}
-		err := handler(srv, ss)
+		err = handler(srv, ss)
 		_, isGrpcErr := status.FromError(err)
 		if isGrpcErr {
 			return err
@@ -120,7 +135,7 @@ func StartServices(ctx context.Context,
 	gradersAuthToken string,
 	dbProps DatabaseProperties,
 	coursesRoot string,
-	) (res *Services, err error) {
+) (res *Services, err error) {
 
 	db, err := MakeDatabaseConnection(dbProps)
 	if err != nil {
@@ -132,7 +147,7 @@ func StartServices(ctx context.Context,
 	res.UserManagement = NewUserManagementService(res)
 	res.CourseManagement = NewCourseManagementService(res, coursesRoot)
 	res.SubmissionManagement = NewSubmissionsManagementService(res)
-
+	res.GradingManager = NewGradingManager(res)
 
 	server := grpc.NewServer(res.createAuthMiddlewares(genericAuthToken, gradersAuthToken)...)
 
@@ -149,12 +164,12 @@ func StartServices(ctx context.Context,
 	}()
 	go func() {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			server.GracefulStop()
 			lis.Close()
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 
-	return res,nil
+	return res, nil
 }

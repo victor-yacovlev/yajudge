@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
-	core_service "yajudge/service"
+	"yajudge_server/core_service"
 )
 
 type IncomingMessage struct {
@@ -27,27 +27,26 @@ type IncomingMessage struct {
 }
 
 type ErrorMessage struct {
-	Code	int64		`json:"code"`
-	Desc	string		`json:"desc"`
+	Code int64  `json:"code"`
+	Desc string `json:"desc"`
 }
 
 type OutgoingMessage struct {
-	Id     int			`json:"id"`
+	Id     int          `json:"id"`
 	Error  ErrorMessage `json:"error"`
 	Type   string       `json:"type"`
 	Result interface{}  `json:"result"`
 }
 
-
 type ClassMethod struct {
-	Name		string
-	Func		reflect.Value
-	ArgType		reflect.Type
+	Name    string
+	Func    reflect.Value
+	ArgType reflect.Type
 }
 
 type Class struct {
-	Instance	interface{}
-	Methods		map[string]ClassMethod
+	Instance interface{}
+	Methods  map[string]ClassMethod
 }
 
 type WsService struct {
@@ -66,10 +65,10 @@ func (service *WsService) RegisterService(name string, srv interface{}) {
 	typee := reflect.TypeOf(srv)
 	class := Class{
 		Instance: srv,
-		Methods: make(map[string]ClassMethod),
+		Methods:  make(map[string]ClassMethod),
 	}
 	methodsCount := typee.NumMethod()
-	for i:=0; i<methodsCount; i++ {
+	for i := 0; i < methodsCount; i++ {
 		method := typee.Method(i)
 		methodName := method.Name
 		funcType := method.Type
@@ -77,15 +76,14 @@ func (service *WsService) RegisterService(name string, srv interface{}) {
 		argTypeName := argType.Name()
 		_ = argTypeName
 		m := ClassMethod{
-			Name: methodName,
-			Func: method.Func,
+			Name:    methodName,
+			Func:    method.Func,
 			ArgType: argType,
 		}
 		class.Methods[methodName] = m
 	}
 	service.RegisteredClasses[name] = class
 }
-
 
 var upgrader = websocket.Upgrader{}
 
@@ -165,7 +163,7 @@ func (service *WsService) ProcessTextMessage(in []byte) (out []byte, err error) 
 			inData.Service, inData.Method, inData.Argument)
 		outData := OutgoingMessage{Id: inData.Id, Type: "unary"}
 		if err != nil {
-			outData.Error.Code = 99999;
+			outData.Error.Code = 99999
 			outData.Error.Desc = err.Error()
 			grpcErr := status.Convert(err)
 			if grpcErr != nil {
@@ -200,7 +198,7 @@ func ToNonEmptyjson(s interface{}) (res string, err error) {
 	}
 	fieldsCount := sType.NumField()
 	res = res + "{ "
-	for i:=0; i<fieldsCount; i++ {
+	for i := 0; i < fieldsCount; i++ {
 		field := sVal.Field(i)
 		jsonTag := sType.Field(i).Tag.Get("json")
 		if jsonTag == "" {
@@ -222,14 +220,14 @@ func ToNonEmptyjson(s interface{}) (res string, err error) {
 		}
 		if fieldKind == reflect.Struct || fieldKind == reflect.Interface {
 			var valueToSave interface{}
-			if field.IsValid() && field.Interface()!=nil {
+			if field.IsValid() && field.Interface() != nil {
 				valueToSave = field.Interface()
 			} else {
 				valueToSave = reflect.New(field.Type()).Interface()
 			}
 			var fieldData string
 			if valueToSave == nil {
-				fieldData = "null";
+				fieldData = "null"
 			} else {
 				fieldData, err = ToNonEmptyjson(valueToSave)
 			}
@@ -241,7 +239,7 @@ func ToNonEmptyjson(s interface{}) (res string, err error) {
 			res += "["
 			if !field.IsNil() {
 				itemsCount := field.Len()
-				for j:=0; j<itemsCount; j++ {
+				for j := 0; j < itemsCount; j++ {
 					if j > 0 {
 						res += ", "
 					}
@@ -269,10 +267,10 @@ func ToNonEmptyjson(s interface{}) (res string, err error) {
 func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res reflect.Value, err error) {
 	fieldsCount := argType.NumField()
 	res = reflect.New(argType)
-	for i:=0; i<fieldsCount; i++ {
+	for i := 0; i < fieldsCount; i++ {
 		field := argType.Field(i)
 		jsonTag := field.Tag.Get("json")
-		if jsonTag=="" {
+		if jsonTag == "" {
 			continue
 		}
 		tagParams := strings.Split(jsonTag, ",")
@@ -343,7 +341,7 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 			if isSlice {
 				itemsCount := len(sliceVal)
 				fieldVal = reflect.MakeSlice(fieldType, itemsCount, itemsCount)
-				for index:=0; index<itemsCount; index++ {
+				for index := 0; index < itemsCount; index++ {
 					jsonItem := sliceVal[index]
 					if jsonItemAsMessage, isMap := jsonItem.(map[string]interface{}); isMap {
 						itemVal, err := ArgumentMapToValue(fieldTargetType, jsonItemAsMessage)
@@ -366,7 +364,7 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 		structField := res.Elem().Field(i)
 		structFieldType := structField.Type()
 		fieldValType := fieldVal.Type()
-		if structFieldType.Name() != fieldValType.Name() && fieldValType.Name()=="int32" {
+		if structFieldType.Name() != fieldValType.Name() && fieldValType.Name() == "int32" {
 			// some dirty hack for enum values
 			enumValue := reflect.New(structFieldType).Elem()
 			enumValue.SetInt(fieldVal.Int())
@@ -377,7 +375,6 @@ func ArgumentMapToValue(argType reflect.Type, data map[string]interface{}) (res 
 	}
 	return
 }
-
 
 func (service *WsService) ProcessUnaryMessage(cookie string, className string,
 	methodName string, argument interface{}) (res interface{}, err error) {
