@@ -177,7 +177,7 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
         });
       });
     } else {
-      _selectedKey = _selectedKey;
+      _selectedKey = selectedKey;
     }
   }
 

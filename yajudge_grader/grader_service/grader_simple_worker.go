@@ -115,11 +115,10 @@ func (worker *Worker) BuildTarget(rootDir string, target *GradingTarget) (ok boo
 }
 
 func (worker *Worker) RunTarget(rootDir string, rt *GradingRuntime, target *GradingTarget,
-	testNumber int,
+	testDir string,
 	testCase *TestCase,
 	limits *GradingLimits) (ok bool, status int, stdout, stderr []byte, err error) {
-	testSubdir := fmt.Sprintf("%s%ctest_%03d", rootDir, os.PathSeparator, testNumber)
-	err = os.MkdirAll(testSubdir, 0700)
+	err = os.MkdirAll(testDir, 0700)
 	if err != nil {
 		err = fmt.Errorf("can't create directory for test: %v", err)
 		return
@@ -149,7 +148,7 @@ func (worker *Worker) RunTarget(rootDir string, rt *GradingRuntime, target *Grad
 	}
 	if testCase.InputExtraFiles != nil {
 		for _, inputFile := range testCase.InputExtraFiles.Files {
-			inputFileName := testSubdir + string(os.PathSeparator) + inputFile.Name
+			inputFileName := testDir + string(os.PathSeparator) + inputFile.Name
 			err = os.WriteFile(inputFileName, inputFile.Data, 0600)
 			if err != nil {
 				err = fmt.Errorf("cant create input test file %s: %v", inputFile, err)
@@ -166,7 +165,7 @@ func (worker *Worker) RunTarget(rootDir string, rt *GradingRuntime, target *Grad
 			FdCountLimit:     20,
 		}
 	}
-	return worker.RunProcessWithLimits(testSubdir, programToLaunch, programArgs,
+	return worker.RunProcessWithLimits(testDir, programToLaunch, programArgs,
 		testCase.StdinData.Data, limits)
 }
 

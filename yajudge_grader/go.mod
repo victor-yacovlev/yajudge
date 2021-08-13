@@ -7,6 +7,7 @@ go 1.16
 replace yajudge_server => ../yajudge_server
 
 require (
+	github.com/DataDog/go-python3 v0.0.0-20210805105248-03d93fb21b67
 	google.golang.org/grpc v1.39.1
 	gopkg.in/yaml.v2 v2.4.0
 	yajudge_server v0.0.0-00010101000000-000000000000

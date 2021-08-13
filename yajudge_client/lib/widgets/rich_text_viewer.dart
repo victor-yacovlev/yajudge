@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:markdown/markdown.dart' as md;
 import 'package:universal_html/parsing.dart';
@@ -98,15 +99,37 @@ class RichTextViewer extends StatelessWidget {
     Widget textViewer;
     if (contentType == 'text/html') {
       RichText richText = RichText(
-        textScaleFactor: 1.3,
+        textScaleFactor: 1.2,
         text: _data!,
       );
       textViewer = richText;
     } else if (contentType == 'text/markdown') {
+      TextStyle mainTextStyle = theme.bodyText1!
+          .merge(GoogleFonts.ptSans())
+          .merge(TextStyle(letterSpacing: 1.05))
+      ;
+      TextStyle codeTextStyle = theme.bodyText1!
+          .merge(GoogleFonts.ptMono())
+          .merge(TextStyle(letterSpacing: 1.1))
+      ;
+      TextStyle h2TextStyle = theme.headline5!
+          .merge(GoogleFonts.ptSansCaption())
+          .merge(TextStyle(color: Theme.of(context).accentColor))
+          .merge(TextStyle(height: 2.5))
+      ;
+      TextStyle h3TextStyle = theme.headline6!
+          .merge(GoogleFonts.ptSans())
+          .merge(TextStyle(color: Theme.of(context).accentColor.withAlpha(200)))
+          .merge(TextStyle(height: 1.8))
+      ;
       MarkdownBody markdown = MarkdownBody(
         styleSheet: MarkdownStyleSheet(
           textScaleFactor: 1.3,
-          code: theme.bodyText1!.merge(TextStyle(fontFamily: 'Courier')),
+          p: mainTextStyle,
+          code: codeTextStyle,
+          blockquote: codeTextStyle,
+          h2: h2TextStyle,
+          h3: h3TextStyle,
         ),
         selectable: false,
         data: _markdownPreprocessed!,

@@ -252,6 +252,11 @@ class AppState extends State<App> {
   Future<CourseData> loadCourseData(String courseId) async {
     CourseContentResponse? cached =
         await PlatformsUtils.getInstance().findCachedCourse(courseId);
+
+    // TODO remove from production code
+    // cache is null while in development
+    cached = null;
+
     CourseContentRequest request = CourseContentRequest()
       ..courseDataId = courseId;
     if (cached != null) {
@@ -273,8 +278,3 @@ class AppState extends State<App> {
   }
 }
 
-class CupertinoNotAnimatedPageRoute extends CupertinoPageRoute {
-  WidgetBuilder builder;
-  CupertinoNotAnimatedPageRoute(this.builder) : super(builder: builder);
-
-}

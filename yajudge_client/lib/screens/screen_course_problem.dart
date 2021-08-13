@@ -180,7 +180,18 @@ class CourseProblemScreenState extends BaseScreenState {
       contents.add(Text('После прохождения тестов: ' + actionsOnPassed));
       contents.add(SizedBox(height: 20));
       contents.add(Text('Условие', style: theme.headline5));
-      contents.add(RichTextViewer(_problemData!.statementText, _problemData!.statementContentType, theme: theme));
+      contents.add(
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.black12),
+            borderRadius: BorderRadius.all(Radius.circular(10)),
+          ),
+          margin: EdgeInsets.fromLTRB(5, 10, 5, 10),
+          padding: EdgeInsets.fromLTRB(10, 10, 10, 10),
+          child: RichTextViewer(_problemData!.statementText, _problemData!.statementContentType, theme: theme)
+        )
+      );
       contents.add(SizedBox(height: 20));
       bool hasStatementFiles = _problemData!.statementFiles!.files.isNotEmpty;
       bool hasStyleFiles = _courseData!.codeStyles!=null && _courseData!.codeStyles!.isNotEmpty;
@@ -210,11 +221,15 @@ class CourseProblemScreenState extends BaseScreenState {
         }
       }
     }
-    // TODO add problem files download
     Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
+    double screenWidth = MediaQuery.of(context).size.width;
+    double horizontalMargins = (screenWidth - 950) / 2;
+    if (horizontalMargins < 0) {
+      horizontalMargins = 0;
+    }
     return Container(
       padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
-      width: MediaQuery.of(context).size.width,
+      margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
       constraints: BoxConstraints(
         minHeight: 300,
       ),

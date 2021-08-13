@@ -262,16 +262,45 @@ func (service SubmissionManagementService) ReceiveSubmissionsToGrade(properties 
 }
 
 func (service SubmissionManagementService) UpdateGraderOutput(ctx context.Context, submission *Submission) (*Submission, error) {
-	query := `
-update submissions set status=$1, grader_name=$2 
-where id=$3
-`
-	_, err := service.DB.Exec(query, submission.Status,
-		submission.GraderName, submission.Id)
+	tx, err := service.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	return submission, nil
+	statusQuery := `
+update submissions set status=$1, grader_name=$2 
+where id=$3
+`
+	_, err = tx.Exec(statusQuery, submission.Status, submission.GraderName, submission.Id)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	resultsQuery := `
+insert into submission_results(
+                               submissions_id,
+                               test_number,
+                               stdout,
+                               stderr,
+                               status,
+                               exited,
+                               standard_match
+)
+values ($1,$2,$3,$4,$5,$6,$7)
+returning id
+`
+	for _, test := range submission.TestResult {
+		var submissionResultId int64
+		err = tx.QueryRow(resultsQuery,
+			submission.Id, test.TestNumber, test.Stdout, test.Stderr,
+			test.Status, test.Exited, test.StandardMatch,
+			).Scan(&submissionResultId)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+	err = tx.Commit()
+	return submission, err
 }
 
 func (service SubmissionManagementService) mustEmbedUnimplementedSubmissionManagementServer() {

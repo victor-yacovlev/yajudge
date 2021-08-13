@@ -45,7 +45,12 @@ class CourseScreenState extends BaseScreenState {
 
   void _loadCourseData() {
     AppState.instance.loadCourseData(screen.courseId)
-        .then((value) => setState((){ screen.courseData = value; }))
+        .then((value) => setState((){
+          screen.courseData = value;
+          if (screen.sectionKey != null && screen.lessonKey != null) {
+            findLesson();
+          }
+        }))
         .onError((err, stackTrace) => setState(() {
           _errorString = err.toString() + '\n' + stackTrace.toString();
         }));

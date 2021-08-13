@@ -198,6 +198,14 @@ func (service *GraderService) processSubmission(submission *Submission) (result 
 		// generate targets from runtimes
 		problem.GradingOptions.Targets = make([]*GradingTarget, 0, len(problem.GradingOptions.Runtimes))
 		for _, rt := range problem.GradingOptions.Runtimes {
+			rtName := rt.Name
+			osName := runtime.GOOS
+			if osName == "darwin" {
+				// MacOS has no all Linux tools ported and no 32-bit support
+				if rtName == "qemu-arm" || rtName == "valgrind" || rtName == "default-32" {
+					continue
+				}
+			}
 			target := &GradingTarget{}
 			service.GenerateDefaultTargetBuildScripts(rt, target, solution, problem.GradingOptions.ExtraCompileOptions, problem.GradingOptions.ExtraLinkOptions)
 			problem.GradingOptions.Targets = append(problem.GradingOptions.Targets, target)
@@ -218,6 +226,7 @@ func (service *GraderService) processSubmission(submission *Submission) (result 
 	// 4. Run test cases for all targets
 	testsFailed := 0
 	testsPassed := 0
+	checkFailed := false
 	submission.TestResult = make([]*TestResult, 0, len(problem.GradingOptions.Runtimes)*len(problem.GradingOptions.TestCases))
 	var checker checkers.CheckerInterface
 	if problem.GradingOptions.StandardChecker != "" {
@@ -226,30 +235,59 @@ func (service *GraderService) processSubmission(submission *Submission) (result 
 			return nil, fmt.Errorf("not valid checker %s", problem.GradingOptions.StandardChecker)
 		}
 	}
-	for runtimeIndex := 0; runtimeIndex < len(problem.GradingOptions.Runtimes); runtimeIndex++ {
+	cwd, _ := os.Getwd()
+	if problem.GradingOptions.CustomChecker != nil {
+		if strings.HasSuffix(problem.GradingOptions.CustomChecker.Name, ".py") {
+			checker, err = checkers.BuildCustomCheckerFromPythonSource(
+				cwd + string(os.PathSeparator) + problemRoot + string(os.PathSeparator),
+				problem.GradingOptions.CustomChecker,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("cant build custom checker for %s: %v", problem.Id, err)
+			}
+		} else {
+			return nil, fmt.Errorf("dont know how to handle checker %d", problem.GradingOptions.CustomChecker.Name)
+		}
+	}
+	numBinariesToCheck := len(problem.GradingOptions.Runtimes)
+	if len(problem.GradingOptions.Targets) < numBinariesToCheck {
+		numBinariesToCheck = len(problem.GradingOptions.Targets)
+	}
+	for runtimeIndex := 0; runtimeIndex < numBinariesToCheck; runtimeIndex++ {
 		target := problem.GradingOptions.Targets[runtimeIndex]
 		rt := problem.GradingOptions.Runtimes[runtimeIndex]
 		rtName := rt.Name
 		osName := runtime.GOOS
 		if osName == "darwin" {
-			// MacOS has no all Linux tools ported
-			if rtName == "qemu-arm" || rtName == "valgrind" {
+			// MacOS has no all Linux tools ported and no 32-bit support
+			if rtName == "qemu-arm" || rtName == "valgrind" || rtName == "default-32" {
 				continue
 			}
 		}
 		limits := problem.GradingOptions.Limits
 		for testIndex, testCase := range problem.GradingOptions.TestCases {
 			testNumber := testIndex + 1
+			testDir := fmt.Sprintf(
+				"%s%ctest_%03d",
+				cwd + string(os.PathSeparator) + problemRoot,
+				os.PathSeparator,
+				testNumber,
+				)
 			testResult := &TestResult{
 				Target:     rtName,
 				TestNumber: int32(testNumber),
 			}
-			ok, status, stdout, stderr, err := service.Worker.RunTarget(problemRoot, rt, target, testNumber, testCase, limits)
+			ok, status, stdout, stderr, err := service.Worker.RunTarget(problemRoot, rt, target, testDir, testCase, limits)
 			if err != nil {
 				return nil, fmt.Errorf("can't run test %d for runtime %s: %v",
 					testNumber, rt.Name, err)
 			}
-			resultMatch := checker.Match(stdout, testCase.StdoutReference.Data)
+			checker.SetTestDirPath(testDir)
+			resultMatch, err := checker.Match(stdout, testCase.StdoutReference.Data)
+			if err != nil {
+				testResult.Stderr = err.Error()
+				checkFailed = true
+			}
 			if !ok || !resultMatch {
 				testsFailed += 1
 			} else {
@@ -258,12 +296,16 @@ func (service *GraderService) processSubmission(submission *Submission) (result 
 			testResult.Exited = ok
 			testResult.Status = int32(status)
 			testResult.Stdout = string(stdout)
-			testResult.Stderr = string(stderr)
+			if err == nil {
+				testResult.Stderr = string(stderr)
+			}
 			testResult.StandardMatch = resultMatch
 			submission.TestResult = append(submission.TestResult, testResult)
 		}
 	}
-	if testsFailed == 0 {
+	if checkFailed {
+		submission.Status = SolutionStatus_CHECK_FAILED
+	} else if testsFailed == 0 {
 		submission.Status = SolutionStatus_PENDING_REVIEW
 	} else {
 		submission.Status = SolutionStatus_VERY_BAD
@@ -394,7 +436,7 @@ func (service *GraderService) DefaultGCCCompileCommand(rt string, sourceFileName
 	if strings.Contains(rt, "32") && !strings.Contains(rt, "qemu") {
 		options = append(options, "-m32")
 	}
-	options = append(options, "-Werror", "-Wall")
+	options = append(options, "-Werror", "-Wall", "-Wno-unused-variable", "-Wno-sometimes-uninitialized")
 	options = append(options, "-c", "-g", "-O2")
 	if compilerPrefix == "" {
 		// use sanitizers only for native platforms

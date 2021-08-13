@@ -563,7 +563,32 @@ func (service *CourseManagementService) GetProblemFromYaml(problemPrefix string)
 		value := checkerOpts.(string)
 		data.GradingOptions.StandardCheckerOpts = value
 	}
+	if customChecker, hasCustomChecker := dataMap["custom_checker"]; hasCustomChecker {
+		fileName := customChecker.(string)
+		data.GradingOptions.CustomChecker = &File{Name: fileName}
+		data.GradingOptions.CustomChecker.Data, err = fs.ReadFile(service.Root, problemPrefix + "/" + fileName)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return data, timestamp, nil
+}
+
+func (service *CourseManagementService) GetEjudgeDirFiles(rootDir string) (res *FileSet, err error) {
+	dirEntries, err := fs.ReadDir(service.Root, rootDir)
+	if err != nil {
+		return nil, err
+	}
+	res = &FileSet{Files: make([]*File, 0, len(dirEntries))}
+	for _, entry := range dirEntries {
+		file := &File{Name: entry.Name()}
+		file.Data, err = fs.ReadFile(service.Root, rootDir + "/" + file.Name)
+		if err != nil {
+			return nil, err
+		}
+		res.Files = append(res.Files, file)
+	}
+	return res, nil
 }
 
 func (service *CourseManagementService) GetEjudgeTestCases(rootDir string) (res []*TestCase, err error) {
@@ -574,7 +599,7 @@ func (service *CourseManagementService) GetEjudgeTestCases(rootDir string) (res 
 		err = nil // not an error
 		return
 	}
-	testFilePattern := regexp.MustCompile(`(\d\d\d)\.(dat|ans|inf)`)
+	testFilePattern := regexp.MustCompile(`(\d\d\d)\.(dat|ans|inf|dir)`)
 	for _, entry := range dirEntries {
 		if testFilePattern.MatchString(entry.Name()) {
 			parts := testFilePattern.FindStringSubmatch(entry.Name())
@@ -599,6 +624,8 @@ func (service *CourseManagementService) GetEjudgeTestCases(rootDir string) (res 
 				test.StdoutReference.Data, err = fs.ReadFile(service.Root, fileName)
 			case "inf":
 				infContent, err = fs.ReadFile(service.Root, fileName)
+			case "dir":
+				test.InputExtraFiles, err = service.GetEjudgeDirFiles(fileName)
 			}
 			if err != nil {
 				return

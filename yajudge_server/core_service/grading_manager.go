@@ -3,6 +3,7 @@ package core_service
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 type GraderConnection struct {
@@ -93,7 +94,7 @@ func (manager *GradingManager) GraderCanAcceptSubmission(sub *Submission, props 
 	}
 	runtimesMatch := true
 	for _, rt := range problem.GradingOptions.Runtimes {
-		if !rt.Optional && rt.Name != "default" {
+		if !rt.Optional && !strings.HasPrefix(rt.Name, "default") {
 			runtimeFound := false
 			for _, grt := range props.Platform.Runtimes {
 				if rt.Name == grt {

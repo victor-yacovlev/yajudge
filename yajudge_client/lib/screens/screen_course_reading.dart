@@ -75,15 +75,26 @@ class CourseReadingScreenState extends BaseScreenState {
     } else {
       childToPlace = Text('Загружается...');
     }
-    Container container = Container(
-      padding: EdgeInsets.fromLTRB(0, 10, 0, 100),
+    double screenWidth = MediaQuery.of(context).size.width;
+    double horizontalMargins = (screenWidth - 950) / 2;
+    if (horizontalMargins < 0) {
+      horizontalMargins = 0;
+    }
+    Container outerBox = Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.all(Radius.circular(10)),
+      ),
+      margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 50),
       constraints: BoxConstraints(
         minWidth: 400,
         minHeight: 600,
       ),
       child: childToPlace,
     );
-    return container;
+    return outerBox;
   }
 
 }

@@ -138,8 +138,8 @@ message GradingOptions {
   repeated TestCase   test_cases            = 7;
   string              standard_checker      = 8; // named by ejudge checkers name
   string              standard_checker_opts = 9; // like ejudge checker environment
-  FileSet             custom_checker        = 10;// checker source files
-  FileSet             custom_interactor     = 11;// interactor source files
+  File                custom_checker        = 10;// checker source file
+  File                custom_interactor     = 11;// interactor source file
 }
 
 message CodeStyle {
@@ -188,6 +188,7 @@ enum SolutionStatus {
   DEFENCE_FAILED      = 10;
   PLAGIARISM_DETECTED = 11;
   DISQUALIFIED        = 12;
+  CHECK_FAILED        = 13;
   OK                  = 100;
 
   // INTERNAL STATUSES
