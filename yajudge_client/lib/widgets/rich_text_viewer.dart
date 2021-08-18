@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:markdown/markdown.dart' as md;
 import 'package:universal_html/parsing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class RichTextViewer extends StatelessWidget {
   final String content;
@@ -94,6 +95,12 @@ class RichTextViewer extends StatelessWidget {
     }
   }
 
+  void _processLink(String text, String? href, String title) {
+    if (href != null) {
+      launch(href);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget textViewer;
@@ -137,6 +144,7 @@ class RichTextViewer extends StatelessWidget {
           md.ExtensionSet.gitHubFlavored.blockSyntaxes,
           [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes],
         ),
+        onTapLink: _processLink,
       );
       textViewer = markdown;
     } else {

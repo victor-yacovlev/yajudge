@@ -19,7 +19,9 @@ const SolutionStatus_AcceptedForDefence = 9;
 const SolutionStatus_DefenceFailed      = 10;
 const SolutionStatus_PlagiarismDetected = 11;
 const SolutionStatus_Disqualified       = 12;
+const SolutionStatus_CheckFailed        = 13;
 const SolutionStatus_OK                 = 100;
+const SolutionStatus_GraderAssigned     = 201;
 
 @JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
 class Submission {
@@ -78,6 +80,36 @@ class SubmissionList {
   factory SubmissionList.fromJson(Map<String,dynamic> json) => _$SubmissionListFromJson(json);
   Map<String,dynamic> toJson() => _$SubmissionListToJson(this);
 }
+
+@JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
+class ProblemStatus {
+  String  problemId = '';
+  int solutionStatus = 0;
+
+  ProblemStatus();
+  factory ProblemStatus.fromJson(Map<String,dynamic> json) => _$ProblemStatusFromJson(json);
+  Map<String,dynamic> toJson() => _$ProblemStatusToJson(this);
+}
+
+@JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
+class CheckCourseStatusRequest {
+  User user = User();
+  Course course = Course();
+
+  CheckCourseStatusRequest();
+  factory CheckCourseStatusRequest.fromJson(Map<String,dynamic> json) => _$CheckCourseStatusRequestFromJson(json);
+  Map<String,dynamic> toJson() => _$CheckCourseStatusRequestToJson(this);
+}
+
+@JsonSerializable(includeIfNull: false, fieldRename: FieldRename.snake)
+class CheckCourseStatusResponse {
+  List<ProblemStatus> problemStatuses = List.empty(growable: true);
+
+  CheckCourseStatusResponse();
+  factory CheckCourseStatusResponse.fromJson(Map<String,dynamic> json) => _$CheckCourseStatusResponseFromJson(json);
+  Map<String,dynamic> toJson() => _$CheckCourseStatusResponseToJson(this);
+}
+
 
 class SubmissionService extends ServiceBase {
   SubmissionService(RpcConnection connection)

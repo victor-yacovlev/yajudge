@@ -397,10 +397,25 @@ message SubmissionFilter {
   SolutionStatus  status          = 4;
 }
 
+message CheckCourseStatusRequest {
+  User    user      = 1;
+  Course  course    = 2;
+}
+
+message ProblemStatus {
+  string          problem_id  = 1;
+  SolutionStatus  status      = 2;
+}
+
+message CheckCourseStatusResponse {
+  repeated ProblemStatus  problem_statuses = 1;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
   rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
+  rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CheckCourseStatusResponse) {}
 
   // anounce grader alive and receive stream of submissions to be graded
   rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}

@@ -155,9 +155,9 @@ class CourseProblemScreenState extends BaseScreenState {
       if (_problemMetadata!.fullScoreMultiplier == 1.0) {
         hardeness = 'обычная';
       } else if (_problemMetadata!.fullScoreMultiplier < 1.0) {
-        hardeness = 'легкая, в оценку войдет с весом '+_problemMetadata!.fullScoreMultiplier.toString();
+        hardeness = 'легкая, коэффициент сложности '+_problemMetadata!.fullScoreMultiplier.toString();
       } else if (_problemMetadata!.fullScoreMultiplier > 1.0) {
-        hardeness = 'сложная, в оценку войдет с весом '+_problemMetadata!.fullScoreMultiplier.toString();
+        hardeness = 'трудная, коэффициент сложности '+_problemMetadata!.fullScoreMultiplier.toString();
       }
       String problemStatus = '';
       if (_problemMetadata!.blocksNextProblems) {
@@ -227,13 +227,15 @@ class CourseProblemScreenState extends BaseScreenState {
     if (horizontalMargins < 0) {
       horizontalMargins = 0;
     }
-    return Container(
-      padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
-      margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
-      constraints: BoxConstraints(
-        minHeight: 300,
-      ),
-      child: SingleChildScrollView(child: visible),
+    return SingleChildScrollView(
+      child: Container(
+        child: visible,
+        padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
+        margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
+        constraints: BoxConstraints(
+          minHeight: 300,
+        ),
+      )
     );
   }
 
@@ -384,13 +386,20 @@ class CourseProblemScreenState extends BaseScreenState {
       }
     }
     Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
-    return Container(
-      padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
-      width: MediaQuery.of(context).size.width,
-      constraints: BoxConstraints(
-        minHeight: 300,
-      ),
-      child: SingleChildScrollView(child: visible),
+    double screenWidth = MediaQuery.of(context).size.width;
+    double horizontalMargins = (screenWidth - 950) / 2;
+    if (horizontalMargins < 0) {
+      horizontalMargins = 0;
+    }
+    return SingleChildScrollView(
+        child: Container(
+          child: visible,
+          padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
+          margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
+          constraints: BoxConstraints(
+            minHeight: 300,
+          ),
+        )
     );
   }
 

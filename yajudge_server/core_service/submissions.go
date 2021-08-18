@@ -358,3 +358,40 @@ func (service *SubmissionManagementService) CheckSubmissionsCountLimit(ctx conte
 	}
 	return result, nil
 }
+
+func (service *SubmissionManagementService) CheckCourseStatus(ctx context.Context, request *CheckCourseStatusRequest) (*CheckCourseStatusResponse, error) {
+	query := `
+select problem_id,status from submissions
+where users_id=$1 and courses_id=$2
+order by timestamp 
+`
+	rows, err := service.DB.Query(query, request.User.Id, request.Course.Id)
+	if err != nil {
+		return nil, err
+	}
+	problems := make(map[string]SolutionStatus)
+	for rows.Next() {
+		var id string
+		var statusInt int64
+		err = rows.Scan(&id, &statusInt)
+		if err != nil {
+			return nil, err
+		}
+		status := SolutionStatus(statusInt)
+		problemStatus, hasStatus := problems[id]
+		if hasStatus {
+			if problemStatus != SolutionStatus_OK && problemStatus != SolutionStatus_DISQUALIFIED && problemStatus != SolutionStatus_PLAGIARISM_DETECTED {
+				problems[id] = status
+			}
+		} else {
+			problems[id] = status
+		}
+	}
+	response := &CheckCourseStatusResponse{
+		ProblemStatuses: make([]*ProblemStatus, 0, len(problems)),
+	}
+	for id, status := range problems {
+		response.ProblemStatuses = append(response.ProblemStatuses, &ProblemStatus{ProblemId: id, Status: status})
+	}
+	return response, nil
+}
