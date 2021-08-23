@@ -156,11 +156,11 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
         }
       }
     }
-    if (selectedKey == null) {
-      selectedKey = PlatformsUtils.getInstance().loadSettingsValue(
-        'selected_lesson/' + widget.courseUrl
-      );
-    }
+    // if (selectedKey == null) {
+    //   selectedKey = PlatformsUtils.getInstance().loadSettingsValue(
+    //     'selected_lesson/' + widget.courseUrl
+    //   );
+    // }
     if (treeViewController != null) {
       if (selectedKey != null) {
         treeViewController = treeViewController!.copyWith(selectedKey: selectedKey);

@@ -34,17 +34,12 @@ void main([List<String>? arguments]) {
     wsApiUrl = 'ws://localhost:8080/api-ws';
   }
 
-  String? currentSessionCookie = platformsSettings.loadSettingsValue('User/session_id');
-  if (currentSessionCookie == null) {
-    currentSessionCookie = '';
-  }
-
   RpcConnection rpcConn = new RpcConnection(wsApiUrl);
   UsersService usersService = new UsersService(rpcConn);
   CoursesService coursesService = new CoursesService(rpcConn);
   SubmissionService submissionService = new SubmissionService(rpcConn);
 
 
-  App app = App(currentSessionCookie);
+  App app = App();
   runApp(app);
 }

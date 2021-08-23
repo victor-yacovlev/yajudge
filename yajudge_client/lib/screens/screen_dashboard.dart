@@ -1,4 +1,5 @@
 import 'package:yajudge_client/screens/screen_base.dart';
+import 'package:yajudge_client/utils/utils.dart';
 import 'package:yajudge_client/widgets/unified_widgets.dart';
 import 'package:yajudge_client/wsapi/courses.dart';
 
@@ -37,7 +38,12 @@ class DashboardScreenState extends BaseScreenState {
       if (e.role != UserRole_Student) {
         roleTitle = 'Вид глазами студента';
       }
-      String link = '/' + e.course.urlPrefix;
+      String link = '/' + e.course.urlPrefix + '/';
+      String? subroute = PlatformsUtils.getInstance()
+        .loadSettingsValue('Subroute/' + e.course.urlPrefix);
+      if (subroute != null) {
+        link += subroute;
+      }
       VoidCallback action = () {
         Navigator.pushNamed(context, link);
       };

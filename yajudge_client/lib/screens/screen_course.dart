@@ -77,13 +77,15 @@ class CourseScreenState extends BaseScreenState {
   }
 
   void _onLessonPicked(String sectionKey, String lessonKey) {
-    String url = '/' + screen.courseUrl;
+    String url = '/' + screen.courseUrl + '/';
+    String subroute = '';
     if (sectionKey.isNotEmpty) {
-      url += '/' + sectionKey;
+      subroute += sectionKey;
     } else {
-      url += '/_';
+      subroute += '_';
     }
-    url += '/' + lessonKey;
+    subroute += '/' + lessonKey;
+    url += subroute;
     PageRouteBuilder routeBuilder = PageRouteBuilder(
       settings: RouteSettings(name: url),
       pageBuilder: (_a, _b, _c) {
@@ -94,6 +96,10 @@ class CourseScreenState extends BaseScreenState {
         );
       },
       transitionDuration: Duration(seconds: 0),
+    );
+    PlatformsUtils.getInstance().saveSettingsValue(
+      "Subroute/" + screen.courseUrl,
+      subroute,
     );
     Navigator.pushReplacement(context, routeBuilder);
   }

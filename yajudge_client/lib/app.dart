@@ -16,15 +16,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 
 class App extends StatefulWidget {
-  String _sessionId;
-
-  App(String sessionId)
-      : _sessionId = sessionId,
-        super();
+  App() : super();
 
   @override
   State<StatefulWidget> createState() {
-    return AppState(_sessionId);
+    String? sessionId = PlatformsUtils.getInstance().loadSettingsValue('User/session_id');
+    return AppState(sessionId==null? '' : sessionId);
   }
 }
 
@@ -40,7 +37,29 @@ class AppState extends State<App> {
 
   AppState(String sessionId) {
     _instance = this;
-    if (sessionId.isNotEmpty) this.sessionId = sessionId;
+    if (sessionId.isNotEmpty) {
+      this.sessionId = sessionId;
+    }
+  }
+
+  void _loadCoursesListForUser(User user) {
+    CoursesFilter filter = CoursesFilter()..user = user;
+    CoursesService.instance.getCourses(filter)
+    .then((CoursesList coursesList) {
+      setState(() {
+        _coursesList = coursesList;
+      });
+      for (UserChangedCallback cb in _userChangedCallbacks) {
+        cb(user, coursesList);
+      }
+      Navigator.pushReplacementNamed(context, initialRoute);
+    })
+    .onError((error, stackTrace) {
+      Future.delayed(Duration(seconds: 2), () {
+        // try again
+        _loadCoursesListForUser(user);
+      });
+    });
   }
 
   void registerUserChangedCallback(UserChangedCallback cb) {
@@ -69,22 +88,14 @@ class AppState extends State<App> {
       _userProfile = null;
       return;
     }
-    UsersService.instance.getProfile(session).then((User user) {
+    UsersService.instance.getProfile(session)
+    .then((User user) {
       setState(() {
         _userProfile = user;
       });
-      CoursesFilter filter = CoursesFilter()..user = user;
-      CoursesService.instance
-          .getCourses(filter)
-          .then((CoursesList coursesList) {
-        setState(() {
-          _coursesList = coursesList;
-        });
-        for (UserChangedCallback cb in _userChangedCallbacks) {
-          cb(user, coursesList);
-        }
-      });
-    }).onError((error, stackTrace) {
+      _loadCoursesListForUser(user);
+    })
+    .onError((error, stackTrace) {
       Future.delayed(Duration(seconds: 2), () {
         // try again
         this.sessionId = sessionId;
@@ -96,6 +107,32 @@ class AppState extends State<App> {
 
   void setTitle(String title) {
     _title = title;
+  }
+
+  String get initialRoute {
+    if (_sessionId.isEmpty || _userProfile == null) {
+      return '/login';
+    }
+    Course? defaultCourse;
+    String result = '/';
+    if (_userProfile!.defaultRole == UserRole_Student) {
+      // check if there is only one course available to skip welcome screen
+      CoursesService.instance.getCourses(CoursesFilter()..user=_userProfile!)
+          .then((CoursesList coursesList) {
+            if (coursesList.courses.length == 1) {
+              defaultCourse = coursesList.courses.first.course;
+            }
+      });
+    }
+    if (defaultCourse != null) {
+      result += defaultCourse!.urlPrefix + '/';
+      String? subroute = PlatformsUtils.getInstance()
+          .loadSettingsValue('Subroute/' + defaultCourse!.urlPrefix);
+      if (subroute != null) {
+        result += subroute;
+      }
+    }
+    return result;
   }
 
   String userProfileName() {
@@ -226,13 +263,12 @@ class AppState extends State<App> {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    String initialRoute;
-    if (_sessionId.isNotEmpty) {
-      initialRoute = '/';
-    } else {
-      initialRoute = '/login';
-    }
-
+    // String initialRoute;
+    // if (_sessionId.isNotEmpty) {
+    //   initialRoute = '/';
+    // } else {
+    //   initialRoute = '/login';
+    // }
     return MaterialApp(
       title: _title,
       theme: ThemeData(
