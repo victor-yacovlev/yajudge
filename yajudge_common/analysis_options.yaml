@@ -1,0 +1,9 @@
+include: pacakge:lints/recommended.yaml
+
+analyzer:
+  exclude:
+    - lib/generated/**
+
+linter:
+  rules:
+    prefer_relative_imports: true

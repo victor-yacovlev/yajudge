@@ -1,0 +1,19 @@
+
+
+builders:
+  yajudge_common:
+    target: "yajudge_common:grpc_generator"
+    import: "package:yajudge_common/builder.dart"
+    builder_factories: ["yajudgeGrpcGenerator"]
+    build_extensions: {".proto": [".pb.dart", ".pbenum.dart", ".pbgrpc.dart", ".pbjson.dart"]}
+    build_to: source
+    auto_apply: root_package
+    applies_builders: ["source_gen|combining_builder"]
+
+targets:
+  $default:
+    sources:
+      include:
+        - $package$
+        - lib/**
+        - proto/*.proto

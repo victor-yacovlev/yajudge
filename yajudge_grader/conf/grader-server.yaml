@@ -1,0 +1,8 @@
+working_directory: ./work
+rpc:
+  host: localhost
+  port: 9095
+  public_token: abrakadabra
+  private_token: zxcvbnmsdfsd
+extra_runtimes: [valgrind, wine]  # currently supported: [valgrind, qemu-arm, wine]
+system_environment: ./alpine-linux
