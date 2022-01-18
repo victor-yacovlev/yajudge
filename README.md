@@ -9,8 +9,10 @@ Prerequirements:
 
 To build native app (currently only MacOS supported, Linux planned):
 
-`make native`
+`make native-client`
 
 To build web app to be exposed by server:
 
-`make web`
+`make web-client`
+
+Also do not forget to build server-side tools (see separate README.md) 
