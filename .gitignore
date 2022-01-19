@@ -31,9 +31,7 @@
 .pub/
 /build/
 *.lock
-
-# Web related
-lib/generated_plugin_registrant.dart
+**/**/generated_*.*
 
 # Symbolication related
 app.*.symbols
