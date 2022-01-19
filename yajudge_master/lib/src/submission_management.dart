@@ -216,7 +216,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         break;
       }
     }
-    if (courseEnroll==null) {
+    if (courseEnroll==null && request.user.defaultRole != Role.ROLE_ADMINISTRATOR) {
       throw GrpcError.permissionDenied('user ${request.user.id} not enrolled to ${request.course.id}');
     }
     SubmissionsCountLimit limit = await checkSubmissionsCountLimit(
