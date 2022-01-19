@@ -1,5 +1,6 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
+import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:crypto/crypto.dart';
@@ -9,22 +10,23 @@ import 'dart:math';
 class UserManagementService extends UserManagementServiceBase {
 
   final PostgreSQLConnection connection;
+  final Logger log = Logger('UsersManager');
 
   UserManagementService({required this.connection}): super();
 
   @override
   Future<Session> authorize(ServiceCall call, User user) async {
     if (user.id==0 && user.email.isEmpty) {
+      log.warning('empty user id tried to authorize');
       throw GrpcError.invalidArgument('id or email not provided');
     }
     if (user.password.isEmpty) {
+      log.warning('user ${user.id} / ${user.email} tried to authorize with no password');
       throw GrpcError.invalidArgument('password not provided');
     }
     if (user.disabled) {
+      log.warning('disabled user ${user.id} / ${user.email} tried to authorize');
       throw GrpcError.permissionDenied('user disabled');
-    }
-    if (user.password.isEmpty) {
-      throw GrpcError.permissionDenied('wrong password');
     }
     String findByIdQuery = 'select id, email, password from users where id=@id';
     String findByEmailQuery = 'select id, email, password from users where email=@email';
@@ -39,6 +41,7 @@ class UserManagementService extends UserManagementServiceBase {
       );
     }
     if (usersRows.isEmpty) {
+      log.warning('not existing user ${user.id} / ${user.email} tried to authorize');
       throw GrpcError.notFound('user not found');
     }
     int userId = usersRows.first[0];
@@ -53,6 +56,7 @@ class UserManagementService extends UserManagementServiceBase {
       passwordMatch = user.password.toLowerCase() == hexDigest;
     }
     if (!passwordMatch) {
+      log.warning('user ${user.id} / ${user.email} tried to authorize with wrong password');
       throw GrpcError.permissionDenied('wrong password');
     }
     DateTime timestamp = DateTime.now();
@@ -66,6 +70,7 @@ class UserManagementService extends UserManagementServiceBase {
     await connection.query(storeSessionQuery, substitutionValues: {
       'c': sessionKey, 'id': userId, 'st': timestamp
     });
+    log.fine('user ${user.id} / ${user.email} successfully authorized');
     return session;
   }
 
@@ -165,6 +170,10 @@ class UserManagementService extends UserManagementServiceBase {
       values['group_name'] = user.groupName;
       res.groupName = user.groupName;
     }
+    if (user.email.isNotEmpty) {
+      values['email'] = user.email;
+      res.email = user.email;
+    }
     if (user.defaultRole != Role.ROLE_ANY) {
       values['default_role'] = user.defaultRole.value;
       res.defaultRole = user.defaultRole;
@@ -188,6 +197,7 @@ class UserManagementService extends UserManagementServiceBase {
       List<dynamic> fields = row.first;
       int id = fields.first;
       res.id = Int64(id);
+      log.fine('created user ${user.email} with id = $id');
     }
     return res;
   }

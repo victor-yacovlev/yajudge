@@ -112,11 +112,21 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         break;
       }
     }
-    if (courseEnroll==null) {
-      throw GrpcError.permissionDenied('user ${request.user.id} not enrolled to ${request.course.id}');
+    if (request.user.defaultRole != Role.ROLE_ADMINISTRATOR) {
+      if (courseEnroll == null) {
+        throw GrpcError.permissionDenied(
+            'user ${request.user.id} not enrolled to ${request.course.id}');
+      }
+      if (courseEnroll.role == Role.ROLE_STUDENT &&
+          request.user.id != currentUser.id) {
+        throw GrpcError.permissionDenied('cant access not own submissions');
+      }
     }
-    if (courseEnroll.role == Role.ROLE_STUDENT && request.user.id!=currentUser.id) {
-      throw GrpcError.permissionDenied('cant access not own submissions');
+    Course course;
+    if (courseEnroll != null) {
+      course = courseEnroll.course;
+    } else {
+      course = request.course;
     }
     String query =
       '''
@@ -166,7 +176,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       Submission submission = Submission(
         id: Int64(id),
         user: submittedUser,
-        course: courseEnroll.course,
+        course: course,
         problemId: problemId,
         timestamp: Int64(timestamp),
         status: SolutionStatus.valueOf(problemStatus)!,

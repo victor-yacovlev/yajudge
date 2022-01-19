@@ -6,6 +6,10 @@ import 'src/service.dart';
 import 'package:postgres/postgres.dart';
 
 Future<void> main([List<String>? arguments]) async {
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    print('${record.time}: ${record.level.name} - ${record.message}');
+  });
   ArgParser parser = ArgParser();
   parser.addOption('config');
   String? configFileName;
@@ -20,6 +24,7 @@ Future<void> main([List<String>? arguments]) async {
     print('No config file specified\n');
     exit(1);
   }
+  Logger.root.info('using config file $configFileName');
   final config = parseYamlConfig(configFileName);
   DatabaseProperties databaseProperties = DatabaseProperties.fromYamlConfig(config['database']!);
   PostgreSQLConnection postgreSQLConnection = PostgreSQLConnection(
@@ -37,9 +42,7 @@ Future<void> main([List<String>? arguments]) async {
     rpcProperties: rpcProperties,
     locationProperties: locationProperties,
   );
-  Logger.root.onRecord.listen((record) {
-    print('${record.time}: ${record.level.name} - ${record.message}');
-  });
+
   Logger.root.info('started master server at PID = $pid');
   masterService.serveSupervised();
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:core';
 import 'dart:io' as io;
 
 import 'package:grpc/grpc.dart';
@@ -47,7 +48,8 @@ class MasterService {
       _errorsLastMinute = 0;
     });
     userManagementService = UserManagementService(connection: connection);
-    String coursesRoot = absolute(this.locationProperties.coursesRoot);
+    String coursesRoot = normalize(absolute(this.locationProperties.coursesRoot));
+    log.info('using courses root $coursesRoot');
     if (!io.Directory(coursesRoot).existsSync()) {
       throw Exception('Courses root directory does not exists: $coursesRoot');
     }

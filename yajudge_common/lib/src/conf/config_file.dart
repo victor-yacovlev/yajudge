@@ -1,6 +1,7 @@
 import 'package:path/path.dart';
 import 'dart:io';
 import 'package:yaml/yaml.dart';
+import 'package:path/path.dart' as path;
 
 String? findConfigFile(String baseName) {
   String binDir = dirname(Platform.script.path);
@@ -13,7 +14,7 @@ String? findConfigFile(String baseName) {
   ];
   for (String item in variants) {
     if (File(item).existsSync()) {
-      return item;
+      return path.normalize(item);
     }
   }
   return null;
