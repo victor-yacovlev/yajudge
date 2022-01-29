@@ -4,6 +4,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,26 +46,73 @@ static void process_mount() {
     const char *work = getenv_or_fail(WorkDirEnv);
     const char *merge = getenv_or_fail(MergeDirEnv);
 
+    char merged_tmp[PATH_MAX];
+    char merged_proc[PATH_MAX];
+    char merged_devshm[PATH_MAX];
+
+    strncpy(merged_tmp, merge, PATH_MAX);
+    strncpy(merged_devshm, merge, PATH_MAX);
+    strncpy(merged_proc, merge, PATH_MAX);
+    strcat(merged_tmp, "/tmp");
+    strcat(merged_devshm, "/dev/shm");
+    strcat(merged_proc, "/proc");
+
     char options[65536] = {};
     snprintf(options, sizeof(options),
              "lowerdir=%s,upperdir=%s,workdir=%s",
              lower, upper, work);
-    int status = mount(
-            "overlay",
-            merge,
-            "overlay",
-            0,
-            options
-    );
+    int status = mount("overlay",merge,"overlay",0,options);
     if (0 != status) {
         perror("Mount overlay failed");
+        exit(1);
+    }
+
+    // mount special filesystems in new root: /tmp, /dev/shm and /proc
+    status = mount("tmpfs", merged_tmp, "tmpfs", 0, "");
+    if (0 != status) {
+        perror("Mount /tmp in overlay failed");
+        exit(1);
+    }
+    status = mount("tmpfs", merged_devshm, "tmpfs", 0, "");
+    if (0 != status) {
+        perror("Mount /dev/shm in overlay failed");
+        exit(1);
+    }
+    status = mount("procfs", merged_proc, "proc", 0, "");
+    if (0 != status) {
+        perror("Mount /proc in overlay failed");
         exit(1);
     }
 }
 
 static void process_unmount() {
     const char *merge = getenv_or_fail(MergeDirEnv);
-    int status = umount2(merge, MNT_FORCE);
+
+    char merged_tmp[PATH_MAX];
+    char merged_proc[PATH_MAX];
+    char merged_devshm[PATH_MAX];
+
+    strncpy(merged_tmp, merge, PATH_MAX);
+    strncpy(merged_devshm, merge, PATH_MAX);
+    strncpy(merged_proc, merge, PATH_MAX);
+    strcat(merged_tmp, "/tmp");
+    strcat(merged_devshm, "/dev/shm");
+    strcat(merged_proc, "/proc");
+
+    int status = 0;
+    status = umount2(merged_tmp, MNT_FORCE);
+    if (0 != status) {
+        perror("Umount /tmp in overlay failed");
+    }
+    status = umount2(merged_devshm, MNT_FORCE);
+    if (0 != status) {
+        perror("Umount /dev/shm in overlay failed");
+    }
+    status = umount2(merged_proc, MNT_FORCE);
+    if (0 != status) {
+        perror("Umount /proc in overlay failed");
+    }
+    status = umount2(merge, MNT_FORCE);
     if (0 != status) {
         perror("Umount overlay failed");
         exit(1);

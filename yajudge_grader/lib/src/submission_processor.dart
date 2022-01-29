@@ -19,7 +19,7 @@ class SubmissionProcessor {
     required this.problemData,
   });
 
-  void processSubmission() async {
+  Future<void> processSubmission() async {
     try {
       runner.createProblemCacheDir(courseData, problemData);
       runner.createSubmissionDir(submission);
@@ -116,16 +116,10 @@ class SubmissionProcessor {
     if (compiler.isEmpty) {
       throw UnimplementedError('dont know how to build files out of ASM/C/C++');
     }
-    bool noStdLib =
-        problemData.gradingOptions.extraCompileOptions.contains('-nostdlib');
+    // bool noStdLib =
+    //     problemData.gradingOptions.extraCompileOptions.contains('-nostdlib');
 
     var compileOptions = ['-c', '-O2', '-Werror', '-g'];
-    if (!noStdLib) {
-      compileOptions += [
-        '-fsanitize=undefined',
-        '-fsanitize=address',
-      ];
-    }
     List<String> objectFiles = [];
     for (final sourceFile in submission.solutionFiles.files) {
       String suffix = path.extension(sourceFile.name);
@@ -137,6 +131,7 @@ class SubmissionProcessor {
       io.ProcessResult compileResult = await runner.runIsolated(
           submission.id.toInt(), compiler, compilerArguments);
       if (compileResult.exitCode != 0) {
+        log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compileResult.stderr}');
         String message = compileResult.stderr + compileResult.stdout;
         submission = submission.copyWith((changed) {
           changed.status = SolutionStatus.COMPILATION_ERROR;
@@ -144,6 +139,7 @@ class SubmissionProcessor {
         });
         return false;
       } else {
+        log.fine('successfully compiled ${sourceFile.name} from ${submission.id}');
         objectFiles.add(objectFileName);
       }
     }
@@ -153,11 +149,14 @@ class SubmissionProcessor {
     io.ProcessResult linkerResult = await runner.runIsolated(
         submission.id.toInt(), compiler, linkerArguments);
     if (linkerResult.exitCode != 0) {
+      log.fine('cant link ${submission.id}: ${linkerResult.stderr}');
       String message = linkerResult.stderr + linkerResult.stdout;
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrors = message;
       });
+    } else {
+      log.fine('successfully linked ${submission.id}');
     }
     return true;
   }
@@ -175,8 +174,9 @@ class SubmissionProcessor {
           ['-style=file', file.name],
         );
         String formattedCode = (clangResult.stdout as String).trim();
+        String sourcePath = path.normalize('${runner.submissionUpperDir.path}/work/${file.name}');
         String sourceCode =
-            io.File('${runner.submissionUpperDir}/work/${file.name}')
+            io.File(sourcePath)
                 .readAsStringSync()
                 .trim();
         if (formattedCode != sourceCode) {

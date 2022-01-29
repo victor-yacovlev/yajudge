@@ -137,6 +137,9 @@ class ChrootedRunner {
       mounterToolPath, [],
       environment: env,
     );
+    if (status.stderr.toString().isNotEmpty) {
+      log.severe('mount overlay: ${status.stderr}');
+    }
     if (status.exitCode != 0) {
       throw AssertionError('cant mount overlay filesystem: ${status.stderr}');
     }
@@ -151,6 +154,9 @@ class ChrootedRunner {
       mounterToolPath, ['-u'],
       environment: env,
     );
+    if (status.stderr.toString().isNotEmpty) {
+      log.severe('umount overlay: ${status.stderr}');
+    }
     if (status.exitCode != 0) {
       throw AssertionError('cant unmount overlay filesystem: ${status.stderr}');
     }
@@ -214,7 +220,11 @@ class ChrootedRunner {
       workDirArg,
       executable
     ] + arguments;
-    Future<io.ProcessResult> result = io.Process.run(cgroupLauncher, launcherArguments);
+    Future<io.ProcessResult> result = io.Process.run(
+      cgroupLauncher,
+      launcherArguments,
+      environment: environment,
+    );
     return result;
   }
 

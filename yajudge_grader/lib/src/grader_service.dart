@@ -121,8 +121,8 @@ class GraderService {
     }
   }
 
-  Future<Submission> processSubmission(Submission submission) {
-    return loadCourseData(submission.course.dataId).then((courseData) {
+  Future<Submission> processSubmission(Submission submission) async {
+    return loadCourseData(submission.course.dataId).then((courseData) async {
       final courseId = submission.course.dataId;
       final problemId = submission.problemId;
       ProblemData? problemData = findProblemById(courseData, problemId);
@@ -138,6 +138,8 @@ class GraderService {
         problemData: problemData,
         courseData: courseData,
       );
+      await processor.processSubmission();
+      throw UnimplementedError();
       return processor.submission;
     });
   }
