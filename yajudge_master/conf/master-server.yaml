@@ -6,7 +6,7 @@ database:
   password: yajudge
 
 rpc:
-  host: localhost
+  host: any
   port: 9095
   public_token: abrakadabra
   private_token: zxcvbnmsdfsd

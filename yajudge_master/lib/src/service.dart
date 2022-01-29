@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:core';
 import 'dart:io' as io;
+import 'dart:io';
 
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
@@ -102,8 +103,14 @@ class MasterService {
 
   Future<void> serve() {
     log.info('listening master on ${rpcProperties.host}:${rpcProperties.port}');
+    dynamic address;
+    if (rpcProperties.host=='*' || rpcProperties.host=='any') {
+      address = InternetAddress.anyIPv4;
+    } else {
+      address = rpcProperties.host;
+    }
     return grpcServer.serve(
-      address: rpcProperties.host,
+      address: address,
       port: rpcProperties.port,
       shared: true,
     );
