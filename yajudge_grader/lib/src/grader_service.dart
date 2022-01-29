@@ -1,44 +1,43 @@
 import 'dart:async';
+import 'dart:io' as io;
 
+import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:fixnum/fixnum.dart';
-import 'dart:io' as io;
-import 'package:path/path.dart' as path;
 import 'package:yajudge_grader/src/chrooted_runner.dart';
+import 'package:yajudge_grader/src/submission_processor.dart';
 
 const ReconnectTimeout = Duration(seconds: 5);
 
 class TokenAuthGrpcInterceptor implements ClientInterceptor {
-
   final String _token;
-  
-  TokenAuthGrpcInterceptor(this._token): super();
+
+  TokenAuthGrpcInterceptor(this._token) : super();
 
   @override
-  ResponseStream<R> interceptStreaming<Q, R>(ClientMethod<Q, R> method, Stream<Q> requests, CallOptions options, ClientStreamingInvoker<Q, R> invoker) {
+  ResponseStream<R> interceptStreaming<Q, R>(
+      ClientMethod<Q, R> method,
+      Stream<Q> requests,
+      CallOptions options,
+      ClientStreamingInvoker<Q, R> invoker) {
     final newOptions = getNewOptions(options);
     return invoker(method, requests, newOptions);
   }
 
   @override
-  ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request, CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
+  ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
+      CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
     final newOptions = getNewOptions(options);
     return invoker(method, request, newOptions);
   }
-  
-  CallOptions getNewOptions(CallOptions options) {
-    return options.mergedWith(
-        CallOptions(
-            metadata: {
-              'token': _token,
-            }
-        )
-    );
-  }
 
+  CallOptions getNewOptions(CallOptions options) {
+    return options.mergedWith(CallOptions(metadata: {
+      'token': _token,
+    }));
+  }
 }
 
 class GraderService {
@@ -50,9 +49,12 @@ class GraderService {
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
-  Map<String,CourseDataCacheItem> _courses = {};
+  Map<String, CourseDataCacheItem> _courses = {};
 
-  GraderService({required this.rpcProperties, required this.locationProperties, required this.identityProperties}) {
+  GraderService(
+      {required this.rpcProperties,
+      required this.locationProperties,
+      required this.identityProperties}) {
     masterServer = GrpcOrGrpcWebClientChannel.grpc(
       rpcProperties.host,
       port: rpcProperties.port,
@@ -61,8 +63,10 @@ class GraderService {
       ),
     );
     final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
-    coursesService = CourseManagementClient(masterServer, interceptors: [interceptor]);
-    submissionsService = SubmissionManagementClient(masterServer, interceptors: [interceptor]);
+    coursesService =
+        CourseManagementClient(masterServer, interceptors: [interceptor]);
+    submissionsService =
+        SubmissionManagementClient(masterServer, interceptors: [interceptor]);
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
   }
@@ -89,22 +93,22 @@ class GraderService {
     }
   }
 
-  void serveSupervised()  {
+  void serveSupervised() {
     runZonedGuarded(() async {
       await serveIncomingSubmissions();
-    }, (e,s) => handleGraderError(e))!.then((_) => serveSupervised());
+    }, (e, s) => handleGraderError(e))!
+        .then((_) => serveSupervised());
   }
 
   Future<void> serveIncomingSubmissions() async {
     final graderProps = GraderProperties(
-      name: identityProperties.name,
-      platform: GradingPlatform(
-        os: identityProperties.os,
-        arch: identityProperties.arch,
-        runtimes: identityProperties.runtimes,
-        compilers: identityProperties.compilers,
-      )
-    );
+        name: identityProperties.name,
+        platform: GradingPlatform(
+          os: identityProperties.os,
+          arch: identityProperties.arch,
+          runtimes: identityProperties.runtimes,
+          compilers: identityProperties.compilers,
+        ));
     final stream = submissionsService.receiveSubmissionsToGrade(graderProps);
     try {
       await for (final submission in stream) {
@@ -112,8 +116,7 @@ class GraderService {
           submissionsService.updateGraderOutput(result);
         });
       }
-    }
-    finally {
+    } finally {
       stream.cancel();
     }
   }
@@ -127,31 +130,15 @@ class GraderService {
         throw GrpcError.notFound('problem $problemId not found in $courseId');
       }
       log.info('processing submission ${submission.id} $courseId/$problemId');
-      ChrootedRunner runner = ChrootedRunner(locationProperties: locationProperties);
-      try {
-        runner.createProblemCacheDir(courseData, problemData);
-        runner.createSubmissionDir(submission);
-        runner.mountOverlay();
-        runner.createSubmissionCgroup(submission.id.toInt());
-      }
-      catch (error) {
-        log.severe(error);
-      }
-      finally {
-        runner.removeSubmissionCgroup(submission.id.toInt());
-        runner.unMountOverlay();
-      }
-      //
-      // for (final codeStyle in courseData.codeStyles) {
-      //   String error = checkCodeStyle(problemRoot, problemData, codeStyle, submission);
-      //   if (error.isNotEmpty) {
-      //     // TODO fix deprecated method usage
-      //     return submission.copyWith((changed) {
-      //       changed.status = SolutionStatus.STYLE_CHECK_ERROR;
-      //     });
-      //   }
-      // }
-      return submission;
+      ChrootedRunner runner =
+          ChrootedRunner(locationProperties: locationProperties);
+      SubmissionProcessor processor = SubmissionProcessor(
+        submission: submission,
+        runner: runner,
+        problemData: problemData,
+        courseData: courseData,
+      );
+      return processor.submission;
     });
   }
 
@@ -191,39 +178,7 @@ class GraderService {
   void shutdown(String reason, [bool error = false]) async {
     masterServer.shutdown().timeout(Duration(seconds: 2), onTimeout: () {
       log.info('grader shutdown due to $reason');
-      io.exit(error? 1 : 0);
+      io.exit(error ? 1 : 0);
     });
   }
-
-  String checkCodeStyle(String problemRoot, ProblemData problemData, CodeStyle codeStyle, Submission submission) {
-    if (['.c', '.cpp', '.cxx', '.cc'].contains(codeStyle.sourceFileSuffix)) {
-      // use clang-format
-      io.File formatFile = io.File('$problemRoot/.clang-format');
-      formatFile.writeAsBytesSync(codeStyle.styleFile.data);
-      for (final file in submission.solutionFiles.files) {
-        io.ProcessResult clangResult;
-        try {
-          clangResult = io.Process.runSync(
-            'clang-format',
-            ['-style=file', file.name],
-            workingDirectory: problemRoot,
-          );
-          String formattedCode = (clangResult.stdout as String).trim();
-          String sourceCode = io.File('$problemRoot/${file.name}').readAsStringSync().trim();
-          if (formattedCode != sourceCode) {
-            return formattedCode;
-          }
-        } catch (e) {
-          if (e is io.ProcessException) {
-            log.warning('cant launch clang-format for $problemRoot/${file.name}');
-            return '';
-          }
-        }
-      }
-    }
-    return '';
-  }
-
-
-
 }

@@ -5,7 +5,7 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
 import 'package:posix/posix.dart' as posix;
-import 'package:yajudge_grader/src/Limits.dart';
+import 'package:yajudge_grader/src/limits.dart';
 
 class ChrootedRunner {
   final GraderLocationProperties locationProperties;
