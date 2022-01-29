@@ -17,12 +17,13 @@ class YajudgeGrpcGenerator implements Builder {
     String protoFilePath = buildStep.inputId.path;
     String protoFileDir = path.dirname(protoFilePath);
     Directory('lib/src/generated').createSync(recursive: true);
-    Process.runSync(
+    ProcessResult processResult = Process.runSync(
       'protoc',
       ['-I', protoFileDir, protoFilePath, '--dart_out=grpc:lib/src/generated'],
       environment: environment,
       runInShell: true,
     );
+    assert (processResult.exitCode == 0);
   }
 
   @override

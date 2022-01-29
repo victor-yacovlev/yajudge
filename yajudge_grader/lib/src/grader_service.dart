@@ -7,6 +7,7 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
+import 'package:yajudge_grader/src/chrooted_runner.dart';
 
 const ReconnectTimeout = Duration(seconds: 5);
 
@@ -117,26 +118,6 @@ class GraderService {
     }
   }
 
-  String createProblemWorkingDirectory(CourseData courseData, ProblemData problemData, Submission submission) {
-    String problemRoot = path.normalize('${locationProperties.workDir}/${submission.id}/');
-    final problemDir = io.Directory(problemRoot);
-    if (problemDir.existsSync()) {
-      problemDir.deleteSync(recursive: true);
-    }
-    problemDir.createSync(recursive: true);
-    for (final style in courseData.codeStyles) {
-      String styleFilePath = '$problemRoot/${style.styleFile.name}';
-      io.File(styleFilePath).writeAsBytesSync(style.styleFile.data);
-    }
-    for (final file in (problemData.graderFiles.files + submission.solutionFiles.files)) {
-      String filePath = path.normalize('$problemRoot/${file.name}');
-      String fileDir = path.dirname(filePath);
-      io.Directory(fileDir).createSync(recursive: true);
-      io.File(filePath).writeAsBytesSync(file.data);
-    }
-    return problemRoot;
-  }
-
   Future<Submission> processSubmission(Submission submission) {
     return loadCourseData(submission.course.dataId).then((courseData) {
       final courseId = submission.course.dataId;
@@ -146,16 +127,30 @@ class GraderService {
         throw GrpcError.notFound('problem $problemId not found in $courseId');
       }
       log.info('processing submission ${submission.id} $courseId/$problemId');
-      String problemRoot = createProblemWorkingDirectory(courseData, problemData, submission);
-      for (final codeStyle in courseData.codeStyles) {
-        String error = checkCodeStyle(problemRoot, problemData, codeStyle, submission);
-        if (error.isNotEmpty) {
-          // TODO fix deprecated method usage
-          return submission.copyWith((changed) {
-            changed.status = SolutionStatus.STYLE_CHECK_ERROR;
-          });
-        }
+      ChrootedRunner runner = ChrootedRunner(locationProperties: locationProperties);
+      try {
+        runner.createProblemCacheDir(courseData, problemData);
+        runner.createSubmissionDir(submission);
+        runner.mountOverlay();
+        runner.createSubmissionCgroup(submission.id.toInt());
       }
+      catch (error) {
+        log.severe(error);
+      }
+      finally {
+        runner.removeSubmissionCgroup(submission.id.toInt());
+        runner.unMountOverlay();
+      }
+      //
+      // for (final codeStyle in courseData.codeStyles) {
+      //   String error = checkCodeStyle(problemRoot, problemData, codeStyle, submission);
+      //   if (error.isNotEmpty) {
+      //     // TODO fix deprecated method usage
+      //     return submission.copyWith((changed) {
+      //       changed.status = SolutionStatus.STYLE_CHECK_ERROR;
+      //     });
+      //   }
+      // }
       return submission;
     });
   }

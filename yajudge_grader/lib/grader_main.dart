@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
+import 'package:yajudge_grader/src/chrooted_runner.dart';
 import 'src/grader_service.dart';
 
 Future<void> main([List<String>? arguments]) async {
@@ -14,7 +15,7 @@ Future<void> main([List<String>? arguments]) async {
     configFileName = options['config'];
   }
   if (configFileName==null || configFileName.isEmpty) {
-    configFileName = findConfigFile('master-server');
+    configFileName = findConfigFile('grader-server');
   }
   if (configFileName==null) {
     print('No config file specified\n');
@@ -29,8 +30,10 @@ Future<void> main([List<String>? arguments]) async {
       locationProperties: locationProperties,
       identityProperties: identityProperties,
   );
+  ChrootedRunner.moveMyselfToCgroup();
   String name = identityProperties.name;
   graderService.serveSupervised();
+  Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     print('${record.time}: ${record.level.name} - ${record.message}');
   });
