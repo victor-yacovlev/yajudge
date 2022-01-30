@@ -77,23 +77,8 @@ enum Arch {
   ARCH_AARCH64= 4;
 }
 
-enum OS {
-  OS_ANY      = 0;
-  OS_POSIX    = 1;
-  OS_LINUX    = 2;
-  OS_BSD      = 3;
-  OS_WINDOWS  = 4;
-  OS_DARWIN   = 5;
-}
-
-
 message GradingPlatform {
-  Arch            arch        = 1; // ARCH_ANY for generic problems
-  OS              os          = 2; // OS_ANY for too generic problems, OS_POSIX for most common
-  repeated string runtimes    = 3; // additional runtimes like valgrind, qemu-arm, wine etc.
-  repeated string compilers   = 4; // gcc, g++, gas, javac, and so on
-  repeated string tools       = 5; // additional tools required like cmake
-  repeated string libraries   = 6; // additional libraries required (in terms of pkg-config for C/C++)
+  Arch            arch                 = 1; // ARCH_ANY for generic problems
 }
 
 message GradingLimits {
@@ -103,6 +88,9 @@ message GradingLimits {
   int64           real_time_limit_sec = 4;
   int64           proc_count_limit    = 5;
   int64           fd_count_limit      = 6;
+  int64           stdout_size_limit_mb= 7;
+  int64           stderr_size_limit_mb= 8;
+  bool            allow_network       = 9;
   // todo more options
 }
 
@@ -113,26 +101,11 @@ message TestCase {
   File            stdin_data                  = 4;
   File            stdout_reference            = 5;
   File            stderr_reference            = 6;
-  int64           retval_reference            = 7;
-  FileSet         input_extra_files           = 8;
-  FileSet         output_reference_extra_files= 9;
+  File            directory_bundle            = 7;
 }
-
-message GradingTarget {
-  string            target_file_name      = 1;
-  repeated string   build_commands        = 2;
-}
-
-message GradingRuntime {
-  string            name                  = 1;
-  bool              optional              = 2;
-}
-
 
 message GradingOptions {
   GradingPlatform     platform_required     = 1; // to match corresponding grader client
-  repeated GradingRuntime runtimes          = 2; // additional runtimes like valgrind or wine
-  repeated GradingTarget  targets           = 3; // custom build steps or empty to be generated from runtimes
   repeated string     extra_compile_options = 4;
   repeated string     extra_link_options    = 5;
   GradingLimits       limits                = 6;
@@ -141,6 +114,8 @@ message GradingOptions {
   string              standard_checker_opts = 9; // like ejudge checker environment
   File                custom_checker        = 10;// checker source file
   File                custom_interactor     = 11;// interactor source file
+  repeated CodeStyle  code_styles           = 12;// just copied from parent course for convience
+  FileSet             extra_build_files     = 13;
 }
 
 message CodeStyle {
@@ -182,7 +157,7 @@ enum SolutionStatus {
   GRADE_IN_PROGRESS   = 2;
   STYLE_CHECK_ERROR   = 3;
   COMPILATION_ERROR   = 4;
-  VERY_BAD            = 5;  // no one test passed
+  WRONG_ANSWER        = 5;
   ACCEPTABLE          = 6;  // grade score > 0 (if accept partial solution) or score is full
   PENDING_REVIEW      = 7;
   CODE_REVIEW_REJECTED= 8;
@@ -190,6 +165,8 @@ enum SolutionStatus {
   PLAGIARISM_DETECTED = 11;
   DISQUALIFIED        = 12;
   CHECK_FAILED        = 13;
+  RUNTIME_ERROR       = 14;
+  TIME_LIMIT          = 15;
   OK                  = 100;
 
   // INTERNAL STATUSES
@@ -218,8 +195,9 @@ message TestResult {
   string              stdout        = 3;
   string              stderr        = 4;
   int32               status        = 5;
-  bool                exited        = 6;
+  int32               signal_killed = 6;
   bool                standard_match= 7;
+  bool                time_limit    = 8;
 }
 
 message Submission {
@@ -333,18 +311,32 @@ message CoursesList {
 }
 
 message CourseContentRequest {
-  string                course_data_id  = 1;
-  int64                 cached_timestamp= 2;
+  string      course_data_id  = 1;
+  int64       cached_timestamp= 2;
 }
 
-enum CourseContentStatus {
+message ProblemContentRequest {
+  string      course_data_id = 1;
+  string      problem_id = 2;
+  int64       cached_timestamp = 3;
+}
+
+enum ContentStatus {
   HAS_DATA        = 0;
   NOT_CHANGED     = 1;
 }
 
+message ProblemContentResponse {
+  string          course_data_id = 1;
+  string          problem_id = 2;
+  int64           last_modified = 3;
+  ContentStatus   status = 4;
+  ProblemData     data = 5;
+}
+
 message CourseContentResponse {
   string                course_data_id  = 1;
-  CourseContentStatus   status          = 2;
+  ContentStatus         status          = 2;
   CourseData            data            = 3;
   int64                 last_modified   = 4;
 }
@@ -367,7 +359,7 @@ service CourseManagement {
   rpc DeleteCourse(Course) returns (Nothing) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
   rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
-  rpc GetCourseFullContent(CourseContentRequest) returns (CourseContentResponse) {}
+  rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
 }
 
 message GraderProperties {
@@ -419,7 +411,8 @@ service SubmissionManagement {
   rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CheckCourseStatusResponse) {}
 
   // anounce grader alive and receive stream of submissions to be graded
-  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}
+//  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}
+  rpc TakeSubmissionToGrade(GraderProperties) returns (Submission) {}
   // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
   rpc UpdateGraderOutput(Submission) returns (Submission) {}
 }

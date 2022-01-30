@@ -1,13 +1,14 @@
 import 'dart:core';
 
+import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
 import 'package:posix/posix.dart' as posix;
-import 'package:yajudge_grader/src/limits.dart';
+import 'abstract_runner.dart';
 
-class ChrootedRunner {
+class ChrootedRunner extends AbstractRunner {
   final GraderLocationProperties locationProperties;
   final Logger log = Logger('ChrootedRunner');
 
@@ -33,6 +34,9 @@ class ChrootedRunner {
   }
 
   static String detectRootCgroupLocation() {
+    if (!io.Platform.isLinux) {
+      return '';
+    }
     io.ProcessResult mountResult = io.Process.runSync('mount', []);
     assert(mountResult.exitCode == 0);
     final lines = mountResult.stdout.toString().split('\n');
@@ -54,6 +58,9 @@ class ChrootedRunner {
   }
 
   static void moveMyselfToCgroup() {
+    if (!io.Platform.isLinux) {
+      return;
+    }
     String rootPath = detectRootCgroupLocation();
     io.Directory rootDir = io.Directory(rootPath);
     if (rootDir.existsSync()) {
@@ -82,24 +89,6 @@ class ChrootedRunner {
     }
   }
 
-  void createProblemCacheDir(CourseData courseData, ProblemData problemData) {
-    String problemPath = path.absolute(locationProperties.coursesCacheDir, problemData.id);
-    problemDir = io.Directory(problemPath);
-    problemDir.createSync(recursive: true);
-    io.Directory problemFilesDir = io.Directory(problemPath + '/work');
-    problemFilesDir.createSync(recursive: true);
-    for (final style in courseData.codeStyles) {
-      String styleFilePath = '${problemFilesDir.path}/${style.styleFile.name}';
-      io.File(styleFilePath).writeAsBytesSync(style.styleFile.data);
-    }
-    for (final file in problemData.graderFiles.files) {
-      String filePath = path.normalize('${problemFilesDir.path}/${file.name}');
-      String fileDir = path.dirname(filePath);
-      io.Directory(fileDir).createSync(recursive: true);
-      io.File(filePath).writeAsBytesSync(file.data);
-    }
-    log.fine('created problem cache $problemPath');
-  }
   
   void createSubmissionDir(Submission submission) {
     String submissionPath = path.absolute(locationProperties.workDir, '${submission.id}');
@@ -109,7 +98,11 @@ class ChrootedRunner {
     submissionUpperDir.createSync(recursive: true);
     submissionWorkDir.createSync(recursive: true);
     submissionMergeDir.createSync(recursive: true);
-    io.Directory submissionFilesDir = io.Directory(submissionUpperDir.path + '/work');
+    io.Directory submissionFilesDir = io.Directory(submissionUpperDir.path + '/build');
+    final fileNames = submission.solutionFiles.files.map((e) => e.name);
+    io.File(submissionFilesDir.path+'/.solution_files').writeAsStringSync(
+      fileNames.join('\n')
+    );
     for (final file in submission.solutionFiles.files) {
       String filePath = path.normalize('${submissionFilesDir.path}/${file.name}');
       String fileDir = path.dirname(filePath);
@@ -187,17 +180,20 @@ class ChrootedRunner {
     }
   }
 
-  void setupCgroupLimits(String cgroupPath, Limits limits) {
+  void setupCgroupLimits(String cgroupPath, GradingLimits limits) {
 
   }
 
-  Future<io.ProcessResult> runIsolated(int submissionId, String executable, List<String> arguments, {
+  @override
+  Future<io.Process> start(int submissionId, String executable, List<String> arguments, {
     String workingDirectory = '/work',
     Map<String,String>? environment,
-    Limits? limits,
+    GradingLimits? limits,
   }) {
     if (limits == null) {
-      limits = Limits();
+      limits = GradingLimits(
+        procCountLimit: Int64(20),
+      );
     }
     if (environment == null) {
       environment = Map<String,String>.from(io.Platform.environment);
@@ -208,7 +204,7 @@ class ChrootedRunner {
     String binDir = path.dirname(io.Platform.script.path);
     String cgroupLauncher = path.absolute(binDir, '../libexec/', 'cgroup-run');
     String unshareFlags = '-muipUf';
-    if (limits.isolateNetwork) {
+    if (!limits.allowNetwork) {
       unshareFlags += 'n';
     }
     String rootDirArg = '--root=${submissionMergeDir.path}';
@@ -220,12 +216,35 @@ class ChrootedRunner {
       workDirArg,
       executable
     ] + arguments;
-    Future<io.ProcessResult> result = io.Process.run(
+    Future<io.Process> result = io.Process.start(
       cgroupLauncher,
       launcherArguments,
       environment: environment,
     );
     return result;
+  }
+
+  @override
+  void createDirectoryForSubmission(Submission submission) {
+    createSubmissionDir(submission);
+    mountOverlay();
+    createSubmissionCgroup(submission.id.toInt());
+  }
+
+  @override
+  void releaseDirectoryForSubmission(Submission submission) {
+    unMountOverlay();
+    removeSubmissionCgroup(submission.id.toInt());
+  }
+
+  @override
+  String submissionPrivateDirectory(Submission submission) {
+    return submissionUpperDir.path;
+  }
+
+  @override
+  String submissionWorkingDirectory(Submission submission) {
+    return submissionMergeDir.path;
   }
 
 }

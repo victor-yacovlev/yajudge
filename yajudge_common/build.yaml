@@ -9,6 +9,9 @@ builders:
     build_to: source
     auto_apply: root_package
     applies_builders: ["source_gen|combining_builder"]
+    defaults:
+      generate_for:
+        - proto/*.proto
 
 targets:
   $default:

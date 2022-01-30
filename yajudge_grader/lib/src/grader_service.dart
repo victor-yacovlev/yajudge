@@ -6,8 +6,12 @@ import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:yajudge_grader/src/chrooted_runner.dart';
-import 'package:yajudge_grader/src/submission_processor.dart';
+import 'chrooted_runner.dart';
+import 'simple_runner.dart';
+import 'submission_processor.dart';
+import 'package:path/path.dart' as path;
+
+import 'abstract_runner.dart';
 
 const ReconnectTimeout = Duration(seconds: 5);
 
@@ -49,12 +53,15 @@ class GraderService {
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
-  Map<String, CourseDataCacheItem> _courses = {};
+  late final GraderProperties _graderProperties;
 
-  GraderService(
-      {required this.rpcProperties,
+  GraderService({required this.rpcProperties,
       required this.locationProperties,
       required this.identityProperties}) {
+    _graderProperties = GraderProperties(
+      name: identityProperties.name,
+      platform: GradingPlatform(arch: identityProperties.arch),
+    );
     masterServer = GrpcOrGrpcWebClientChannel.grpc(
       rpcProperties.host,
       port: rpcProperties.port,
@@ -101,80 +108,128 @@ class GraderService {
   }
 
   Future<void> serveIncomingSubmissions() async {
-    final graderProps = GraderProperties(
-        name: identityProperties.name,
-        platform: GradingPlatform(
-          os: identityProperties.os,
-          arch: identityProperties.arch,
-          runtimes: identityProperties.runtimes,
-          compilers: identityProperties.compilers,
-        ));
-    final stream = submissionsService.receiveSubmissionsToGrade(graderProps);
-    try {
-      await for (final submission in stream) {
-        processSubmission(submission).then((Submission result) {
-          submissionsService.updateGraderOutput(result);
-        });
+    while (true) {
+      Submission submission = await submissionsService.takeSubmissionToGrade(_graderProperties);
+      if (submission.id.toInt() > 0) {
+        submission = await processSubmission(submission);
+        await submissionsService.updateGraderOutput(submission);
       }
-    } finally {
-      stream.cancel();
+      else {
+        // no new submissions -- wait for 10 seconds and retry
+        io.sleep(Duration(seconds: 10));
+      }
     }
   }
 
   Future<Submission> processSubmission(Submission submission) async {
-    return loadCourseData(submission.course.dataId).then((courseData) async {
-      final courseId = submission.course.dataId;
-      final problemId = submission.problemId;
-      ProblemData? problemData = findProblemById(courseData, problemId);
-      if (problemData == null) {
-        throw GrpcError.notFound('problem $problemId not found in $courseId');
-      }
-      log.info('processing submission ${submission.id} $courseId/$problemId');
-      ChrootedRunner runner =
-          ChrootedRunner(locationProperties: locationProperties);
-      SubmissionProcessor processor = SubmissionProcessor(
-        submission: submission,
-        runner: runner,
-        problemData: problemData,
-        courseData: courseData,
-      );
-      await processor.processSubmission();
-      throw UnimplementedError();
-      return processor.submission;
-    });
-  }
-
-  Future<CourseData> loadCourseData(String courseId) async {
-    CourseDataCacheItem? cachedCourse;
-    if (_courses.containsKey(courseId)) {
-      cachedCourse = _courses[courseId]!;
-    }
-    Int64 timestamp = Int64(0);
-    if (cachedCourse != null) {
-      timestamp = Int64(
-          cachedCourse.lastModified!.toUtc().millisecondsSinceEpoch ~/ 1000);
-    }
-    final response = await coursesService.getCourseFullContent(
-      CourseContentRequest(
-        courseDataId: courseId,
-        cachedTimestamp: timestamp,
+    final courseId = submission.course.dataId;
+    final problemId = submission.problemId;
+    await loadProblemData(courseId, problemId);
+    log.info('processing submission ${submission.id} $courseId/$problemId');
+    AbstractRunner runner;
+    if (io.Platform.isLinux)
+      runner = ChrootedRunner(locationProperties: locationProperties);
+    else
+      runner = SimpleRunner(locationProperties: locationProperties);
+    SubmissionProcessor processor = SubmissionProcessor(
+      submission: submission,
+      runner: runner,
+      locationProperties: locationProperties,
+      defaultLimits: GradingLimits( // TODO read from config
+        realTimeLimitSec: Int64(5),
+        stdoutSizeLimitMb: Int64(1),
+        stderrSizeLimitMb: Int64(1),
+        procCountLimit: Int64(20),
+        allowNetwork: false,
       ),
     );
-    if (response.status == CourseContentStatus.HAS_DATA) {
-      log.info('loaded course $courseId content from master server');
-      cachedCourse = CourseDataCacheItem(
-        data: response.data,
-        lastModified: DateTime.fromMillisecondsSinceEpoch(
-          response.lastModified.toInt(),
-          isUtc: true,
-        ),
-      );
-      _courses[courseId] = cachedCourse;
+    await processor.processSubmission();
+    Submission result = processor.submission;
+    log.info('done processing submission ${submission.id} with status ${result.status.name}');
+    return result;
+  }
+
+  Future<void> loadProblemData(String courseId, String problemId) async {
+    String root = locationProperties.coursesCacheDir;
+    final problemDir = io.Directory(path.absolute(root, courseId, problemId));
+    final problemTimeStampFile = io.File(problemDir.path + '/.timestamp');
+    int timeStamp = 0;
+    if (problemTimeStampFile.existsSync()) {
+      String timeStampData = problemTimeStampFile.readAsStringSync().trim();
+      timeStamp = int.parse(timeStampData);
     }
-    if (cachedCourse == null) {
-      throw GrpcError.notFound('cant load course $courseId from server');
+    final request = ProblemContentRequest(
+      courseDataId: courseId,
+      problemId: problemId,
+      cachedTimestamp: Int64(timeStamp),
+    );
+    final response = await coursesService.getProblemFullContent(request);
+    if (response.status == ContentStatus.HAS_DATA) {
+      problemDir.createSync(recursive: true);
+      String buildDir = problemDir.path + '/build';
+      String testsDir = problemDir.path + '/tests';
+      io.Directory(buildDir).createSync(recursive: true);
+      io.Directory(testsDir).createSync(recursive: true);
+      problemTimeStampFile.writeAsStringSync('${response.lastModified.toInt()}\n');
+      final problemData = response.data;
+      String compileOptions = problemData.gradingOptions.extraCompileOptions.join(' ');
+      String linkOptions = problemData.gradingOptions.extraLinkOptions.join(' ');
+      io.File(buildDir+'/.compile_options').writeAsStringSync(compileOptions);
+      io.File(buildDir+'/.link_options').writeAsStringSync(linkOptions);
+      for (final codeStyle in problemData.gradingOptions.codeStyles) {
+        String fileName = codeStyle.styleFile.name;
+        String suffix = codeStyle.sourceFileSuffix;
+        if (suffix.startsWith('.'))
+          suffix = suffix.substring(1);
+        io.File(buildDir+'/'+fileName).writeAsBytesSync(codeStyle.styleFile.data);
+        io.File(buildDir+'/.style_$suffix').writeAsStringSync(codeStyle.styleFile.name);
+      }
+      for (final file in problemData.gradingOptions.extraBuildFiles.files) {
+        io.File(buildDir+'/'+file.name).writeAsBytesSync(file.data);
+      }
+      final customChecker = problemData.gradingOptions.customChecker;
+      if (customChecker.name.isNotEmpty) {
+        io.File(buildDir+'/'+customChecker.name).writeAsBytesSync(customChecker.data);
+        io.File(buildDir+'/.checker').writeAsStringSync(customChecker.name);
+      } else {
+        io.File(buildDir+'/.checker').writeAsStringSync(
+            problemData.gradingOptions.standardChecker + '\n' +
+            problemData.gradingOptions.standardCheckerOpts
+        );
+      }
+      final gzip = io.gzip;
+      int testNumber = 1;
+      for (final testCase in problemData.gradingOptions.testCases) {
+        final stdin = testCase.stdinData;
+        final stdout = testCase.stdoutReference;
+        final stderr = testCase.stderrReference;
+        final bundle = testCase.directoryBundle;
+        final args = testCase.commandLineArguments;
+        if (stdin.name.isNotEmpty) {
+          io.File(testsDir+'/'+stdin.name).writeAsBytesSync(gzip.decode(stdin.data));
+        }
+        if (stdout.name.isNotEmpty) {
+          io.File(testsDir+'/'+stdout.name).writeAsBytesSync(gzip.decode(stdout.data));
+        }
+        if (stderr.name.isNotEmpty) {
+          io.File(testsDir+'/'+stderr.name).writeAsBytesSync(gzip.decode(stderr.data));
+        }
+        if (bundle.name.isNotEmpty) {
+          io.File(testsDir+'/'+bundle.name).writeAsBytesSync(bundle.data);
+          io.Process.runSync('tar', ['zxf', bundle.name], workingDirectory: testsDir);
+          io.File(testsDir+'/'+bundle.name).deleteSync();
+        }
+        if (args.isNotEmpty) {
+          String testBaseName = '$testNumber';
+          if (testNumber < 10)
+            testBaseName = '0' + testBaseName;
+          if (testNumber < 100)
+            testBaseName = '0' + testBaseName;
+          io.File(testsDir+'/'+testBaseName+'.args').writeAsStringSync(args);
+        }
+        testNumber ++;
+      }
     }
-    return cachedCourse.data!;
   }
 
   void shutdown(String reason, [bool error = false]) async {

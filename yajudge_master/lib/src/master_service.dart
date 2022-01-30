@@ -9,13 +9,12 @@ import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart';
 import './course_management.dart';
-import './grader_manager.dart';
 import './submission_management.dart';
 import './user_management.dart';
 
 const NotLoggedMethods = ['Authorize'];
 const PrivateMethods = [
-  'ReceiveSubmissionsToGrade', 'GetCourseFullContent', 'UpdateGraderOutput',
+  'TakeSubmissionToGrade', 'GetProblemFullContent', 'UpdateGraderOutput',
 ];
 const StudentsMethods = [
   'GetProfile', 'ChangePassword',
@@ -37,7 +36,6 @@ class MasterService {
   late final CourseManagementService courseManagementService;
   late final SubmissionManagementService submissionManagementService;
   late final Server grpcServer;
-  late final GraderManager graderManager;
 
   MasterService({
     required this.connection,
@@ -67,7 +65,6 @@ class MasterService {
         [userManagementService, courseManagementService, submissionManagementService],
         [checkAuth]
     );
-    graderManager = GraderManager(parent: this);
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
   }
@@ -137,7 +134,6 @@ class MasterService {
   void shutdown(String reason, [bool error = false]) async {
     log.info('server shutdown due to $reason');
     await grpcServer.shutdown();
-    graderManager.shutdown();
     io.exit(error? 1 : 0);
   }
 

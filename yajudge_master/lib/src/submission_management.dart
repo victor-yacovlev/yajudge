@@ -6,8 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
-import 'grader_manager.dart';
-import 'service.dart';
+import 'master_service.dart';
 
 class SubmissionManagementService extends SubmissionManagementServiceBase {
 
@@ -187,23 +186,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return SubmissionList(submissions: result);
   }
 
-  @override
-  Stream<Submission> receiveSubmissionsToGrade(ServiceCall call, GraderProperties request) async* {
-    GraderConnection graderConnection = parent.graderManager.registerNewGrader(request);
-    parent.graderManager.checkForDelayedSubmissions(graderConnection);
-    Stream<Submission> sourceStream = graderConnection.streamController.stream;
-    try {
-      await for (Submission sub in sourceStream) {
-        log.fine('sending $sub to ${graderConnection.properties.name}');
-        yield(sub);
-      }
-    }
-    finally {
-      if (call.isCanceled) {
-        parent.graderManager.deregisterGrader(graderConnection);
-      }
-    }
-  }
 
   @override
   Future<Submission> submitProblemSolution(ServiceCall call, Submission request) async {
@@ -300,6 +282,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
+    log.fine('got response from grader on ${request.id}: status = ${request.status.name}');
     await connection.transaction((connection) async {
       await connection.query(
         '''
@@ -332,7 +315,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,@status,@exited,@standard_m
             'stdout': test.stdout,
             'stderr': test.stderr,
             'status': test.status,
-            'exited': test.exited,
+            'exited': test.signalKilled==0 && !test.timeLimit,
             'standard_match': test.standardMatch,
           }
         );
@@ -385,13 +368,14 @@ values (@submissions_id,@test_number,@stdout,@stderr,@status,@exited,@standard_m
     return result;
   }
 
-  Future<List<Submission>> getUnfinishedSubmissionsToGrade(String graderName) async {
+  Future<List<Submission>> getUnfinishedSubmissionToGrade(String graderName) async {
     List<dynamic> rows = await connection.query(
         '''
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
       where status=@status and grader_name=@grader_name and courses_id=courses.id
       order by timestamp
+      limit 1
       ''',
         substitutionValues: {
           'status': SolutionStatus.GRADER_ASSIGNED.value,
@@ -416,6 +400,50 @@ values (@submissions_id,@test_number,@stdout,@stderr,@status,@exited,@standard_m
       ));
     }
     return result;
+  }
+
+  @override
+  Future<Submission> takeSubmissionToGrade(ServiceCall call, GraderProperties request) async {
+    List<Submission> unfinished = await getUnfinishedSubmissionToGrade(request.name);
+    if (unfinished.isNotEmpty) {
+      Submission submission = unfinished.first;
+      log.fine('submission ${submission.id} sent to grader ${request.name}');
+      return submission;
+    }
+    List<Submission> newSubmissions = await getSubmissionsToGrade();
+    for (Submission submission in newSubmissions) {
+      ProblemData problemData = await getProblemDataForSubmission(submission);
+      if (graderMatch(request, problemData.gradingOptions)) {
+        assignGrader(submission.id.toInt(), request.name);
+        log.fine('submission ${submission.id} assigned and sent to grader ${request.name}');
+        return submission;
+      }
+    }
+    return Submission(id: Int64(0));
+  }
+
+  bool graderMatch(GraderProperties grader, GradingOptions options) {
+    return grader.platform.arch == options.platformRequired.arch ||
+      options.platformRequired.arch == Arch.ARCH_ANY;
+  }
+
+  Future<ProblemData> getProblemDataForSubmission(Submission sub) async {
+    String courseDataId;
+    if (sub.course.dataId.isEmpty) {
+      List<dynamic> rows = await parent.connection.query(
+          'select course_data from courses where id=@id',
+          substitutionValues: {'id': sub.course.id.toInt()}
+      );
+      courseDataId = rows[0][0];
+    } else {
+      courseDataId = sub.course.dataId;
+    }
+    final request = ProblemContentRequest(
+      courseDataId: courseDataId,
+      problemId: sub.problemId,
+    );
+    final response = await parent.courseManagementService.getProblemFullContent(null, request);
+    return response.data;
   }
 
 }

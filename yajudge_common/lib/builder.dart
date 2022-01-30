@@ -9,6 +9,7 @@ class YajudgeGrpcGenerator implements Builder {
 
   @override
   FutureOr<void> build(BuildStep buildStep) async {
+    print('Running builder for build step ${buildStep}');
     String homeEnv = Platform.environment['HOME']!;
     String pathEnv = Platform.environment['PATH']!;
     pathEnv = '$homeEnv/.pub-cache/bin:' + pathEnv;

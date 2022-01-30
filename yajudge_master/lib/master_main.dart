@@ -2,7 +2,7 @@ import 'package:args/args.dart';
 import 'package:logging/logging.dart';
 import 'dart:io';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'src/service.dart';
+import 'src/master_service.dart';
 import 'package:postgres/postgres.dart';
 
 Future<void> main([List<String>? arguments]) async {

@@ -1,19 +1,20 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_connection_interface.dart';
+import 'package:yajudge_common/yajudge_common.dart';
+
 import 'screens/screen_course.dart';
 import 'screens/screen_course_problem.dart';
 import 'screens/screen_course_reading.dart';
-import 'screens/screen_users_edit.dart';
-import 'screens/screen_users.dart';
-import 'screens/screen_users_import_csv.dart';
-import 'widgets/unified_widgets.dart';
-import 'package:yajudge_common/yajudge_common.dart';
-import 'utils/utils.dart';
 import 'screens/screen_dashboard.dart';
 import 'screens/screen_login.dart';
-import 'package:flutter/material.dart';
+import 'screens/screen_users.dart';
+import 'screens/screen_users_edit.dart';
+import 'screens/screen_users_import_csv.dart';
+import 'utils/utils.dart';
+import 'widgets/unified_widgets.dart';
 
 class App extends StatefulWidget {
   final ClientChannelBase clientChannel;
@@ -21,14 +22,16 @@ class App extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() {
-    String? userJson = PlatformsUtils.getInstance().loadSettingsValue('User/object');
-    String? sessionJson = PlatformsUtils.getInstance().loadSettingsValue('Session/object');
+    String? userJson =
+        PlatformsUtils.getInstance().loadSettingsValue('User/object');
+    String? sessionJson =
+        PlatformsUtils.getInstance().loadSettingsValue('Session/object');
     Session? initialSession;
     User? initialUser;
-    if (sessionJson!=null && sessionJson.isNotEmpty) {
+    if (sessionJson != null && sessionJson.isNotEmpty) {
       initialSession = Session.fromJson(sessionJson);
     }
-    if (userJson!=null && userJson.isNotEmpty) {
+    if (userJson != null && userJson.isNotEmpty) {
       initialUser = User.fromJson(userJson);
     }
     return AppState(initialSession, initialUser, clientChannel);
@@ -38,26 +41,24 @@ class App extends StatefulWidget {
 typedef void UserChangedCallback(User? user, CoursesList courseList);
 
 class AuthGrpcInterceptor implements ClientInterceptor {
-
   String sessionCookie = '';
 
   @override
-  ResponseStream<R> interceptStreaming<Q, R>(ClientMethod<Q, R> method, Stream<Q> requests, CallOptions options, ClientStreamingInvoker<Q, R> invoker) {
+  ResponseStream<R> interceptStreaming<Q, R>(
+      ClientMethod<Q, R> method,
+      Stream<Q> requests,
+      CallOptions options,
+      ClientStreamingInvoker<Q, R> invoker) {
     return invoker(method, requests, options);
   }
 
   @override
-  ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request, CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(
-      CallOptions(
-        metadata: {
-          'session': sessionCookie
-        }
-      )
-    );
+  ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
+      CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
+    CallOptions newOptions =
+        options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
     return invoker(method, request, newOptions);
   }
-
 }
 
 class AppState extends State<App> {
@@ -75,31 +76,32 @@ class AppState extends State<App> {
 
   List<UserChangedCallback> _userChangedCallbacks = List.empty(growable: true);
 
-  AppState(Session? initialSession, User? initialUser, ClientChannelBase clientChannel) {
+  AppState(Session? initialSession, User? initialUser,
+      ClientChannelBase clientChannel) {
     _instance = this;
     this.clientChannel = clientChannel;
-    usersService = UserManagementClient(clientChannel, interceptors: [authGrpcInterceptor]);
-    coursesService = CourseManagementClient(clientChannel, interceptors: [authGrpcInterceptor]);
-    submissionsService = SubmissionManagementClient(clientChannel, interceptors: [authGrpcInterceptor]);
+    usersService = UserManagementClient(clientChannel,
+        interceptors: [authGrpcInterceptor]);
+    coursesService = CourseManagementClient(clientChannel,
+        interceptors: [authGrpcInterceptor]);
+    submissionsService = SubmissionManagementClient(clientChannel,
+        interceptors: [authGrpcInterceptor]);
 
-    if (initialSession != null &&  initialUser !=null) {
+    if (initialSession != null && initialUser != null) {
       this.session = initialSession;
       this.userProfile = initialUser;
     }
   }
 
-
   void _loadCoursesListForUser(User user) {
     CoursesFilter filter = CoursesFilter()..user = user;
-    coursesService.getCourses(filter)
-    .then((CoursesList coursesList) {
+    coursesService.getCourses(filter).then((CoursesList coursesList) {
       setState(() {
         _coursesList = coursesList;
       });
       String route = initialRoute;
       Navigator.pushReplacementNamed(context, route);
-    })
-    .onError((error, stackTrace) {
+    }).onError((error, stackTrace) {
       Future.delayed(Duration(seconds: 2), () {
         // try again
         _loadCoursesListForUser(user);
@@ -118,7 +120,7 @@ class AppState extends State<App> {
 
   User? get userProfile => _userProfile;
 
-  bool get loggedIn => userProfile!=null && session!=null;
+  bool get loggedIn => userProfile != null && session != null;
 
   set userProfile(User? u) {
     _userProfile = u;
@@ -140,13 +142,13 @@ class AppState extends State<App> {
 
   set session(Session? s) {
     _session = s;
-    authGrpcInterceptor.sessionCookie = s==null? '' : s.cookie;
+    authGrpcInterceptor.sessionCookie = s == null ? '' : s.cookie;
     String jsonValue = '';
-    if (s!=null) {
+    if (s != null) {
       jsonValue = json.encode(s.writeToJsonMap());
     }
     PlatformsUtils.getInstance().saveSettingsValue('Session/object', jsonValue);
-    if (s==null) {
+    if (s == null) {
       _userProfile = null;
       PlatformsUtils.getInstance().saveSettingsValue('User/object', '');
     } else {
@@ -161,7 +163,7 @@ class AppState extends State<App> {
   }
 
   String get initialRoute {
-    if (_session==null) {
+    if (_session == null) {
       return '/login';
     }
     Course? defaultCourse;
@@ -186,24 +188,20 @@ class AppState extends State<App> {
     return result;
   }
 
-
   Map<String, WidgetBuilder> createRoutes() {
     return {
       '/login': (_) => SizedBox.expand(
-        child: Container(
-            color: Theme.of(context).backgroundColor,
-            child: Center(
-                child: Container(
-                    constraints: BoxConstraints(
-                      maxHeight: 400,
-                      maxWidth: 800,
-                    ),
-                    color: Theme.of(context).backgroundColor,
-                    child: LoginScreen()
-                )
-            )
-        ),
-      ),
+            child: Container(
+                color: Theme.of(context).backgroundColor,
+                child: Center(
+                    child: Container(
+                        constraints: BoxConstraints(
+                          maxHeight: 400,
+                          maxWidth: 800,
+                        ),
+                        color: Theme.of(context).backgroundColor,
+                        child: LoginScreen()))),
+          ),
       '/': (_) => DashboardScreen(),
       '/users': (_) => UsersScreen(),
       '/users/import_csv': (_) => UsersImportCSVScreen(),
@@ -250,7 +248,8 @@ class AppState extends State<App> {
             if (lessonPartMatch[7] != null) {
               tab = lessonPartMatch[7]!;
             }
-            return CourseProblemScreen(courseEntry.course.id.toInt(), courseDataId, key, null, null, tab);
+            return CourseProblemScreen(courseEntry.course.id.toInt(),
+                courseDataId, key, null, null, tab);
           }
         }
       }
@@ -320,7 +319,8 @@ class AppState extends State<App> {
     return MaterialApp(
       title: _title,
       theme: ThemeData(
-          colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue).copyWith(secondary: Colors.deepPurple)),
+          colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue)
+              .copyWith(secondary: Colors.deepPurple)),
       initialRoute: initialRoute,
       routes: createRoutes(),
       onGenerateRoute: (RouteSettings settings) {
@@ -335,7 +335,7 @@ class AppState extends State<App> {
 
   Future<CourseData> loadCourseData(String courseId) async {
     CourseContentResponse? cached = null;
-        // await PlatformsUtils.getInstance().findCachedCourse(courseId);
+    // await PlatformsUtils.getInstance().findCachedCourse(courseId);
 
     // TODO remove from production code
     // cache is null while in development
@@ -352,7 +352,7 @@ class AppState extends State<App> {
     } catch (error) {
       return Future.error(error);
     }
-    if (response.status == CourseContentStatus.NOT_CHANGED) {
+    if (response.status == ContentStatus.NOT_CHANGED) {
       assert(cached != null);
       return Future.value(cached!.data);
     } else {
@@ -361,4 +361,3 @@ class AppState extends State<App> {
     }
   }
 }
-

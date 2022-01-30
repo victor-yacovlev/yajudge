@@ -344,9 +344,17 @@ class CourseProblemScreenState extends BaseScreenState {
             iconData = Icons.error_outline;
             secondLine = 'Ошибка компиляции';
             break;
-          case SolutionStatus.VERY_BAD:
+          case SolutionStatus.RUNTIME_ERROR:
             iconData = Icons.error_outline;
-            secondLine = 'Не проходят тесты';
+            secondLine = 'Программа упала на одном из тестов';
+            break;
+          case SolutionStatus.TIME_LIMIT:
+            iconData = Icons.error_outline;
+            secondLine = 'Программа выполнялась слишком долго на одном из тестов';
+            break;
+          case SolutionStatus.WRONG_ANSWER:
+            iconData = Icons.error_outline;
+            secondLine = 'Неправильный ответ в одном из тестов';
             break;
           case SolutionStatus.PENDING_REVIEW:
             iconData = Icons.access_time_rounded;
