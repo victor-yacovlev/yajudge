@@ -128,7 +128,11 @@ class GraderService {
     log.info('processing submission ${submission.id} $courseId/$problemId');
     AbstractRunner runner;
     if (io.Platform.isLinux)
-      runner = ChrootedRunner(locationProperties: locationProperties);
+      runner = ChrootedRunner(
+        locationProperties: locationProperties,
+        courseId: courseId,
+        problemId: problemId,
+      );
     else
       runner = SimpleRunner(locationProperties: locationProperties);
     SubmissionProcessor processor = SubmissionProcessor(
@@ -137,9 +141,13 @@ class GraderService {
       locationProperties: locationProperties,
       defaultLimits: GradingLimits( // TODO read from config
         realTimeLimitSec: Int64(5),
+        cpuTimeLimitSec: Int64(1),
         stdoutSizeLimitMb: Int64(1),
         stderrSizeLimitMb: Int64(1),
         procCountLimit: Int64(20),
+        memoryMaxLimitMb: Int64(64),
+        fdCountLimit: Int64(20),
+        stackSizeLimitMb: Int64(4),
         allowNetwork: false,
       ),
     );

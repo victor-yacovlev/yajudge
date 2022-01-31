@@ -83,7 +83,7 @@ message GradingPlatform {
 
 message GradingLimits {
   int64           stack_size_limit_mb = 1;
-  int64           vm_size_limit_mb    = 2;
+  int64           memory_max_limit_mb = 2;
   int64           cpu_time_limit_sec  = 3;
   int64           real_time_limit_sec = 4;
   int64           proc_count_limit    = 5;

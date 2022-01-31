@@ -21,6 +21,8 @@ class ChrootedRunner extends AbstractRunner {
 
   ChrootedRunner({
     required this.locationProperties,
+    required String courseId,
+    required String problemId,
   }) {
     log.info('using work dir root ${locationProperties.workDir}');
     io.Directory(locationProperties.workDir).createSync(recursive: true);
@@ -31,6 +33,10 @@ class ChrootedRunner extends AbstractRunner {
     }
     log.info('using cache dir for course data ${locationProperties.coursesCacheDir}');
     io.Directory(locationProperties.coursesCacheDir).createSync(recursive: true);
+    String problemCachePath = path.normalize(path.absolute(
+      '${locationProperties.coursesCacheDir}/$courseId/$problemId'
+    ));
+    problemDir = io.Directory(problemCachePath);
   }
 
   static String detectRootCgroupLocation() {
@@ -54,30 +60,26 @@ class ChrootedRunner extends AbstractRunner {
     }
     assert(cgroupSystemPath != null);
     int uid = posix.getuid();
-    return '$cgroupSystemPath/user.slice/user-$uid.slice/user@$uid.service/yajudge-grader.service';
+    return path.normalize('$cgroupSystemPath/user.slice/user-$uid.slice/user@$uid.service/yajudge-grader.service');
   }
 
-  static void moveMyselfToCgroup() {
+  static void initialCgroupSetup() {
     if (!io.Platform.isLinux) {
       return;
     }
-    String rootPath = detectRootCgroupLocation();
-    io.Directory rootDir = io.Directory(rootPath);
-    if (rootDir.existsSync()) {
-      try {
-        rootDir.deleteSync(recursive: true);
-      } catch (_) {
-
-      }
+    String cgroupRootPath = detectRootCgroupLocation();
+    final cgroupRootDir = io.Directory(cgroupRootPath);
+    if (cgroupRootDir.existsSync()) {
+      io.Process.runSync('rmdir', [cgroupRootPath]);
     }
-    rootDir.createSync(recursive: true);
+    cgroupRootDir.createSync(recursive: true);
     String binDir = path.dirname(io.Platform.script.path);
-    String helper = path.absolute(binDir, '../libexec', 'move-pid-to-cgroup');
+    String helper = path.normalize(path.absolute(binDir, '../libexec', 'initial-cgroup-setup'));
     String myPid = '${io.pid}';
     if (io.File(helper).existsSync()) {
       final result = io.Process.runSync(
         helper,
-        [rootPath, myPid]
+        [cgroupRootPath, myPid]
       );
       if (result.stdout.toString().isNotEmpty) {
         print(result.stdout.toString());
@@ -91,23 +93,34 @@ class ChrootedRunner extends AbstractRunner {
 
   
   void createSubmissionDir(Submission submission) {
-    String submissionPath = path.absolute(locationProperties.workDir, '${submission.id}');
+    String submissionPath = path.normalize(path.absolute(locationProperties.workDir, '${submission.id}'));
     submissionUpperDir = io.Directory(submissionPath + '/upperdir');
     submissionWorkDir = io.Directory(submissionPath + '/workdir');
     submissionMergeDir = io.Directory(submissionPath + '/mergedir');
     submissionUpperDir.createSync(recursive: true);
     submissionWorkDir.createSync(recursive: true);
     submissionMergeDir.createSync(recursive: true);
-    io.Directory submissionFilesDir = io.Directory(submissionUpperDir.path + '/build');
+    io.Directory submissionBuildDir = io.Directory(submissionUpperDir.path + '/build');
+    io.Directory submissionTestsDir = io.Directory(submissionUpperDir.path + '/tests');
+    submissionBuildDir.createSync(recursive: true);
+    submissionTestsDir.createSync(recursive: true);
     final fileNames = submission.solutionFiles.files.map((e) => e.name);
-    io.File(submissionFilesDir.path+'/.solution_files').writeAsStringSync(
+    io.File(submissionBuildDir.path+'/.solution_files').writeAsStringSync(
       fileNames.join('\n')
     );
     for (final file in submission.solutionFiles.files) {
-      String filePath = path.normalize('${submissionFilesDir.path}/${file.name}');
+      String filePath = '${submissionBuildDir.path}/${file.name}';
       String fileDir = path.dirname(filePath);
       io.Directory(fileDir).createSync(recursive: true);
       io.File(filePath).writeAsBytesSync(file.data);
+    }
+    io.Directory problemTestsDir = io.Directory(problemDir.path+'/tests');
+    for (final entry in problemTestsDir.listSync(recursive: true)) {
+      if (entry.statSync().type == io.FileSystemEntityType.directory) {
+        String entryPath = entry.path.substring(problemTestsDir.path.length);
+        io.Directory testsSubdir = io.Directory(submissionTestsDir.path+'/'+entryPath);
+        testsSubdir.createSync(recursive: true);
+      }
     }
     log.fine('created submission directory layout $submissionPath');
   }
@@ -162,31 +175,54 @@ class ChrootedRunner extends AbstractRunner {
 
   void createSubmissionCgroup(int submissionId) {
     String path = submissionCgroupPath(submissionId);
+    final dir = io.Directory(path);
+    if (dir.existsSync()) {
+      io.Process.runSync('rmdir', [path]);
+    }
     try {
-      io.Directory dir = io.Directory(path);
       dir.createSync(recursive: true);
     } catch (error) {
       log.severe('cant create cgroup $path: $error');
+    }
+    final subtreeControl = io.File('$path/cgroup.subtree_control');
+    if (subtreeControl.existsSync()) {
+      subtreeControl.writeAsStringSync('+pids +memory');
     }
   }
 
   void removeSubmissionCgroup(int submissionId) {
     String path = submissionCgroupPath(submissionId);
-    try {
-      io.Directory dir = io.Directory(path);
-      dir.deleteSync(recursive: true);
-    } catch (error) {
-      log.severe('cant delete cgroup $path: $error');
+    final result = io.Process.runSync(
+      'rmdir', [path]
+    );
+    if (result.exitCode != 0) {
+      log.severe('cant remove cgroup $path: ${result.stderr.toString()}');
+    } else {
+      log.fine('removed cgroup for submission $submissionId');
     }
   }
 
   void setupCgroupLimits(String cgroupPath, GradingLimits limits) {
-
+    final pidsMax = io.File('$cgroupPath/pids.max');
+    if (!pidsMax.existsSync()) {
+      log.severe('no pids cgroup controller enabled. Ensure you a running on system with systemd.unified_cgroup_hierarchy=1');
+    }
+    else if (limits.procCountLimit.toInt() > 0) {
+      pidsMax.writeAsStringSync(limits.procCountLimit.toString());
+    }
+    final memoryMax = io.File('$cgroupPath/memory.max');
+    if (!memoryMax.existsSync()) {
+      log.severe('no memory cgroup controller enabled. Ensure you a running on system with systemd.unified_cgroup_hierarchy=1');
+    }
+    else if (limits.memoryMaxLimitMb > 0) {
+      int valueInBytes = limits.memoryMaxLimitMb.toInt() * 1024 * 1024;
+      memoryMax.writeAsStringSync('$valueInBytes');
+    }
   }
 
   @override
   Future<io.Process> start(int submissionId, String executable, List<String> arguments, {
-    String workingDirectory = '/work',
+    String workingDirectory = '/build',
     Map<String,String>? environment,
     GradingLimits? limits,
   }) {
@@ -201,8 +237,17 @@ class ChrootedRunner extends AbstractRunner {
     String cgroupPath = submissionCgroupPath(submissionId);
     environment['YAJUDGE_CGROUP_PATH'] = cgroupPath;
     setupCgroupLimits(cgroupPath, limits);
+    if (limits.stackSizeLimitMb > 0) {
+      environment['YAJUDGE_STACK_SIZE_LIMIT_MB'] = limits.stackSizeLimitMb.toString();
+    }
+    if (limits.cpuTimeLimitSec > 0) {
+      environment['YAJUDGE_CPU_TIME_LIMIT_SEC'] = limits.cpuTimeLimitSec.toString();
+    }
+    if (limits.fdCountLimit > 0) {
+      environment['YAJUDGE_FD_COUNT_LIMIT'] = limits.fdCountLimit.toString();
+    }
     String binDir = path.dirname(io.Platform.script.path);
-    String cgroupLauncher = path.absolute(binDir, '../libexec/', 'cgroup-run');
+    String cgroupLauncher = path.absolute(binDir, '../libexec/', 'limited-run');
     String unshareFlags = '-muipUf';
     if (!limits.allowNetwork) {
       unshareFlags += 'n';
@@ -245,6 +290,11 @@ class ChrootedRunner extends AbstractRunner {
   @override
   String submissionWorkingDirectory(Submission submission) {
     return submissionMergeDir.path;
+  }
+
+  @override
+  String submissionProblemDirectory(Submission submission) {
+    return problemDir.path;
   }
 
 }

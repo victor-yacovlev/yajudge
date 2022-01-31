@@ -11,4 +11,5 @@ abstract class AbstractRunner {
   });
   String submissionPrivateDirectory(Submission submission);
   String submissionWorkingDirectory(Submission submission);
+  String submissionProblemDirectory(Submission submission);
 }

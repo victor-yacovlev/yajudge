@@ -30,7 +30,7 @@ Future<void> main([List<String>? arguments]) async {
       locationProperties: locationProperties,
       identityProperties: identityProperties,
   );
-  ChrootedRunner.moveMyselfToCgroup();
+  ChrootedRunner.initialCgroupSetup();
   String name = identityProperties.name;
   graderService.serveSupervised();
   Logger.root.level = Level.ALL;

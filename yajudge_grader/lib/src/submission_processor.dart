@@ -47,22 +47,22 @@ class SubmissionProcessor {
   }
 
   List<String> compileOptions() {
-    String solutionPath = runner.submissionPrivateDirectory(submission)+'/build';
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     return io.File(solutionPath+'/.compile_options').readAsStringSync().trim().split(' ');
   }
 
   List<String> linkOptions() {
-    String solutionPath = runner.submissionPrivateDirectory(submission)+'/build';
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     return io.File(solutionPath+'/.link_options').readAsStringSync().trim().split(' ');
   }
 
   String problemChecker() {
-    String solutionPath = runner.submissionPrivateDirectory(submission)+'/build';
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     return io.File(solutionPath+'/.checker').readAsStringSync().trim();
   }
 
   String styleFileName(String suffix) {
-    String solutionPath = runner.submissionPrivateDirectory(submission)+'/build';
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     if (suffix.startsWith('.'))
       suffix = suffix.substring(1);
     String styleLinkPath = '$solutionPath/.style_$suffix';
@@ -83,6 +83,7 @@ class SubmissionProcessor {
           submission.id.toInt(),
           'clang-format',
           ['-style=file', fileName],
+          workingDirectory: '/build',
         );
         int exitCode = await clangProcess.exitCode;
         List<int> clangStdout = await clangProcess.stdout.first;
@@ -178,7 +179,12 @@ class SubmissionProcessor {
       final compilerArguments = compileBaseOptions +
           compileOptions() +
           ['-o', objectFileName, sourceFile.name];
-      io.Process compilerProcess = await runner.start(submission.id.toInt(), compiler, compilerArguments);
+      io.Process compilerProcess = await runner.start(
+        submission.id.toInt(),
+        compiler,
+        compilerArguments,
+        workingDirectory: '/build',
+      );
       int compilerExitCode = await compilerProcess.exitCode;
       if (compilerExitCode != 0) {
         List<int> stdout = await compilerProcess.stdout.first;
@@ -198,7 +204,12 @@ class SubmissionProcessor {
     final linkerArguments = ['-o', 'solution'] +
         linkOptions() +
         objectFiles;
-    io.Process linkerProcess = await runner.start(submission.id.toInt(), compiler, linkerArguments);
+    io.Process linkerProcess = await runner.start(
+      submission.id.toInt(),
+      compiler,
+      linkerArguments,
+      workingDirectory: '/build'
+    );
     int linkerExitCode = await linkerProcess.exitCode;
     if (linkerExitCode != 0) {
       List<int> stdout = await linkerProcess.stdout.first;
@@ -359,7 +370,7 @@ class SubmissionProcessor {
   bool runChecker(List<int> observed, String observedPath, List<int> reference, String referencePath, String wd) {
     String checkerName = problemChecker();
     wd = path.normalize(
-        path.absolute(runner.submissionPrivateDirectory(submission)+'/'+wd)
+        path.absolute(runner.submissionWorkingDirectory(submission)+'/'+wd)
     );
     observedPath = path.normalize(
       path.absolute(observedPath)
@@ -373,7 +384,7 @@ class SubmissionProcessor {
       return true; // TODO implement me
     }
     else if (checkerName.endsWith('.py')) {
-      String solutionPath = runner.submissionPrivateDirectory(submission)+'/build';
+      String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
       String checkerPy = path.normalize(
           path.absolute(solutionPath + '/' + checkerName)
       );

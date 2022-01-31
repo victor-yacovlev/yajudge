@@ -71,4 +71,9 @@ class SimpleRunner extends AbstractRunner {
     return '${locationProperties.workDir}/${submission.id}';
   }
 
+  @override
+  String submissionProblemDirectory(Submission submission) {
+    return '${locationProperties.workDir}/${submission.id}';
+  }
+
 }
