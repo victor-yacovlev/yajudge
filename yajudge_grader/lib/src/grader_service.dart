@@ -121,6 +121,9 @@ class GraderService {
       Submission submission = await submissionsService.takeSubmissionToGrade(_graderProperties);
       if (submission.id.toInt() > 0) {
         submission = await processSubmission(submission);
+        submission = submission.copyWith((s) {
+          s.graderName = _graderProperties.name;
+        });
         await submissionsService.updateGraderOutput(submission);
       }
       else {

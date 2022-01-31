@@ -348,6 +348,10 @@ class CourseProblemScreenState extends BaseScreenState {
             iconData = Icons.error_outline;
             secondLine = 'Программа упала на одном из тестов';
             break;
+          case SolutionStatus.VALGRIND_ERRORS:
+            iconData = Icons.error_outline;
+            secondLine = 'Программа имеет ошибки Valgrind';
+            break;
           case SolutionStatus.TIME_LIMIT:
             iconData = Icons.error_outline;
             secondLine = 'Программа выполнялась слишком долго на одном из тестов';

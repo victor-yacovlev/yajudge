@@ -282,7 +282,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
-    log.fine('got response from grader on ${request.id}: status = ${request.status.name}');
+    log.fine('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     await connection.transaction((connection) async {
       await connection.query(
         '''
@@ -304,10 +304,15 @@ insert into submission_results(
                                stdout,
                                stderr,
                                status,
-                               exited,
-                               standard_match
+                               standard_match,
+                               killed_by_timer,
+                               signal_killed,
+                               valgrind_errors,
+                               valgrind_output
 )
-values (@submissions_id,@test_number,@stdout,@stderr,@status,@exited,@standard_match)          
+values (@submissions_id,@test_number,@stdout,@stderr,
+        @status,@standard_match,@killed_by_timer,
+        @signal_killed,@valgrind_errors,@valgrind_output)          
           ''',
           substitutionValues: {
             'submissions_id': request.id.toInt(),
@@ -315,8 +320,11 @@ values (@submissions_id,@test_number,@stdout,@stderr,@status,@exited,@standard_m
             'stdout': test.stdout,
             'stderr': test.stderr,
             'status': test.status,
-            'exited': test.signalKilled==0 && !test.timeLimit,
             'standard_match': test.standardMatch,
+            'killed_by_timer': test.killedByTimer,
+            'signal_killed': test.signalKilled,
+            'valgrind_errors': test.valgrindErrors,
+            'valgrind_output': test.valgrindOutput,
           }
         );
       }
