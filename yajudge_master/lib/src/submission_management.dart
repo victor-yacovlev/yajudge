@@ -282,7 +282,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
-    log.fine('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
+    log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     await connection.transaction((connection) async {
       await connection.query(
         '''
@@ -415,7 +415,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     List<Submission> unfinished = await getUnfinishedSubmissionToGrade(request.name);
     if (unfinished.isNotEmpty) {
       Submission submission = unfinished.first;
-      log.fine('submission ${submission.id} sent to grader ${request.name}');
+      log.info('submission ${submission.id} sent to grader ${request.name}');
       return submission;
     }
     List<Submission> newSubmissions = await getSubmissionsToGrade();
@@ -423,7 +423,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       ProblemData problemData = await getProblemDataForSubmission(submission);
       if (graderMatch(request, problemData.gradingOptions)) {
         assignGrader(submission.id.toInt(), request.name);
-        log.fine('submission ${submission.id} assigned and sent to grader ${request.name}');
+        log.info('submission ${submission.id} assigned and sent to grader ${request.name}');
         return submission;
       }
     }
