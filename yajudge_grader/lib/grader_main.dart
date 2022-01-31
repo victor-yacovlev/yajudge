@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:yajudge_grader/src/chrooted_runner.dart';
+import 'src/chrooted_runner.dart';
 import 'src/grader_service.dart';
+import 'src/grader_extra_configs.dart';
+import 'package:yaml/yaml.dart';
 
 Future<void> main([List<String>? arguments]) async {
   ArgParser parser = ArgParser();
@@ -25,10 +27,26 @@ Future<void> main([List<String>? arguments]) async {
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
   final locationProperties = GraderLocationProperties.fromYamlConfig(config['locations']);
   final identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
+  GradingLimits defaultLimits;
+  if (config['default_limits'] is YamlMap) {
+    YamlMap limitsConf = config['default_limits'];
+    defaultLimits = parseDefaultLimits(limitsConf);
+  } else {
+    defaultLimits = GradingLimits();
+  }
+  CompilersConfig compilersConfig;
+  if (config['compilers'] is YamlMap) {
+    YamlMap compilersConf = config['compilers'];
+    compilersConfig = CompilersConfig.fromYaml(compilersConf);
+  } else {
+    compilersConfig = CompilersConfig.createDefault();
+  }
   final graderService = GraderService(
-      rpcProperties: rpcProperties,
-      locationProperties: locationProperties,
-      identityProperties: identityProperties,
+    rpcProperties: rpcProperties,
+    locationProperties: locationProperties,
+    identityProperties: identityProperties,
+    defaultLimits: defaultLimits,
+    compilersConfig: compilersConfig,
   );
   ChrootedRunner.initialCgroupSetup();
   String name = identityProperties.name;
@@ -42,3 +60,4 @@ Future<void> main([List<String>? arguments]) async {
     Logger.root.warning('running grader on systems other than Linux is completely unsecure!');
   }
 }
+

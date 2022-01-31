@@ -3,8 +3,28 @@ rpc:
   port: 9095
   public_token: abrakadabra
   private_token: zxcvbnmsdfsd
-extra_runtimes: [valgrind, wine]  # currently supported: [valgrind, qemu-arm, wine]
 locations:
-  system_environment: ./alpine
+  system_environment: ./debian
   working_directory: ./work
   cache_directory: ./cache
+compilers:
+  enable_sanitizers: true # set 'false' for Alpine Linux environment or 'true' for glibc-based environments
+  sanitizers_compile_options: -fsanitize=undefined -fsanitize=address -fno-sanitize-recover=all
+  enable_valgrind: true
+  valgrind_extra_memory_limit_mb: 16 # adds extra megabytes for valgrind runtime
+  valgrind_cpu_time_scale: 2.0 # adds extra time for valgrind runtime
+  c_compiler: clang
+  cxx_compiler: clang
+  c_base_options: -O2 -g -Werror
+  cxx_base_options: -O2 -g -Werror
+default_limits:
+  stack_size_limit_mb: 4
+  memory_max_limit_mb: 64
+  cpu_time_limit_sec: 1
+  real_time_limit_sec: 5
+  proc_count_limit: 20
+  fd_count_limit: 20
+  stdout_size_limit_mb: 1
+  stderr_size_limit_mb: 1
+  allow_network: false
+

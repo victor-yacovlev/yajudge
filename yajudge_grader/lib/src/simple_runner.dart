@@ -43,12 +43,16 @@ class SimpleRunner extends AbstractRunner {
   }
 
   @override
-  Future<io.Process> start(int submissionId, String executable, List<String> arguments, {
+  Future<io.Process> start(int submissionId, List<String> arguments, {
     String workingDirectory = '/build',
     Map<String, String>? environment,
     GradingLimits? limits
       })
   {
+    assert (arguments.length >= 1);
+    String executable = arguments.first;
+    arguments = arguments.sublist(1);
+    arguments.removeWhere((element) => element.trim().isEmpty);
     String workDir = path.absolute(
         path.normalize('${locationProperties.workDir}/$submissionId/$workingDirectory')
     );

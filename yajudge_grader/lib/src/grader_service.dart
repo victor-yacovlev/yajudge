@@ -6,6 +6,7 @@ import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
+import 'grader_extra_configs.dart';
 import 'chrooted_runner.dart';
 import 'simple_runner.dart';
 import 'submission_processor.dart';
@@ -50,14 +51,22 @@ class GraderService {
   final RpcProperties rpcProperties;
   final GraderLocationProperties locationProperties;
   final GraderIdentityProperties identityProperties;
+  final GradingLimits defaultLimits;
+  final CompilersConfig compilersConfig;
+
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
   late final GraderProperties _graderProperties;
 
-  GraderService({required this.rpcProperties,
-      required this.locationProperties,
-      required this.identityProperties}) {
+  GraderService({
+    required this.rpcProperties,
+    required this.locationProperties,
+    required this.identityProperties,
+    required this.defaultLimits,
+    required this.compilersConfig,
+  })
+  {
     _graderProperties = GraderProperties(
       name: identityProperties.name,
       platform: GradingPlatform(arch: identityProperties.arch),
@@ -139,17 +148,8 @@ class GraderService {
       submission: submission,
       runner: runner,
       locationProperties: locationProperties,
-      defaultLimits: GradingLimits( // TODO read from config
-        realTimeLimitSec: Int64(5),
-        cpuTimeLimitSec: Int64(1),
-        stdoutSizeLimitMb: Int64(1),
-        stderrSizeLimitMb: Int64(1),
-        procCountLimit: Int64(20),
-        memoryMaxLimitMb: Int64(64),
-        fdCountLimit: Int64(20),
-        stackSizeLimitMb: Int64(4),
-        allowNetwork: false,
-      ),
+      defaultLimits: defaultLimits,
+      compilersConfig: compilersConfig,
     );
     await processor.processSubmission();
     Submission result = processor.submission;

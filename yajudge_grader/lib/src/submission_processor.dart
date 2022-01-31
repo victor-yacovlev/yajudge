@@ -6,7 +6,8 @@ import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:yajudge_grader/src/checkers.dart';
+import 'checkers.dart';
+import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
 import 'package:yaml/yaml.dart';
 
@@ -16,12 +17,16 @@ class SubmissionProcessor {
   final Logger log = Logger('SubmissionProcessor');
   final GraderLocationProperties locationProperties;
   final GradingLimits defaultLimits;
+  final CompilersConfig compilersConfig;
+  String plainBuildTarget = '';
+  String sanitizersBuildTarget = '';
 
   SubmissionProcessor({
     required this.submission,
     required this.runner,
     required this.locationProperties,
     required this.defaultLimits,
+    required this.compilersConfig,
   });
 
   Future<void> processSubmission() async {
@@ -81,8 +86,7 @@ class SubmissionProcessor {
         // Run clang-format to check
         io.Process clangProcess = await runner.start(
           submission.id.toInt(),
-          'clang-format',
-          ['-style=file', fileName],
+          ['clang-format', '-style=file', fileName],
           workingDirectory: '/build',
         );
         int exitCode = await clangProcess.exitCode;
@@ -103,7 +107,7 @@ class SubmissionProcessor {
     return true;
   }
 
-  Future<bool> buildSolution() {
+  Future<bool> buildSolution() async {
     bool hasCMakeLists = false;
     bool hasMakefile = false;
     bool hasGoFiles = false;
@@ -125,7 +129,12 @@ class SubmissionProcessor {
     } else if (hasGoFiles) {
       return buildGoProject();
     } else {
-      return buildProjectFromFiles();
+      bool plainOk = await buildProjectFromFiles(false);
+      bool sanitizersOk = true;
+      if (compilersConfig.enableSanitizers) {
+        sanitizersOk = await buildProjectFromFiles(true);
+      }
+      return plainOk && sanitizersOk;
     }
   }
 
@@ -141,7 +150,18 @@ class SubmissionProcessor {
     throw UnimplementedError('golang project not implemented yet');
   }
 
-  Future<bool> buildProjectFromFiles() async {
+  GradingLimits getProblemLimits(bool withValgrindAjustment) {
+    GradingLimits limits = defaultLimits;
+    // TODO read problem limits
+    if (withValgrindAjustment) {
+      return compilersConfig.applyValgrindToGradingLimits(limits);
+    }
+    else {
+      return limits;
+    }
+  }
+
+  Future<bool> buildProjectFromFiles(bool withSanitizers) async {
     bool hasCFiles = false;
     bool hasGnuAsmFiles = false;
     bool hasCXXFiles = false;
@@ -159,38 +179,45 @@ class SubmissionProcessor {
       }
     }
     String compiler = '';
+    List<String> compilerBaseOptions = [];
+    List<String> sanitizerOptions = withSanitizers? compilersConfig.sanitizersOptions : [];
+    String objectSuffix = withSanitizers? '.san.o' : '.o';
+    String targetName = withSanitizers? 'solution-san' : 'solution';
     if (hasCXXFiles) {
-      compiler = 'clang++';
+      compiler = compilersConfig.cxxCompiler;
+      compilerBaseOptions = compilersConfig.cBaseOptions;
     } else if (hasCFiles || hasGnuAsmFiles) {
-      compiler = 'clang';
+      compiler = compilersConfig.cCompiler;
+      compilerBaseOptions = compilersConfig.cxxBaseOptions;
     }
     if (compiler.isEmpty) {
       throw UnimplementedError('dont know how to build files out of ASM/C/C++');
     }
-    // bool noStdLib =
-    //     problemData.gradingOptions.extraCompileOptions.contains('-nostdlib');
-
-    var compileBaseOptions = ['-c', '-O2', '-Werror', '-g'];
     List<String> objectFiles = [];
     for (final sourceFile in submission.solutionFiles.files) {
       String suffix = path.extension(sourceFile.name);
       if (!['.S', '.s', '.c', '.cpp', '.cxx', '.cc'].contains(suffix)) continue;
-      String objectFileName = sourceFile.name + '.o';
-      final compilerArguments = compileBaseOptions +
-          compileOptions() +
-          ['-o', objectFileName, sourceFile.name];
+      String objectFileName = sourceFile.name + objectSuffix;
+      final compilerArguments =
+              ['-c'] +
+              compilerBaseOptions +
+              sanitizerOptions +
+              compileOptions() +
+              ['-o', objectFileName, sourceFile.name];
+      final compilerCommand = [compiler] + compilerArguments;
       io.Process compilerProcess = await runner.start(
         submission.id.toInt(),
-        compiler,
-        compilerArguments,
+        compilerCommand,
         workingDirectory: '/build',
       );
+      List<int> stdout = [];
+      List<int> stderr = [];
+      await compilerProcess.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
+      await compilerProcess.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
       int compilerExitCode = await compilerProcess.exitCode;
       if (compilerExitCode != 0) {
-        List<int> stdout = await compilerProcess.stdout.first;
-        List<int> stderr = await compilerProcess.stderr.first;
         String message = utf8.decode(stderr) + utf8.decode(stdout);
-        log.fine('cant compile ${sourceFile.name} from ${submission.id}: $message');
+        log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compilerCommand.join(' ')}\n$message');
         submission = submission.copyWith((changed) {
           changed.status = SolutionStatus.COMPILATION_ERROR;
           changed.buildErrors = message;
@@ -201,28 +228,36 @@ class SubmissionProcessor {
         objectFiles.add(objectFileName);
       }
     }
-    final linkerArguments = ['-o', 'solution'] +
+    final linkerArguments = ['-o', targetName] +
         linkOptions() +
+        sanitizerOptions +
         objectFiles;
+    final linkerCommand = [compiler] + linkerArguments;
     io.Process linkerProcess = await runner.start(
       submission.id.toInt(),
-      compiler,
-      linkerArguments,
+      linkerCommand,
       workingDirectory: '/build'
     );
+    List<int> stdout = [];
+    List<int> stderr = [];
+    await linkerProcess.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
+    await linkerProcess.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
     int linkerExitCode = await linkerProcess.exitCode;
     if (linkerExitCode != 0) {
-      List<int> stdout = await linkerProcess.stdout.first;
-      List<int> stderr = await linkerProcess.stderr.first;
       String message = utf8.decode(stderr) + utf8.decode(stdout);
-      log.fine('cant link ${submission.id}: $message');
+      log.fine('cant link ${submission.id}: ${linkerCommand.join(' ')}\n$message');
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrors = message;
       });
+      return false;
     } else {
-      log.fine('successfully linked ${submission.id}');
+      log.fine('successfully linked target $targetName for ${submission.id}');
     }
+    if (withSanitizers)
+      sanitizersBuildTarget = '/build/' + targetName;
+    else
+      plainBuildTarget = '/build/' + targetName;
     return true;
   }
 
@@ -231,7 +266,10 @@ class SubmissionProcessor {
     bool hasRuntimeError = false;
     bool hasTimeLimit = false;
     bool hasWrongAnswer = false;
+    bool hasValgrindErrors = false;
     List<TestResult> testResults = [];
+    GradingLimits plainLimits = getProblemLimits(false);
+    GradingLimits valgrindLimits = getProblemLimits(true);
     for (int i=1; i<=999; i++) {
       String baseName = '$i';
       if (i < 10)
@@ -242,14 +280,63 @@ class SubmissionProcessor {
       bool ansExists = io.File('$testsPath/$baseName.ans').existsSync();
       bool dirExists = io.Directory('$testsPath/$baseName.dir').existsSync();
       if (datExists || ansExists || dirExists) {
-        TestResult result = await processTest(baseName);
-        if (!result.standardMatch)
-          hasWrongAnswer = true;
-        if (result.timeLimit)
-          hasTimeLimit = true;
-        if (result.signalKilled > 0 && !result.timeLimit)
-          hasRuntimeError = true;
-        testResults.add(result);
+        List<TestResult> targetResults = [];
+        if (compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
+          TestResult result = await processTest(
+            i,
+            [sanitizersBuildTarget],
+            'with sanitizers',
+            baseName,
+            plainLimits,
+          );
+          targetResults.add(result);
+        }
+        if (compilersConfig.enableValgrind && plainBuildTarget.isNotEmpty) {
+          final valgrindCommandLine = [
+            'valgrind', '--tool=memcheck', '--leak-check=full',
+            '--show-leak-kinds=all', '--track-origins=yes',
+            '--log-file=/tests/$baseName.valgrind',
+            plainBuildTarget
+          ];
+          TestResult result = await processTest(
+            i,
+            valgrindCommandLine,
+            'with valgrind',
+            baseName,
+            valgrindLimits
+          );
+          final valgrindOut = io.File('$testsPath/$baseName.valgrind').readAsStringSync();
+          int valgrindErrors = 0;
+          final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
+          final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
+          if (matchEntries.isNotEmpty) {
+            RegExpMatch match = matchEntries.first;
+            String matchGroup = match.group(1)!;
+            valgrindErrors = int.parse(matchGroup);
+          }
+          if (valgrindErrors > 0) {
+            result = result.copyWith((r) {
+              r.valgrindErrors = valgrindErrors;
+              r.valgrindOutput = valgrindOut;
+            });
+          }
+          targetResults.add(result);
+        }
+        if (!compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
+          TestResult result = await processTest(
+            i,
+            [plainBuildTarget],
+            'no sanitizers, no valgrind',
+            baseName,
+            plainLimits,
+          );
+          targetResults.add(result);
+        }
+        hasWrongAnswer = targetResults.any((element) => !element.standardMatch);
+        hasTimeLimit = targetResults.any((element) => element.killedByTimer);
+        hasRuntimeError = targetResults.any((element) => element.signalKilled>0 && !element.killedByTimer);
+        hasValgrindErrors = targetResults.any((element) => element.valgrindErrors>0);
+        testResults.addAll(targetResults);
       } else {
         break;
       }
@@ -257,6 +344,9 @@ class SubmissionProcessor {
     SolutionStatus newStatus = submission.status;
     if (hasRuntimeError) {
       newStatus = SolutionStatus.RUNTIME_ERROR;
+    }
+    else if (hasValgrindErrors) {
+      newStatus = SolutionStatus.VALGRIND_ERRORS;
     }
     else if (hasTimeLimit) {
       newStatus = SolutionStatus.TIME_LIMIT;
@@ -271,6 +361,8 @@ class SubmissionProcessor {
       s.testResult.addAll(testResults);
     });
   }
+
+
 
   GradingLimits getLimitsForProblem() {
     String limitsPath = path.absolute(
@@ -293,20 +385,19 @@ class SubmissionProcessor {
     return limits;
   }
 
-  Future<TestResult> processTest(String testBaseName) async {
-    log.info('running test $testBaseName for submission ${submission.id}');
+  Future<TestResult> processTest(int testNumber, List<String> firstArgs, String description, String testBaseName, GradingLimits limits) async {
+    log.info('running test $testBaseName ($description) for submission ${submission.id}');
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
     final testDir = io.Directory('$testsPath/$testBaseName.dir');
     String wd = testDir.existsSync() ? '/tests/$testBaseName.dir' : '/build';
     final argsFile = io.File('$testsPath/$testBaseName.args');
     List<String> arguments = argsFile.existsSync()? argsFile.readAsStringSync().trim().split(' ') : [];
-    GradingLimits limits = getLimitsForProblem();
     List<int>? stdinData;
     final stdinFile = io.File('$testsPath/$testBaseName.dat');
     if (stdinFile.existsSync()) {
       stdinData = stdinFile.readAsBytesSync();
     }
-    io.Process solutionProcess = await runner.start(submission.id.toInt(), '/build/solution', arguments,
+    io.Process solutionProcess = await runner.start(submission.id.toInt(), firstArgs + arguments,
       workingDirectory: wd,
       limits: limits,
     );
@@ -314,7 +405,7 @@ class SubmissionProcessor {
     final timer = Timer(Duration(seconds: limits.realTimeLimitSec.toInt()), () {
       solutionProcess.kill(io.ProcessSignal.sigkill);
       killedByTimeout = true;
-      log.fine('submission ${submission.id} killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
+      log.fine('submission ${submission.id} ($description) killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
     });
     if (stdinData != null) {
       solutionProcess.stdin.write(stdinData);
@@ -324,18 +415,20 @@ class SubmissionProcessor {
     List<int> stderr = [];
     final maxStdoutBytes = limits.stdoutSizeLimitMb.toInt() * 1024 * 1024;
     final maxStderrBytes = limits.stderrSizeLimitMb.toInt() * 1024 * 1024;
-    solutionProcess.stdout.forEach((List<int> chunk) {
+    final stdoutListener = solutionProcess.stdout.listen((List<int> chunk) {
       if (stdout.length + chunk.length <= maxStdoutBytes) {
         stdout.addAll(chunk);
       }
-    });
-    solutionProcess.stderr.forEach((List<int> chunk) {
+    }).asFuture();
+    final stderrListener = solutionProcess.stderr.listen((List<int> chunk) {
       if (stderr.length + chunk.length <= maxStderrBytes) {
         stderr.addAll(chunk);
       }
-    });
+    }).asFuture();
     int exitStatus = await solutionProcess.exitCode;
     timer.cancel();
+    await stdoutListener;
+    await stderrListener;
     final stdoutFile = io.File('$testsPath/$testBaseName.stdout');
     final stderrFile = io.File('$testsPath/$testBaseName.stderr');
     stdoutFile.writeAsBytesSync(stdout);
@@ -348,20 +441,21 @@ class SubmissionProcessor {
       if (ansFile.existsSync()) {
         referenceStdout = ansFile.readAsBytesSync();
       }
-      log.fine('submission ${submission.id} exited with $exitStatus on test $testBaseName');
+      log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
       resultMatch = runChecker(stdout, stdoutFile.path, referenceStdout, '$testsPath/$testBaseName.ans', wd);
     }
     else if (exitStatus < 0) {
       signalKilled = -exitStatus;
-      log.fine('submission ${submission.id} killed by signal $signalKilled on test $testBaseName');
+      log.fine('submission ${submission.id} ($description) killed by signal $signalKilled on test $testBaseName');
       exitStatus = 0;
     }
     return TestResult(
-      testNumber: int.parse(testBaseName, radix: 10),
+      testNumber: testNumber,
+      target: description,
       status: exitStatus,
       stderr: utf8.decode(stderr),
       stdout: utf8.decode(stdout),
-      timeLimit: killedByTimeout,
+      killedByTimer: killedByTimeout,
       standardMatch: resultMatch,
       signalKilled: signalKilled,
     );

@@ -167,6 +167,7 @@ enum SolutionStatus {
   CHECK_FAILED        = 13;
   RUNTIME_ERROR       = 14;
   TIME_LIMIT          = 15;
+  VALGRIND_ERRORS     = 16;
   OK                  = 100;
 
   // INTERNAL STATUSES
@@ -197,7 +198,9 @@ message TestResult {
   int32               status        = 5;
   int32               signal_killed = 6;
   bool                standard_match= 7;
-  bool                time_limit    = 8;
+  bool                killed_by_timer= 8;
+  string              valgrind_output= 9;
+  int32               valgrind_errors=10;
 }
 
 message Submission {
