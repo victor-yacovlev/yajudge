@@ -183,11 +183,12 @@ class GraderService {
       io.Directory(testsDir).createSync(recursive: true);
       problemTimeStampFile.writeAsStringSync('${response.lastModified.toInt()}\n');
       final problemData = response.data;
-      String compileOptions = problemData.gradingOptions.extraCompileOptions.join(' ');
-      String linkOptions = problemData.gradingOptions.extraLinkOptions.join(' ');
+      final opts = problemData.gradingOptions;
+      String compileOptions = opts.extraCompileOptions.join(' ');
+      String linkOptions = opts.extraLinkOptions.join(' ');
       io.File(buildDir+'/.compile_options').writeAsStringSync(compileOptions);
       io.File(buildDir+'/.link_options').writeAsStringSync(linkOptions);
-      for (final codeStyle in problemData.gradingOptions.codeStyles) {
+      for (final codeStyle in opts.codeStyles) {
         String fileName = codeStyle.styleFile.name;
         String suffix = codeStyle.sourceFileSuffix;
         if (suffix.startsWith('.'))
@@ -195,21 +196,25 @@ class GraderService {
         io.File(buildDir+'/'+fileName).writeAsBytesSync(codeStyle.styleFile.data);
         io.File(buildDir+'/.style_$suffix').writeAsStringSync(codeStyle.styleFile.name);
       }
-      for (final file in problemData.gradingOptions.extraBuildFiles.files) {
+      for (final file in opts.extraBuildFiles.files) {
         io.File(buildDir+'/'+file.name).writeAsBytesSync(file.data);
       }
-      final customChecker = problemData.gradingOptions.customChecker;
+      final customChecker = opts.customChecker;
       if (customChecker.name.isNotEmpty) {
         io.File(buildDir+'/'+customChecker.name).writeAsBytesSync(customChecker.data);
         io.File(buildDir+'/.checker').writeAsStringSync(customChecker.name);
       } else {
-        String checkerName = problemData.gradingOptions.standardChecker;
-        String checkerOpts = problemData.gradingOptions.standardCheckerOpts;
+        String checkerName = opts.standardChecker;
+        String checkerOpts = opts.standardCheckerOpts;
         io.File(buildDir+'/.checker').writeAsStringSync('=$checkerName\n$checkerOpts\n');
       }
+      if (opts.disableValgrind)
+        io.File(buildDir+'/.disable_valgrind').createSync(recursive: true);
+      if (opts.disableSanitizers)
+        io.File(buildDir+'/.disable_sanitizers').createSync(recursive: true);
       final gzip = io.gzip;
       int testNumber = 1;
-      for (final testCase in problemData.gradingOptions.testCases) {
+      for (final testCase in opts.testCases) {
         final stdin = testCase.stdinData;
         final stdout = testCase.stdoutReference;
         final stderr = testCase.stderrReference;

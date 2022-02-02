@@ -69,6 +69,16 @@ class SubmissionProcessor {
     return io.File(solutionPath+'/.checker').readAsStringSync().trim();
   }
 
+  bool disableProblemValgrind() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    return io.File(solutionPath+'/.disable_valgrind').existsSync();
+  }
+
+  bool disableProblemSanitizers() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    return io.File(solutionPath+'/.disable_sanitizers').existsSync();
+  }
+
   String styleFileName(String suffix) {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     if (suffix.startsWith('.'))
@@ -135,7 +145,10 @@ class SubmissionProcessor {
       bool plainOk = await buildProjectFromFiles(false);
       bool sanitizersOk = true;
       if (compilersConfig.enableSanitizers) {
-        sanitizersOk = await buildProjectFromFiles(true);
+        final buildOptions = compileOptions() + linkOptions();
+        if (!buildOptions.contains('-nostdlib') && !disableProblemSanitizers()) {
+          sanitizersOk = await buildProjectFromFiles(true);
+        }
       }
       return plainOk && sanitizersOk;
     }
@@ -387,7 +400,7 @@ class SubmissionProcessor {
       bool dirExists = io.Directory('$testsPath/$baseName.dir').existsSync();
       if (datExists || ansExists || dirExists) {
         List<TestResult> targetResults = [];
-        if (!disableValgrindAndSanitizers && !runTargetIsScript && compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
+        if (!disableValgrindAndSanitizers && !disableProblemSanitizers() && !runTargetIsScript && compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
           TestResult result = await processTest(
             i,
             [sanitizersBuildTarget],
@@ -397,7 +410,7 @@ class SubmissionProcessor {
           );
           targetResults.add(result);
         }
-        if (!disableValgrindAndSanitizers && !runTargetIsScript && compilersConfig.enableValgrind && plainBuildTarget.isNotEmpty) {
+        if (!disableValgrindAndSanitizers && !disableProblemValgrind() && !runTargetIsScript && compilersConfig.enableValgrind && plainBuildTarget.isNotEmpty) {
           final valgrindCommandLine = [
             'valgrind', '--tool=memcheck', '--leak-check=full',
             '--show-leak-kinds=all', '--track-origins=yes',
@@ -428,7 +441,7 @@ class SubmissionProcessor {
           }
           targetResults.add(result);
         }
-        if (disableValgrindAndSanitizers && !runTargetIsScript || !runTargetIsScript && !compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
+        if (disableValgrindAndSanitizers && !runTargetIsScript || disableProblemValgrind() && disableProblemSanitizers() && !runTargetIsScript || !runTargetIsScript && !compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
           TestResult result = await processTest(
             i,
             [plainBuildTarget],
