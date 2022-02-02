@@ -153,7 +153,7 @@ class CourseManagementService extends CourseManagementServiceBase {
       DateTime lastModified = loader.problemLastModified(problemId);
       if (lastModified.millisecondsSinceEpoch > request.cachedTimestamp.toInt()) {
         ProblemData problemData = loader.problemData(problemId);
-        log.fine('sent problem data on $courseId/$problemId to grader');
+        log.fine('sent problem data on $courseId/$problemId [last modified $lastModified] to grader');
         return ProblemContentResponse(
           problemId: problemId,
           courseDataId: courseId,
@@ -162,6 +162,8 @@ class CourseManagementService extends CourseManagementServiceBase {
           lastModified: Int64(lastModified.millisecondsSinceEpoch),
         );
       } else {
+        DateTime requestDateTime = DateTime.fromMillisecondsSinceEpoch(request.cachedTimestamp.toInt());
+        log.fine('skipped sending problem data on $courseId/$problemId due to no changes [last modified $lastModified, cached $requestDateTime] to grader');
         return ProblemContentResponse(
           problemId: problemId,
           courseDataId: courseId,
