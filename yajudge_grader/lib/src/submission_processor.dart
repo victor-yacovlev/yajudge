@@ -162,6 +162,7 @@ class SubmissionProcessor {
     if (compilerExitCode != 0) {
       String message = utf8.decode(stderr) + utf8.decode(stdout);
       log.fine('cant build Makefile project from ${submission.id}:\n$message');
+      io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrors = message;
@@ -184,18 +185,22 @@ class SubmissionProcessor {
       }
     }
     if (newExecutables.isEmpty) {
-      log.fine('no executables created by make in Makefile project from ${submission.id}');
+      String message = 'no executables created by make in Makefile project from ${submission.id}';
+      log.fine(message);
+      io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrors = 'no executables created by make in Makefile project from ${submission.id}';
+        changed.buildErrors = message;
       });
       return false;
     }
     if (newExecutables.length > 1) {
-      log.fine('several executables created by make in Makefile project from ${submission.id}: $newExecutables}');
+      String message = 'several executables created by make in Makefile project from ${submission.id}: $newExecutables}';
+      log.fine(message);
+      io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrors = 'several executables created by make in Makefile project from ${submission.id}: $newExecutables}';
+        changed.buildErrors = message;
       });
       return false;
     }
@@ -287,6 +292,7 @@ class SubmissionProcessor {
       return true;
     }
     List<String> objectFiles = [];
+    final buildDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/build');
     for (final sourceFile in submission.solutionFiles.files) {
       String suffix = path.extension(sourceFile.name);
       if (!['.S', '.s', '.c', '.cpp', '.cxx', '.cc'].contains(suffix)) continue;
@@ -310,6 +316,7 @@ class SubmissionProcessor {
       int compilerExitCode = await compilerProcess.exitCode;
       if (compilerExitCode != 0) {
         String message = utf8.decode(stderr) + utf8.decode(stdout);
+        io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
         log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compilerCommand.join(' ')}\n$message');
         submission = submission.copyWith((changed) {
           changed.status = SolutionStatus.COMPILATION_ERROR;
@@ -339,6 +346,7 @@ class SubmissionProcessor {
     if (linkerExitCode != 0) {
       String message = utf8.decode(stderr) + utf8.decode(stdout);
       log.fine('cant link ${submission.id}: ${linkerCommand.join(' ')}\n$message');
+      io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrors = message;
