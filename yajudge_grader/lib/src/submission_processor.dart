@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
-
+import 'package:posix/posix.dart' as posix;
 import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
@@ -20,6 +20,9 @@ class SubmissionProcessor {
   final CompilersConfig compilersConfig;
   String plainBuildTarget = '';
   String sanitizersBuildTarget = '';
+  bool runTargetIsScript = false;
+  String targetInterpreter = '';
+  bool disableValgrindAndSanitizers = false;
 
   SubmissionProcessor({
     required this.submission,
@@ -142,8 +145,63 @@ class SubmissionProcessor {
     throw UnimplementedError('CMake project not implemented yet');
   }
 
-  Future<bool> buildMakeProject() {
-    throw UnimplementedError('Make project not implemented yet');
+  Future<bool> buildMakeProject() async {
+    final buildDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/build');
+    DateTime beforeMake = DateTime.now();
+    io.sleep(Duration(milliseconds: 250));
+    io.Process compilerProcess = await runner.start(
+      submission.id.toInt(),
+      ['make'],
+      workingDirectory: '/build',
+    );
+    List<int> stdout = [];
+    List<int> stderr = [];
+    await compilerProcess.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
+    await compilerProcess.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
+    int compilerExitCode = await compilerProcess.exitCode;
+    if (compilerExitCode != 0) {
+      String message = utf8.decode(stderr) + utf8.decode(stdout);
+      log.fine('cant build Makefile project from ${submission.id}:\n$message');
+      submission = submission.copyWith((changed) {
+        changed.status = SolutionStatus.COMPILATION_ERROR;
+        changed.buildErrors = message;
+      });
+      return false;
+    } else {
+      log.fine('successfully compiled Makefile project from ${submission.id}');
+    }
+    final entriesAfterMake = buildDir.listSync(recursive: true);
+    List<String> newExecutables = [];
+    for (final entry in entriesAfterMake) {
+      String entryPath = entry.path;
+      DateTime modified = entry.statSync().modified;
+      if (modified.millisecondsSinceEpoch <= beforeMake.millisecondsSinceEpoch) {
+        continue;
+      }
+      if (0 == posix.access(entryPath, posix.X_OK)) {
+        entryPath = entryPath.substring(buildDir.path.length+1);
+        newExecutables.add(entryPath);
+      }
+    }
+    if (newExecutables.isEmpty) {
+      log.fine('no executables created by make in Makefile project from ${submission.id}');
+      submission = submission.copyWith((changed) {
+        changed.status = SolutionStatus.COMPILATION_ERROR;
+        changed.buildErrors = 'no executables created by make in Makefile project from ${submission.id}';
+      });
+      return false;
+    }
+    if (newExecutables.length > 1) {
+      log.fine('several executables created by make in Makefile project from ${submission.id}: $newExecutables}');
+      submission = submission.copyWith((changed) {
+        changed.status = SolutionStatus.COMPILATION_ERROR;
+        changed.buildErrors = 'several executables created by make in Makefile project from ${submission.id}: $newExecutables}';
+      });
+      return false;
+    }
+    plainBuildTarget = '/build/'+newExecutables.first;
+    disableValgrindAndSanitizers = true;
+    return true;
   }
 
   Future<bool> buildGoProject() {
@@ -165,6 +223,7 @@ class SubmissionProcessor {
     bool hasCFiles = false;
     bool hasGnuAsmFiles = false;
     bool hasCXXFiles = false;
+    List<String> scriptFiles = [];
     for (final file in submission.solutionFiles.files) {
       if (file.name.endsWith('.S') || file.name.endsWith('.s')) {
         hasGnuAsmFiles = true;
@@ -176,6 +235,9 @@ class SubmissionProcessor {
           file.name.endsWith('.cc') ||
           file.name.endsWith('.cpp')) {
         hasCXXFiles = true;
+      }
+      if (file.name.endsWith('.sh') || file.name.endsWith('.py')) {
+        scriptFiles.add('/build/${file.name}');
       }
     }
     String compiler = '';
@@ -190,8 +252,39 @@ class SubmissionProcessor {
       compiler = compilersConfig.cCompiler;
       compilerBaseOptions = compilersConfig.cxxBaseOptions;
     }
-    if (compiler.isEmpty) {
+    if (compiler.isEmpty && scriptFiles.isEmpty) {
       throw UnimplementedError('dont know how to build files out of ASM/C/C++');
+    }
+    if (compiler.isEmpty && scriptFiles.isNotEmpty) {
+      if (scriptFiles.length > 1) {
+        throw Exception('several script files present, dont know which to run');
+      }
+      String scriptName = scriptFiles.first;
+      final scriptFile = io.File(
+          path.normalize(path.absolute(runner.submissionPrivateDirectory(submission)
+              + '/$scriptName'
+          )));
+      final lines = scriptFile.readAsLinesSync();
+      String interpreter = '';
+      if (lines.length > 0) {
+        String firstLine = lines.first;
+        if (firstLine.startsWith('#!')) {
+          interpreter = firstLine.substring(2);
+        }
+      }
+      if (interpreter.isEmpty) {
+        if (scriptName.endsWith('.sh'))
+          interpreter = '/usr/bin/env bash';
+        if (scriptName.endsWith('.py'))
+          interpreter = '/usr/bin/env python3';
+      }
+      if (interpreter.isEmpty) {
+        throw UnimplementedError('dont know how to run $scriptName');
+      }
+      plainBuildTarget = path.normalize(path.absolute(runner.submissionRootPrefix(submission)+'/$scriptName'));
+      targetInterpreter = interpreter;
+      runTargetIsScript = true;
+      return true;
     }
     List<String> objectFiles = [];
     for (final sourceFile in submission.solutionFiles.files) {
@@ -281,7 +374,7 @@ class SubmissionProcessor {
       bool dirExists = io.Directory('$testsPath/$baseName.dir').existsSync();
       if (datExists || ansExists || dirExists) {
         List<TestResult> targetResults = [];
-        if (compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
+        if (!disableValgrindAndSanitizers && !runTargetIsScript && compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
           TestResult result = await processTest(
             i,
             [sanitizersBuildTarget],
@@ -291,7 +384,7 @@ class SubmissionProcessor {
           );
           targetResults.add(result);
         }
-        if (compilersConfig.enableValgrind && plainBuildTarget.isNotEmpty) {
+        if (!disableValgrindAndSanitizers && !runTargetIsScript && compilersConfig.enableValgrind && plainBuildTarget.isNotEmpty) {
           final valgrindCommandLine = [
             'valgrind', '--tool=memcheck', '--leak-check=full',
             '--show-leak-kinds=all', '--track-origins=yes',
@@ -322,11 +415,21 @@ class SubmissionProcessor {
           }
           targetResults.add(result);
         }
-        if (!compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
+        if (disableValgrindAndSanitizers && !runTargetIsScript || !runTargetIsScript && !compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
           TestResult result = await processTest(
             i,
             [plainBuildTarget],
             'no sanitizers, no valgrind',
+            baseName,
+            plainLimits,
+          );
+          targetResults.add(result);
+        }
+        if (runTargetIsScript) {
+          TestResult result = await processTest(
+            i,
+            targetInterpreter.split(' ') + [plainBuildTarget],
+            'script run',
             baseName,
             plainLimits,
           );
@@ -400,6 +503,7 @@ class SubmissionProcessor {
     io.Process solutionProcess = await runner.start(submission.id.toInt(), firstArgs + arguments,
       workingDirectory: wd,
       limits: limits,
+      runTargetIsScript: runTargetIsScript,
     );
     bool killedByTimeout = false;
     final timer = Timer(Duration(seconds: limits.realTimeLimitSec.toInt()), () {
@@ -462,7 +566,9 @@ class SubmissionProcessor {
   }
 
   bool runChecker(List<int> observed, String observedPath, List<int> reference, String referencePath, String wd) {
-    String checkerName = problemChecker();
+    final checkerData = problemChecker().trim().split('\n');
+    final checkerName = checkerData[0];
+    final checkerOpts = checkerData.length > 1? checkerData[1] : '';
     wd = path.normalize(
         path.absolute(runner.submissionWorkingDirectory(submission)+'/'+wd)
     );
@@ -475,7 +581,7 @@ class SubmissionProcessor {
     AbstractChecker checker;
     if (checkerName.startsWith('=')) {
       String standardCheckerName = checkerName.substring(1);
-      return true; // TODO implement me
+      checker = StandardCheckersFactory.getChecker(standardCheckerName);
     }
     else if (checkerName.endsWith('.py')) {
       String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
@@ -483,14 +589,14 @@ class SubmissionProcessor {
           path.absolute(solutionPath + '/' + checkerName)
       );
       checker = PythonChecker(checkerPy: checkerPy);
-    } else {
-      throw UnimplementedError('checker not supported: $checkerName');
     }
-    String options = '';
+    else {
+      throw UnimplementedError('dont know how to handle checker $checkerName');
+    }
     if (checker.useFiles) {
-      return checker.matchFiles(observedPath, referencePath, wd, options);
+      return checker.matchFiles(observedPath, referencePath, wd, checkerOpts);
     } else {
-      return checker.matchData(observed, reference, wd, '');
+      return checker.matchData(observed, reference, wd, checkerOpts);
     }
   }
 

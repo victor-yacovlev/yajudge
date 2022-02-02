@@ -4,9 +4,9 @@ rpc:
   public_token: abrakadabra
   private_token: zxcvbnmsdfsd
 locations:
-  system_environment: ./debian
-  working_directory: ./work
-  cache_directory: ./cache
+  system_environment: '$HOME/yajudge/debian'
+  working_directory: '$HOME/yajudge/work'
+  cache_directory: '$HOME/yajudge/cache'
 compilers:
   enable_sanitizers: true # set 'false' for Alpine Linux environment or 'true' for glibc-based environments
   sanitizers_compile_options: -fsanitize=undefined -fsanitize=address -fno-sanitize-recover=all

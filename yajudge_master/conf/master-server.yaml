@@ -12,5 +12,6 @@ rpc:
   private_token: zxcvbnmsdfsd
 
 locations:
-  courses_root: ../courses
+  courses_root: '$HOME/yajudge/courses'
+  problems_root: '$HOME/yajudge/problems'
 

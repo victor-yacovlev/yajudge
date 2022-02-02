@@ -257,6 +257,7 @@ message CourseData {
   int32                   max_submissions_per_hour= 4;
   int32                   max_submission_file_size= 5;
   repeated CodeStyle      code_styles             = 6;
+  GradingLimits           default_limits          = 7;
 }
 
 message Course {
@@ -265,6 +266,7 @@ message Course {
   string            data_id       = 3;
   int64             course_start  = 4;  // UTC timestamp for course start, other times are relative
   string            url_prefix    = 5;
+  bool              no_teacher_mode=6;  // disables code review and defence stages on course instance
 }
 
 message Enrollment {
@@ -401,6 +403,9 @@ message CheckCourseStatusRequest {
 message ProblemStatus {
   string          problem_id  = 1;
   SolutionStatus  status      = 2;
+  bool            blocked     = 3;
+  double          deadline_penalty = 4;
+  ProblemMetadata metadata    = 5;
 }
 
 message CheckCourseStatusResponse {

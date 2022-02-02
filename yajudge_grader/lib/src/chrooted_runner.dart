@@ -224,6 +224,7 @@ class ChrootedRunner extends AbstractRunner {
     String workingDirectory = '/build',
     Map<String,String>? environment,
     GradingLimits? limits,
+    bool runTargetIsScript = false,
   }) {
     assert (arguments.length >= 1);
     String executable = arguments.first;
@@ -298,6 +299,11 @@ class ChrootedRunner extends AbstractRunner {
   @override
   String submissionProblemDirectory(Submission submission) {
     return problemDir.path;
+  }
+
+  @override
+  String submissionRootPrefix(Submission submission) {
+    return '/';
   }
 
 }

@@ -203,10 +203,9 @@ class GraderService {
         io.File(buildDir+'/'+customChecker.name).writeAsBytesSync(customChecker.data);
         io.File(buildDir+'/.checker').writeAsStringSync(customChecker.name);
       } else {
-        io.File(buildDir+'/.checker').writeAsStringSync(
-            problemData.gradingOptions.standardChecker + '\n' +
-            problemData.gradingOptions.standardCheckerOpts
-        );
+        String checkerName = problemData.gradingOptions.standardChecker;
+        String checkerOpts = problemData.gradingOptions.standardCheckerOpts;
+        io.File(buildDir+'/.checker').writeAsStringSync('=$checkerName\n$checkerOpts\n');
       }
       final gzip = io.gzip;
       int testNumber = 1;

@@ -53,9 +53,9 @@ class MasterService {
       throw Exception('Courses root directory does not exists: $coursesRoot');
     }
     courseManagementService = CourseManagementService(
-        parent: this,
-        connection: connection,
-        root: coursesRoot,
+      parent: this,
+      connection: connection,
+      locationProperties: locationProperties,
     );
     submissionManagementService = SubmissionManagementService(
         parent: this,

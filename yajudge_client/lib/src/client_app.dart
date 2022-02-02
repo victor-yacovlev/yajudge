@@ -227,7 +227,7 @@ class AppState extends State<App> {
     // - group 6: /tab
     // - group 7: tab
     final RegExp rxCoursesLessonParts = RegExp(
-        r'/([0-9a-z_-]+)/([0-9a-z_-]+)/([0-9a-z_-]+)/(readings|problems)/([0-9a-z_-]+)(/(statement|submissions|discussion))?');
+        r'/([0-9a-z_-]+)/([0-9a-z_-]*)/([0-9a-z_-]+)/(readings|problems)/([0-9a-z_-]+)(/(statement|submissions|discussion))?');
     final RegExpMatch? lessonPartMatch = rxCoursesLessonParts.firstMatch(path);
     if (lessonPartMatch != null) {
       final String pathUrlPrefix = lessonPartMatch[1]!;

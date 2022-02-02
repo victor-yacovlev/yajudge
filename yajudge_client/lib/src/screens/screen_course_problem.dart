@@ -9,6 +9,7 @@ import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import '../client_app.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 class CourseProblemScreen extends BaseScreen {
   final int courseId;
@@ -38,7 +39,13 @@ class CourseProblemScreenState extends BaseScreenState {
   SubmissionList? _submissionList;
   FileSet? _submissionFiles;
 
-  CourseProblemScreenState() : super(title: '');
+  CourseProblemScreenState() : super(title: '') {
+    Timer.periodic(Duration(seconds: 5), (_) {
+      if (mounted) {
+        _loadSubmissions();
+      }
+    });
+  }
 
   void _loadCourseData() {
     AppState.instance.loadCourseData(screen.courseDataId).then((value) => setState(() {
@@ -130,6 +137,9 @@ class CourseProblemScreenState extends BaseScreenState {
     Icon statementIcon = Icon(
         Icons.article_outlined
     );
+    Icon newSubmissionIcon = Icon(
+      Icons.add_box_outlined
+    );
     Icon submissionsIcon = Icon(
         Icons.rule
     );
@@ -137,8 +147,9 @@ class CourseProblemScreenState extends BaseScreenState {
         Icons.chat_bubble_outline_rounded
     );
     return [
-      SecondLevelNavigationTab('Условие', statementIcon, buildStatementWidget),
-      SecondLevelNavigationTab('Посылки', submissionsIcon, buildSubmissionsWidget),
+      SecondLevelNavigationTab('Условие задания', statementIcon, buildStatementWidget),
+      SecondLevelNavigationTab('Отправка решения', newSubmissionIcon, buildNewSubmissionWidget),
+      SecondLevelNavigationTab('Предыдущие посылки', submissionsIcon, buildSubmissionsWidget),
       // SecondLevelNavigationTab('Обсуждение', discussionIcon, buildDiscussionsWidget),
     ];
   }
@@ -268,7 +279,7 @@ class CourseProblemScreenState extends BaseScreenState {
 
   }
 
-  Widget buildSubmissionsWidget(BuildContext context) {
+  Widget buildNewSubmissionWidget(BuildContext context) {
     List<Widget> contents = List.empty(growable: true);
     if (_errorString != null) {
       contents.add(Text(_errorString!, style: TextStyle(color: Theme.of(context).errorColor)));
@@ -287,7 +298,7 @@ class CourseProblemScreenState extends BaseScreenState {
       contents.add(SizedBox(height: 20));
     }
     if (_problemData != null) {
-      contents.add(Text('Файлы нового решения', style: theme.headline5!));
+      contents.add(Text('Загрузите файлы нового решения', style: theme.headline5!));
       for (File file in _submissionFiles!.files) {
         String title = file.name;
         String secondLine = '';
@@ -310,7 +321,7 @@ class CourseProblemScreenState extends BaseScreenState {
           padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
           child: YCardLikeButton(
             title,
-            () {
+                () {
               _pickFileData(file);
             },
             leadingIcon: leadingIcon,
@@ -320,6 +331,31 @@ class CourseProblemScreenState extends BaseScreenState {
       }
       contents.add(SizedBox(height: 20));
     }
+    Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
+    double screenWidth = MediaQuery.of(context).size.width;
+    double horizontalMargins = (screenWidth - 950) / 2;
+    if (horizontalMargins < 0) {
+      horizontalMargins = 0;
+    }
+    return SingleChildScrollView(
+        child: Container(
+          child: visible,
+          padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
+          margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
+          constraints: BoxConstraints(
+            minHeight: 300,
+          ),
+        )
+    );
+  }
+
+  Widget buildSubmissionsWidget(BuildContext context) {
+    List<Widget> contents = List.empty(growable: true);
+    if (_errorString != null) {
+      contents.add(Text(_errorString!, style: TextStyle(color: Theme.of(context).errorColor)));
+    }
+    TextTheme theme = Theme.of(context).textTheme;
+
     if (_submissionList != null && _submissionList!.submissions.isNotEmpty) {
       contents.add(Text('Предыдущие посылки', style: theme.headline5!));
       for (Submission sub in _submissionList!.submissions.reversed) {
@@ -442,6 +478,7 @@ class CourseProblemScreenState extends BaseScreenState {
       child: TabBarView(
         children: [
           buildStatementWidget(context),
+          buildNewSubmissionWidget(context),
           buildSubmissionsWidget(context),
           // buildDiscussionsWidget(context),
         ]

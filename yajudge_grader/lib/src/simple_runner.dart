@@ -46,7 +46,8 @@ class SimpleRunner extends AbstractRunner {
   Future<io.Process> start(int submissionId, List<String> arguments, {
     String workingDirectory = '/build',
     Map<String, String>? environment,
-    GradingLimits? limits
+    GradingLimits? limits,
+    bool runTargetIsScript = false,
       })
   {
     assert (arguments.length >= 1);
@@ -56,13 +57,18 @@ class SimpleRunner extends AbstractRunner {
     String workDir = path.absolute(
         path.normalize('${locationProperties.workDir}/$submissionId/$workingDirectory')
     );
-    if (executable.startsWith('/'))
+    if (!runTargetIsScript && executable.startsWith('/'))
       executable = path.absolute(
           path.normalize('${locationProperties.workDir}/$submissionId/$executable')
       );
     if (environment == null)
       environment = io.Platform.environment;
-    return io.Process.start(executable, arguments, workingDirectory: workDir, environment: environment);
+    return io.Process.start(
+      executable,
+      arguments,
+      workingDirectory: workDir,
+      environment: environment,
+    );
   }
 
   @override
@@ -78,6 +84,11 @@ class SimpleRunner extends AbstractRunner {
   @override
   String submissionProblemDirectory(Submission submission) {
     return '${locationProperties.workDir}/${submission.id}';
+  }
+
+  @override
+  String submissionRootPrefix(Submission submission) {
+    return submissionWorkingDirectory(submission);
   }
 
 }

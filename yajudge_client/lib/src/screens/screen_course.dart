@@ -3,6 +3,7 @@ import '../utils/utils.dart';
 import '../widgets/course_lessons_tree.dart';
 import '../widgets/unified_widgets.dart';
 import 'screen_base.dart';
+import 'package:path/path.dart' as path;
 
 import 'package:yajudge_common/yajudge_common.dart';
 
@@ -152,15 +153,21 @@ class CourseScreenState extends BaseScreenState {
   }
 
   void _navigateToReading(Section section, Lesson lesson, TextReading reading) {
-    String url = '/' + screen.courseUrl + '/' + section.id +
-      '/' + lesson.id + '/readings/' + reading.id;
-    Navigator.pushNamed(context, url);
+    String courseUrl = screen.courseUrl;
+    String sectionId = section.id;
+    String lessonId = lesson.id;
+    String readingId = reading.id;
+    String location = '/$courseUrl/$sectionId/$lessonId/readings/$readingId';
+    Navigator.pushNamed(context, location);
   }
 
   void _navigateToProblem(Section section, Lesson lesson, ProblemData problem) {
-    String url = '/' + screen.courseUrl + '/' + section.id +
-        '/' + lesson.id + '/problems/' + problem.id + '/statement';
-    Navigator.pushNamed(context, url);
+    String courseId = screen.courseUrl;
+    String sectionId = section.id;
+    String lessonId = lesson.id;
+    String problemId = problem.id;
+    String location = '/$courseId/$sectionId/$lessonId/problems/$problemId/statement';
+    Navigator.pushNamed(context, location);
   }
 
   List<Widget> _createReadingsIndex(BuildContext context, Section section, Lesson lesson) {

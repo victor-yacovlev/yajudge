@@ -172,9 +172,11 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
     if (prevState == null) {
       // first load of tree view:  navigate explicitly to selected item
       Future.delayed(Duration(milliseconds: 100), () {
-        setState(() {
-          _navigationNodeSelected(selectedKey!);
-        });
+        if (selectedKey != null) {
+          setState(() {
+            _navigationNodeSelected(selectedKey!);
+          });
+        }
       });
     } else {
       _selectedKey = selectedKey;

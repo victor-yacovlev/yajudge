@@ -7,3 +7,4 @@ export 'src/conf/grader_locations_conf.dart';
 export 'src/conf/master_location_conf.dart';
 export 'src/conf/rpc_conf.dart';
 export 'src/conf/config_file.dart';
+export 'src/course_loader.dart';

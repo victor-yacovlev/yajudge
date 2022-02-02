@@ -8,8 +8,10 @@ abstract class AbstractRunner {
     String workingDirectory = '/build',
     Map<String,String>? environment,
     GradingLimits? limits,
+    bool runTargetIsScript,
   });
   String submissionPrivateDirectory(Submission submission);
   String submissionWorkingDirectory(Submission submission);
   String submissionProblemDirectory(Submission submission);
+  String submissionRootPrefix(Submission submission);
 }

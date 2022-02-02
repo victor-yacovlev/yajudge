@@ -5,12 +5,19 @@ import 'package:flutter/material.dart';
 import 'utils/utils.dart';
 
 
-void main([List<String>? arguments]) async {
+void main(List<String>? arguments) async {
 
   PlatformsUtils platformsSettings = PlatformsUtils.getInstance();
   platformsSettings.disableCoursesCache = true;
 
   Uri apiLocation = platformsSettings.getApiLocation();
+  if (platformsSettings.isNativeApp() && arguments!=null) {
+    for (String argument in arguments) {
+      if (!argument.startsWith('-')) {
+        apiLocation = Uri.parse(argument);
+      }
+    }
+  }
 
   ClientChannelBase clientChannel = GrpcOrGrpcWebClientChannel.toSeparatePorts(
     host: apiLocation.host,
