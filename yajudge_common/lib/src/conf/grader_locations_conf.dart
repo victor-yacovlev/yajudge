@@ -10,8 +10,8 @@ class GraderLocationProperties {
 
   factory GraderLocationProperties.fromYamlConfig(YamlMap conf) {
     var result = GraderLocationProperties();
-    if (conf.containsKey('work_dir'))
-      result.workDir = expandPathEnvVariables(conf['work_dir']);
+    if (conf.containsKey('working_directory'))
+      result.workDir = expandPathEnvVariables(conf['working_directory']);
     if (conf.containsKey('cache_directory'))
       result.coursesCacheDir = expandPathEnvVariables(conf['cache_directory']);
     if (conf.containsKey('system_environment'))
