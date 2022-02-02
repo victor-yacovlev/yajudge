@@ -359,6 +359,8 @@ class CourseLoader {
     String interactorName = data['interactor'] is String? data['interactor'] : '';
     String compileOptions = data['compile_options'] is String? data['compile_options'] : '';
     String linkOptions = data['link_options'] is String? data['link_options'] : '';
+    bool disableValgrind = data['disable_valgrind'] is bool? data['disable_valgrind'] : false;
+    bool disableSanitizers = data['disable_sanitizers'] is bool? data['disable_sanitizers'] : false;
     File customChecker = File();
     if (customCheckerName.isNotEmpty) {
       final checkerFile = io.File(problemPath(problemId)+'/'+customCheckerName);
@@ -394,6 +396,8 @@ class CourseLoader {
       extraCompileOptions: compileOptions.split(' '),
       extraLinkOptions: linkOptions.split(' '),
       limits: limits,
+      disableSanitizers: disableSanitizers,
+      disableValgrind: disableValgrind,
     );
   }
 

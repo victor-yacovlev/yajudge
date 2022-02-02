@@ -116,6 +116,8 @@ message GradingOptions {
   File                custom_interactor     = 11;// interactor source file
   repeated CodeStyle  code_styles           = 12;// just copied from parent course for convience
   FileSet             extra_build_files     = 13;
+  bool                disable_valgrind      = 14;
+  bool                disable_sanitizers    = 15;
 }
 
 message CodeStyle {
