@@ -355,6 +355,8 @@ class CourseLoader {
     String checkerOpts = data['checker_options'] is String? data['checker_options'] : '';
     String customCheckerName = data['custom_checker'] is String? data['custom_checker'] : '';
     String interactorName = data['interactor'] is String? data['interactor'] : '';
+    String compileOptions = data['compile_options'] is String? data['compile_options'] : '';
+    String linkOptions = data['link_options'] is String? data['link_options'] : '';
     File customChecker = File();
     if (customCheckerName.isNotEmpty) {
       final checkerFile = io.File(problemPath(problemId)+'/'+customCheckerName);
@@ -372,6 +374,11 @@ class CourseLoader {
       YamlList yamlList = data['private_files'];
       privateFiles = _loadFileSet(problemId, yamlList, false, true);
     }
+    GradingLimits limits = GradingLimits();
+    if (data['limits'] is YamlMap) {
+      YamlMap yamlMap = data['limits'];
+      limits = parseDefaultLimits(yamlMap);
+    }
     List<TestCase> testCases = _loadProblemTestCases(problemId);
     return GradingOptions(
       platformRequired: gradingPlatform,
@@ -382,6 +389,9 @@ class CourseLoader {
       codeStyles: _codeStyles,
       extraBuildFiles: FileSet(files: publicFiles.files + privateFiles.files),
       testCases: testCases,
+      extraCompileOptions: compileOptions.split(' '),
+      extraLinkOptions: linkOptions.split(' '),
+      limits: limits,
     );
   }
 
