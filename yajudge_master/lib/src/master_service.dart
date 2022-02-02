@@ -48,7 +48,9 @@ class MasterService {
     });
     userManagementService = UserManagementService(connection: connection);
     String coursesRoot = normalize(absolute(this.locationProperties.coursesRoot));
+    String problemsRoot = normalize(absolute(this.locationProperties.problemsRoot));
     log.info('using courses root $coursesRoot');
+    log.info('using problems root $problemsRoot');
     if (!io.Directory(coursesRoot).existsSync()) {
       throw Exception('Courses root directory does not exists: $coursesRoot');
     }

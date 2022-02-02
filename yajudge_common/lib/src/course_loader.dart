@@ -12,6 +12,8 @@ class CourseLoader {
   final String separateProblemsRootPath;
   final String courseId;
 
+  DateTime Function(io.File)? customFileDateTimePicker;
+
   CourseDataCacheItem courseCache = CourseDataCacheItem();
   Map<String, ProblemDataCacheItem> problemsCache = {};
 
@@ -543,16 +545,26 @@ class CourseLoader {
   void updateCourseLastModified(io.File file) {
     if (courseCache.lastModified == null)
       return;
-
-    if (file.lastModifiedSync().millisecondsSinceEpoch > courseCache.lastModified!.millisecondsSinceEpoch) {
+    DateTime fileLastModified;
+    if (customFileDateTimePicker != null) {
+      fileLastModified = customFileDateTimePicker!(file);
+    } else {
+      fileLastModified = file.lastModifiedSync();
+    }
+    DateTime cacheLastModified = courseCache.lastModified!;
+    if (file.lastModifiedSync().millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       courseCache.lastModified = file.lastModifiedSync();
     }
   }
 
   void updateProblemLastModified(String problemId, io.File file) {
-    String filePath = file.absolute.path;
-    file = io.File(filePath);
-    DateTime fileLastModified = file.lastModifiedSync();
+    // workaround on Dart bug at dart:io.File.lastModifiedSync()
+    DateTime fileLastModified;
+    if (customFileDateTimePicker != null) {
+      fileLastModified = customFileDateTimePicker!(file);
+    } else {
+      fileLastModified = file.lastModifiedSync();
+    }
     DateTime cacheLastModified = problemsCache[problemId]!.lastModified!;
     if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       problemsCache[problemId]!.lastModified = fileLastModified;

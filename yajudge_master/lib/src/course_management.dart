@@ -9,6 +9,7 @@ import 'package:tuple/tuple.dart';
 import 'package:xml/xml.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:yaml/yaml.dart';
+import 'package:posix/posix.dart' as posix;
 
 import './master_service.dart';
 import './user_management.dart';
@@ -41,6 +42,18 @@ class ProblemDataCacheItem {
     this.lastChecked,
     this.loadError,
   });
+}
+
+DateTime getFileLastModifiedUsingPosixCall(io.File file) {
+  // Workaround on bug in Dart runtime that caches file last modified
+  // time on first call and not usable to check file changes.
+  // This function is passed to CourseLoader and cannot be
+  // linked into yajudge_common package due to posix package is
+  // incompatible with Dart web target.
+  String filePath = normalize(absolute(file.path));
+  posix.Stat stat = posix.stat(filePath);
+  DateTime result = stat.lastModified;
+  return result;
 }
 
 class CourseManagementService extends CourseManagementServiceBase {
@@ -132,6 +145,7 @@ class CourseManagementService extends CourseManagementServiceBase {
         coursesRootPath: locationProperties.coursesRoot,
         separateProblemsRootPath: locationProperties.problemsRoot,
       );
+      loader.customFileDateTimePicker = getFileLastModifiedUsingPosixCall;
     } else {
       loader = courseLoaders[courseId]!;
     }
@@ -174,6 +188,7 @@ class CourseManagementService extends CourseManagementServiceBase {
         coursesRootPath: locationProperties.coursesRoot,
         separateProblemsRootPath: locationProperties.problemsRoot,
       );
+      loader.customFileDateTimePicker = getFileLastModifiedUsingPosixCall;
     } else {
       loader = courseLoaders[courseId]!;
     }
