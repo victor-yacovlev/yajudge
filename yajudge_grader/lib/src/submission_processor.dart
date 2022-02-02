@@ -382,6 +382,7 @@ class SubmissionProcessor {
 
   Future<void> runTests() async {
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
+    String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
     bool hasRuntimeError = false;
     bool hasTimeLimit = false;
     bool hasWrongAnswer = false;
@@ -402,7 +403,7 @@ class SubmissionProcessor {
         List<TestResult> targetResults = [];
         if (!disableValgrindAndSanitizers && !disableProblemSanitizers() && !runTargetIsScript && compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
           TestResult result = await processTest(
-            i,
+            i, 'with-sanitizers',
             [sanitizersBuildTarget],
             'with sanitizers',
             baseName,
@@ -414,17 +415,17 @@ class SubmissionProcessor {
           final valgrindCommandLine = [
             'valgrind', '--tool=memcheck', '--leak-check=full',
             '--show-leak-kinds=all', '--track-origins=yes',
-            '--log-file=/tests/$baseName.valgrind',
+            '--log-file=/runs/valgrind/$baseName.valgrind',
             plainBuildTarget
           ];
           TestResult result = await processTest(
-            i,
+            i, 'valgrind',
             valgrindCommandLine,
             'with valgrind',
             baseName,
             valgrindLimits
           );
-          final valgrindOut = io.File('$testsPath/$baseName.valgrind').readAsStringSync();
+          final valgrindOut = io.File('$runsPath/valgrind/$baseName.valgrind').readAsStringSync();
           int valgrindErrors = 0;
           final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
           final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
@@ -443,7 +444,7 @@ class SubmissionProcessor {
         }
         if (disableValgrindAndSanitizers && !runTargetIsScript || disableProblemValgrind() && disableProblemSanitizers() && !runTargetIsScript || !runTargetIsScript && !compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
           TestResult result = await processTest(
-            i,
+            i, 'plain',
             [plainBuildTarget],
             'no sanitizers, no valgrind',
             baseName,
@@ -453,7 +454,7 @@ class SubmissionProcessor {
         }
         if (runTargetIsScript) {
           TestResult result = await processTest(
-            i,
+            i, 'script',
             targetInterpreter.split(' ') + [plainBuildTarget],
             'script run',
             baseName,
@@ -514,11 +515,20 @@ class SubmissionProcessor {
     return limits;
   }
 
-  Future<TestResult> processTest(int testNumber, List<String> firstArgs, String description, String testBaseName, GradingLimits limits) async {
+  Future<TestResult> processTest(int testNumber, String runsDirPrefix, List<String> firstArgs, String description, String testBaseName, GradingLimits limits) async {
     log.info('running test $testBaseName ($description) for submission ${submission.id}');
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
-    final testDir = io.Directory('$testsPath/$testBaseName.dir');
-    String wd = testDir.existsSync() ? '/tests/$testBaseName.dir' : '/build';
+    final testBundle = io.File('$testsPath/$testBaseName.tgz');
+    final runsDir = io.Directory(runner.submissionWorkingDirectory(submission)+'/runs/$runsDirPrefix/');
+    runsDir.createSync(recursive: true);
+    String wd;
+    if (testBundle.existsSync()) {
+      io.Process.runSync('tar', ['zxf', testBundle.path], workingDirectory: runsDir.path);
+      wd = '/runs/$runsDirPrefix/$testBaseName.dir';
+    }
+    else {
+      wd = '/runs/$runsDirPrefix';
+    }
     final argsFile = io.File('$testsPath/$testBaseName.args');
     List<String> arguments = argsFile.existsSync()? argsFile.readAsStringSync().trim().split(' ') : [];
     List<int>? stdinData;
@@ -560,8 +570,8 @@ class SubmissionProcessor {
     timer.cancel();
     await stdoutListener;
     await stderrListener;
-    final stdoutFile = io.File('$testsPath/$testBaseName.stdout');
-    final stderrFile = io.File('$testsPath/$testBaseName.stderr');
+    final stdoutFile = io.File('${runsDir.path}/$testBaseName.stdout');
+    final stderrFile = io.File('${runsDir.path}/$testBaseName.stderr');
     stdoutFile.writeAsBytesSync(stdout);
     stderrFile.writeAsBytesSync(stderr);
     bool resultMatch = false;
@@ -582,7 +592,7 @@ class SubmissionProcessor {
     }
     return TestResult(
       testNumber: testNumber,
-      target: description,
+      target: runsDirPrefix,
       status: exitStatus,
       stderr: utf8.decode(stderr),
       stdout: utf8.decode(stdout),

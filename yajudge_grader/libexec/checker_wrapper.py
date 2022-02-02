@@ -21,7 +21,11 @@ def main():
     reference_file_name = sys.argv[4]
     module = import_module(checker_file_name)
     observed = read_file_as_bytes(observed_file_name)
-    reference = read_file_as_bytes(reference_file_name)
+    reference = b'';
+    try:
+        reference = read_file_as_bytes(reference_file_name)
+    except:
+        pass
     os.chdir(work_dir_path)
     result = module.match(observed, reference)
     if result:

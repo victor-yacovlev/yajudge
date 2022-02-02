@@ -231,8 +231,6 @@ class GraderService {
         }
         if (bundle.name.isNotEmpty) {
           io.File(testsDir+'/'+bundle.name).writeAsBytesSync(bundle.data);
-          io.Process.runSync('tar', ['zxf', bundle.name], workingDirectory: testsDir);
-          io.File(testsDir+'/'+bundle.name).deleteSync();
         }
         if (args.isNotEmpty) {
           String testBaseName = '$testNumber';
