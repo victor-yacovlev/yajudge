@@ -141,3 +141,50 @@ GradingLimits parseDefaultLimits(YamlMap conf) {
     allowNetwork: allowNetwork,
   );
 }
+
+GradingLimits mergeLimitsFromYaml(GradingLimits source, YamlMap conf) {
+  return source.copyWith((s) {
+    if (conf['stack_size_limit_mb'] is int)
+      s.stackSizeLimitMb = Int64(conf['stack_size_limit_mb']);
+    if (conf['memory_max_limit_mb'] is int)
+      s.memoryMaxLimitMb = Int64(conf['memory_max_limit_mb']);
+    if (conf['cpu_time_limit_sec'] is int)
+      s.cpuTimeLimitSec = Int64(conf['cpu_time_limit_sec']);
+    if (conf['real_time_limit_sec'] is int)
+      s.realTimeLimitSec = Int64(conf['real_time_limit_sec']);
+    if (conf['proc_count_limit'] is int)
+      s.procCountLimit = Int64(conf['proc_count_limit']);
+    if (conf['fd_count_limit'] is int)
+      s.fdCountLimit = Int64(conf['fd_count_limit']);
+    if (conf['stdout_size_limit_mb'] is int)
+      s.stdoutSizeLimitMb = Int64(conf['stdout_size_limit_mb']);
+    if (conf['stderr_size_limit_mb'] is int)
+      s.stderrSizeLimitMb = Int64(conf['stderr_size_limit_mb']);
+    if (conf['allow_network'] is bool)
+      s.allowNetwork = conf['allow_network'].toString().toLowerCase()=='true';
+  });
+}
+
+String limitsToYamlString(GradingLimits limits, [int level = 0]) {
+  String indent = level > 0 ? '  ' * level : '';
+  String result = '';
+  if (limits.stackSizeLimitMb > 0)
+    result += '${indent}stack_size_limit_mb: ${limits.stackSizeLimitMb}\n';
+  if (limits.memoryMaxLimitMb > 0)
+    result += '${indent}memory_max_limit_mb: ${limits.memoryMaxLimitMb}\n';
+  if (limits.cpuTimeLimitSec > 0)
+    result += '${indent}cpu_time_limit_sec: ${limits.cpuTimeLimitSec}\n';
+  if (limits.realTimeLimitSec > 0)
+    result += '${indent}real_time_limit_sec: ${limits.realTimeLimitSec}\n';
+  if (limits.procCountLimit > 0)
+    result += '${indent}proc_count_limit: ${limits.procCountLimit}\n';
+  if (limits.fdCountLimit > 0)
+    result += '${indent}fd_count_limit: ${limits.fdCountLimit}\n';
+  if (limits.stdoutSizeLimitMb > 0)
+    result += '${indent}stdout_size_limit_mb: ${limits.stdoutSizeLimitMb}\n';
+  if (limits.stderrSizeLimitMb > 0)
+    result += '${indent}stderr_size_limit_mb: ${limits.stderrSizeLimitMb}\n';
+  if (limits.allowNetwork)
+    result += '${indent}allow_network: ${limits.allowNetwork}\n';
+  return result;
+}

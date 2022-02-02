@@ -215,7 +215,11 @@ class SubmissionProcessor {
 
   GradingLimits getProblemLimits(bool withValgrindAjustment) {
     GradingLimits limits = defaultLimits;
-    // TODO read problem limits
+    final limitsFile = io.File(runner.submissionProblemDirectory(submission)+'/build/.limits');
+    if (limitsFile.existsSync()) {
+      YamlMap conf = loadYaml(limitsFile.readAsStringSync());
+      limits = mergeLimitsFromYaml(limits, conf);
+    }
     if (withValgrindAjustment) {
       return compilersConfig.applyValgrindToGradingLimits(limits);
     }
