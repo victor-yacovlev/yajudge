@@ -524,7 +524,8 @@ class SubmissionProcessor {
       log.fine('submission ${submission.id} ($description) killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
     });
     if (stdinData != null) {
-      solutionProcess.stdin.write(stdinData);
+      solutionProcess.stdin.add(stdinData);
+      await solutionProcess.stdin.flush();
       solutionProcess.stdin.close();
     }
     List<int> stdout = [];
