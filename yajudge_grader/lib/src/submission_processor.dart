@@ -305,8 +305,9 @@ class SubmissionProcessor {
               ['-c'] +
               compilerBaseOptions +
               sanitizerOptions +
+              ['-o', objectFileName] +
               compileOptions() +
-              ['-o', objectFileName, sourceFile.name];
+              [sourceFile.name];
       final compilerCommand = [compiler] + compilerArguments;
       io.Process compilerProcess = await runner.start(
         submission.id.toInt(),
@@ -333,8 +334,8 @@ class SubmissionProcessor {
       }
     }
     final linkerArguments = ['-o', targetName] +
-        linkOptions() +
         sanitizerOptions +
+        linkOptions() +
         objectFiles;
     final linkerCommand = [compiler] + linkerArguments;
     io.Process linkerProcess = await runner.start(
