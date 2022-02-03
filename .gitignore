@@ -56,3 +56,15 @@ cache/
 courses/
 problems/
 work/
+
+debian/
+alpine/
+*.sh
+
+yajudge_grader/src/build
+yajudge_grader/src/cmake-build-*
+
+yajudge_grader/libexec/overlay-mount
+yajudge_grader/libexec/limited-run
+yajudge_grader/libexec/initial-cgroup-setup
+
