@@ -118,6 +118,7 @@ message GradingOptions {
   FileSet             extra_build_files     = 13;
   bool                disable_valgrind      = 14;
   bool                disable_sanitizers    = 15;
+  File                tests_generator       = 16;
 }
 
 message CodeStyle {

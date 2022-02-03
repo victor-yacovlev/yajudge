@@ -69,6 +69,21 @@ class SubmissionProcessor {
     return io.File(solutionPath+'/.checker').readAsStringSync().trim();
   }
 
+  int problemTestsCount() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/tests';
+    return int.parse(io.File(solutionPath+'/.tests_count').readAsStringSync().trim());
+  }
+
+  String problemTestsGenerator() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    final generatorFile = io.File(solutionPath+'/.tests_generator');
+    if (generatorFile.existsSync()) {
+      return generatorFile.readAsStringSync().trim();
+    } else {
+      return '';
+    }
+  }
+
   bool disableProblemValgrind() {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     return io.File(solutionPath+'/.disable_valgrind').existsSync();
@@ -380,6 +395,54 @@ class SubmissionProcessor {
     return true;
   }
 
+  int prepareSubmissionTests(String targetPrefix) {
+    String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
+    final runsDir = io.Directory(runner.submissionWorkingDirectory(submission)+'/runs/$targetPrefix/');
+    runsDir.createSync(recursive: true);
+
+    // Unpack .tgz bundles if any exists
+    for (int i=1; i<=problemTestsCount(); i++) {
+      String testBaseName = '$i';
+      if (i < 10)
+        testBaseName = '0' + testBaseName;
+      if (i < 100)
+        testBaseName = '0' + testBaseName;
+      final testBundle = io.File('$testsPath/$testBaseName.tgz');
+      if (testBundle.existsSync()) {
+        io.Process.runSync('tar', ['zxf', testBundle.path], workingDirectory: runsDir.path);
+      }
+      else {
+        break;
+      }
+    }
+
+    // Generate tests if script provided
+    String testsGenerator = problemTestsGenerator();
+    if (testsGenerator.isEmpty) {
+      return problemTestsCount();
+    }
+
+    if (testsGenerator.endsWith('.py')) {
+      String binDir = path.dirname(io.Platform.script.path);
+      String pyWrapper = path.normalize(path.absolute(binDir, '../libexec/', 'tests_generator_wrapper.py'));
+      final arguments = [
+        pyWrapper,
+        runner.submissionProblemDirectory(submission)+'/build/$testsGenerator',
+        runsDir.path,
+      ];
+      final processResult = io.Process.runSync('python3', arguments, runInShell: true);
+      if (processResult.exitCode != 0) {
+        String message = processResult.stdout.toString() + processResult.stderr.toString();
+        log.severe('tests generator $testsGenerator failed: $message');
+        return 0;
+      }
+      return int.parse(io.File(runsDir.path+'/.tests_count').readAsStringSync().trim());
+    }
+    else {
+      throw UnimplementedError('Tests generators other than Python not supported yet: $testsGenerator');
+    }
+  }
+
   Future<void> runTests() async {
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
     String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
@@ -390,87 +453,126 @@ class SubmissionProcessor {
     List<TestResult> testResults = [];
     GradingLimits plainLimits = getProblemLimits(false);
     GradingLimits valgrindLimits = getProblemLimits(true);
-    for (int i=1; i<=999; i++) {
+
+    int testsCount = 0;
+
+    bool runSanitizersTarget =
+        !disableValgrindAndSanitizers &&
+        !disableProblemSanitizers() &&
+        !runTargetIsScript &&
+        compilersConfig.enableSanitizers &&
+        sanitizersBuildTarget.isNotEmpty
+    ;
+    final sanitizersTargetPrefix = 'with-sanitizers';
+    if (runSanitizersTarget) {
+      testsCount = prepareSubmissionTests(sanitizersTargetPrefix);
+    }
+
+    bool runValgrindTarget =
+        !disableValgrindAndSanitizers &&
+        !disableProblemValgrind() &&
+        !runTargetIsScript &&
+        compilersConfig.enableValgrind &&
+        plainBuildTarget.isNotEmpty
+    ;
+    final valgrindTargetPrefix = 'valgrind';
+    if (runValgrindTarget) {
+      testsCount = prepareSubmissionTests(valgrindTargetPrefix);
+    }
+
+    bool runScriptTarget = runTargetIsScript;
+    final scriptTargetPrefix = 'script';
+    if (runScriptTarget) {
+      testsCount = prepareSubmissionTests(scriptTargetPrefix);
+    }
+
+    bool runPlainTarget = !runSanitizersTarget && !runValgrindTarget && !runScriptTarget;
+    final plainTargetPrefix = 'plain';
+    if (runPlainTarget) {
+      testsCount = prepareSubmissionTests(plainTargetPrefix);
+    }
+
+    for (int i=1; i<=testsCount; i++) {
       String baseName = '$i';
       if (i < 10)
         baseName = '0' + baseName;
       if (i < 100)
         baseName = '0' + baseName;
-      bool datExists = io.File('$testsPath/$baseName.dat').existsSync();
-      bool ansExists = io.File('$testsPath/$baseName.ans').existsSync();
-      bool dirExists = io.Directory('$testsPath/$baseName.dir').existsSync();
-      if (datExists || ansExists || dirExists) {
-        List<TestResult> targetResults = [];
-        if (!disableValgrindAndSanitizers && !disableProblemSanitizers() && !runTargetIsScript && compilersConfig.enableSanitizers && sanitizersBuildTarget.isNotEmpty) {
-          TestResult result = await processTest(
-            i, 'with-sanitizers',
-            [sanitizersBuildTarget],
-            'with sanitizers',
-            baseName,
-            plainLimits,
-          );
-          targetResults.add(result);
-        }
-        if (!disableValgrindAndSanitizers && !disableProblemValgrind() && !runTargetIsScript && compilersConfig.enableValgrind && plainBuildTarget.isNotEmpty) {
-          final valgrindCommandLine = [
-            'valgrind', '--tool=memcheck', '--leak-check=full',
-            '--show-leak-kinds=all', '--track-origins=yes',
-            '--log-file=/runs/valgrind/$baseName.valgrind',
-            plainBuildTarget
-          ];
-          TestResult result = await processTest(
-            i, 'valgrind',
-            valgrindCommandLine,
-            'with valgrind',
-            baseName,
-            valgrindLimits
-          );
-          final valgrindOut = io.File('$runsPath/valgrind/$baseName.valgrind').readAsStringSync();
-          int valgrindErrors = 0;
-          final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
-          final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
-          if (matchEntries.isNotEmpty) {
-            RegExpMatch match = matchEntries.first;
-            String matchGroup = match.group(1)!;
-            valgrindErrors = int.parse(matchGroup);
-          }
-          if (valgrindErrors > 0) {
-            result = result.copyWith((r) {
-              r.valgrindErrors = valgrindErrors;
-              r.valgrindOutput = valgrindOut;
-            });
-          }
-          targetResults.add(result);
-        }
-        if (disableValgrindAndSanitizers && !runTargetIsScript || disableProblemValgrind() && disableProblemSanitizers() && !runTargetIsScript || !runTargetIsScript && !compilersConfig.enableValgrind && !compilersConfig.enableSanitizers) {
-          TestResult result = await processTest(
-            i, 'plain',
-            [plainBuildTarget],
-            'no sanitizers, no valgrind',
-            baseName,
-            plainLimits,
-          );
-          targetResults.add(result);
-        }
-        if (runTargetIsScript) {
-          TestResult result = await processTest(
-            i, 'script',
-            targetInterpreter.split(' ') + [plainBuildTarget],
-            'script run',
-            baseName,
-            plainLimits,
-          );
-          targetResults.add(result);
-        }
-        hasWrongAnswer = targetResults.any((element) => !element.standardMatch);
-        hasTimeLimit = targetResults.any((element) => element.killedByTimer);
-        hasRuntimeError = targetResults.any((element) => element.signalKilled>0 && !element.killedByTimer);
-        hasValgrindErrors = targetResults.any((element) => element.valgrindErrors>0);
-        testResults.addAll(targetResults);
-      } else {
-        break;
+
+      List<TestResult> targetResults = [];
+
+      if (runSanitizersTarget) {
+        TestResult result = await processTest(
+          i, sanitizersTargetPrefix,
+          [sanitizersBuildTarget],
+          'with sanitizers',
+          baseName,
+          plainLimits,
+        );
+        targetResults.add(result);
       }
+
+      if (runValgrindTarget) {
+        final valgrindCommandLine = [
+          'valgrind', '--tool=memcheck', '--leak-check=full',
+          '--show-leak-kinds=all', '--track-origins=yes',
+          '--log-file=/runs/valgrind/$baseName.valgrind',
+          plainBuildTarget
+        ];
+        TestResult result = await processTest(
+          i, valgrindTargetPrefix,
+          valgrindCommandLine,
+          'with valgrind',
+          baseName,
+          valgrindLimits
+        );
+        final valgrindOut = io.File('$runsPath/valgrind/$baseName.valgrind').readAsStringSync();
+        int valgrindErrors = 0;
+        final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
+        final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
+        if (matchEntries.isNotEmpty) {
+          RegExpMatch match = matchEntries.first;
+          String matchGroup = match.group(1)!;
+          valgrindErrors = int.parse(matchGroup);
+        }
+        if (valgrindErrors > 0) {
+          result = result.copyWith((r) {
+            r.valgrindErrors = valgrindErrors;
+            r.valgrindOutput = valgrindOut;
+          });
+        }
+        targetResults.add(result);
+      }
+
+      if (runPlainTarget) {
+        TestResult result = await processTest(
+          i, plainTargetPrefix,
+          [plainBuildTarget],
+          'no sanitizers, no valgrind',
+          baseName,
+          plainLimits,
+        );
+        targetResults.add(result);
+      }
+
+      if (runTargetIsScript) {
+        TestResult result = await processTest(
+          i, scriptTargetPrefix,
+          targetInterpreter.split(' ') + [plainBuildTarget],
+          'script run',
+          baseName,
+          plainLimits,
+        );
+        targetResults.add(result);
+      }
+
+      hasWrongAnswer = targetResults.any((element) => !element.standardMatch);
+      hasTimeLimit = targetResults.any((element) => element.killedByTimer);
+      hasRuntimeError = targetResults.any((element) => element.signalKilled>0 && !element.killedByTimer);
+      hasValgrindErrors = targetResults.any((element) => element.valgrindErrors>0);
+      testResults.addAll(targetResults);
     }
+
     SolutionStatus newStatus = submission.status;
     if (hasRuntimeError) {
       newStatus = SolutionStatus.RUNTIME_ERROR;
@@ -518,23 +620,43 @@ class SubmissionProcessor {
   Future<TestResult> processTest(int testNumber, String runsDirPrefix, List<String> firstArgs, String description, String testBaseName, GradingLimits limits) async {
     log.info('running test $testBaseName ($description) for submission ${submission.id}');
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
-    final testBundle = io.File('$testsPath/$testBaseName.tgz');
     final runsDir = io.Directory(runner.submissionWorkingDirectory(submission)+'/runs/$runsDirPrefix/');
-    runsDir.createSync(recursive: true);
     String wd;
-    if (testBundle.existsSync()) {
-      io.Process.runSync('tar', ['zxf', testBundle.path], workingDirectory: runsDir.path);
+    if (io.Directory(runsDir.path+'/$testBaseName.dir').existsSync()) {
       wd = '/runs/$runsDirPrefix/$testBaseName.dir';
     }
     else {
       wd = '/runs/$runsDirPrefix';
     }
-    final argsFile = io.File('$testsPath/$testBaseName.args');
-    List<String> arguments = argsFile.existsSync()? argsFile.readAsStringSync().trim().split(' ') : [];
+
+    List<String> arguments = [];
+    final problemArgsFile = io.File('$testsPath/$testBaseName.args');
+    final targetArgsFile = io.File('${runsDir.path}/$testBaseName.inf');
+    if (targetArgsFile.existsSync()) {
+      // file generated by tests generator
+      String line = targetArgsFile.readAsStringSync().trim();
+      final parts = line.split('=');
+      if (parts.length > 1) {
+        String value = parts[1].trimLeft();
+        String key = parts[0].trimRight();
+        if (key == 'params') {
+          arguments = value.split(' ');
+        }
+      }
+    }
+    else if (problemArgsFile.existsSync()) {
+      // already parsed arguments file
+      arguments = problemArgsFile.readAsStringSync().trim().split(' ');
+    }
+
     List<int>? stdinData;
-    final stdinFile = io.File('$testsPath/$testBaseName.dat');
-    if (stdinFile.existsSync()) {
-      stdinData = stdinFile.readAsBytesSync();
+    final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
+    final targetStdinFile = io.File('${runsDir.path}/$testBaseName.dat');
+    if (targetStdinFile.existsSync()) {
+      stdinData = targetStdinFile.readAsBytesSync();
+    }
+    else if (problemStdinFile.existsSync()) {
+      stdinData = problemStdinFile.readAsBytesSync();
     }
     io.Process solutionProcess = await runner.start(submission.id.toInt(), firstArgs + arguments,
       workingDirectory: wd,
@@ -578,9 +700,13 @@ class SubmissionProcessor {
     int signalKilled = 0;
     if (exitStatus >= 0) {
       List<int> referenceStdout = [];
-      final ansFile = io.File('$testsPath/$testBaseName.ans');
-      if (ansFile.existsSync()) {
-        referenceStdout = ansFile.readAsBytesSync();
+      final problemAnsFile = io.File('$testsPath/$testBaseName.ans');
+      final targetAnsFile = io.File('${runsDir.path}/$testBaseName.ans');
+      if (targetAnsFile.existsSync()) {
+        referenceStdout = targetAnsFile.readAsBytesSync();
+      }
+      else if (problemAnsFile.existsSync()) {
+        referenceStdout = problemAnsFile.readAsBytesSync();
       }
       log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
       resultMatch = runChecker(stdout, stdoutFile.path, referenceStdout, '$testsPath/$testBaseName.ans', wd);

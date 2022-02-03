@@ -46,3 +46,13 @@ app.*.map.json
 
 # Dart code generation
 *.g.dart
+
+**/lib/src/generated/
+*/build.dart
+*.exe
+yajudge_client/build
+
+cache/
+courses/
+problems/
+work/

@@ -357,6 +357,7 @@ class CourseLoader {
     String checkerOpts = data['checker_options'] is String? data['checker_options'] : '';
     String customCheckerName = data['custom_checker'] is String? data['custom_checker'] : '';
     String interactorName = data['interactor'] is String? data['interactor'] : '';
+    String testsGeneratorName = data['tests_generator'] is String? data['tests_generator'] : '';
     String compileOptions = data['compile_options'] is String? data['compile_options'] : '';
     String linkOptions = data['link_options'] is String? data['link_options'] : '';
     bool disableValgrind = data['disable_valgrind'] is bool? data['disable_valgrind'] : false;
@@ -372,6 +373,12 @@ class CourseLoader {
       final interactorFile = io.File(problemPath(problemId)+'/'+interactorName);
       updateProblemLastModified(problemId, interactorFile);
       customInteractor = File(name: interactorName, data: interactorFile.readAsBytesSync());
+    }
+    File testsGenerator = File();
+    if (testsGeneratorName.isNotEmpty) {
+      final generatorFile = io.File(problemPath(problemId)+'/'+testsGeneratorName);
+      updateProblemLastModified(problemId, generatorFile);
+      testsGenerator = File(name: testsGeneratorName, data: generatorFile.readAsBytesSync());
     }
     FileSet privateFiles = FileSet();
     if (data['private_files'] is YamlList) {
@@ -398,6 +405,7 @@ class CourseLoader {
       limits: limits,
       disableSanitizers: disableSanitizers,
       disableValgrind: disableValgrind,
+      testsGenerator: testsGenerator,
     );
   }
 

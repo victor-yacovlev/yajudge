@@ -208,12 +208,18 @@ class GraderService {
         String checkerOpts = opts.standardCheckerOpts;
         io.File(buildDir+'/.checker').writeAsStringSync('=$checkerName\n$checkerOpts\n');
       }
+      final testsGenerator = opts.testsGenerator;
+      if (testsGenerator.name.isNotEmpty) {
+        io.File(buildDir+'/'+testsGenerator.name).writeAsBytesSync(testsGenerator.data);
+        io.File(buildDir+'/.tests_generator').writeAsStringSync(testsGenerator.name);
+      }
       if (opts.disableValgrind)
         io.File(buildDir+'/.disable_valgrind').createSync(recursive: true);
       if (opts.disableSanitizers)
         io.File(buildDir+'/.disable_sanitizers').createSync(recursive: true);
       final gzip = io.gzip;
       int testNumber = 1;
+      int testsCount = 0;
       for (final testCase in opts.testCases) {
         final stdin = testCase.stdinData;
         final stdout = testCase.stdoutReference;
@@ -241,7 +247,9 @@ class GraderService {
           io.File(testsDir+'/'+testBaseName+'.args').writeAsStringSync(args);
         }
         testNumber ++;
+        testsCount ++;
       }
+      io.File(testsDir+"/.tests_count").writeAsStringSync('$testsCount\n');
     }
   }
 
