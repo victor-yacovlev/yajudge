@@ -361,7 +361,18 @@ class CourseLoader {
     String compileOptions = data['compile_options'] is String? data['compile_options'] : '';
     String linkOptions = data['link_options'] is String? data['link_options'] : '';
     bool disableValgrind = data['disable_valgrind'] is bool? data['disable_valgrind'] : false;
-    bool disableSanitizers = data['disable_sanitizers'] is bool? data['disable_sanitizers'] : false;
+    List<String> disableSanitizers = [];
+    if (data['disable_sanitizers'] is YamlList) {
+      YamlList yamlList = data['disable_sanitizers'];
+      for (final entry in yamlList) {
+        String disabledSanitizerName = entry.toString();
+        disableSanitizers.add(disabledSanitizerName);
+      }
+    }
+    else if (data['disable_sanitizers'] is String) {
+      String line = data['disable_sanitizers'];
+      disableSanitizers = line.split(' ');
+    }
     File customChecker = File();
     if (customCheckerName.isNotEmpty) {
       final checkerFile = io.File(problemPath(problemId)+'/'+customCheckerName);

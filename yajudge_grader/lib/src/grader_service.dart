@@ -212,10 +212,14 @@ class GraderService {
         io.File(buildDir+'/'+testsGenerator.name).writeAsBytesSync(testsGenerator.data);
         io.File(buildDir+'/.tests_generator').writeAsStringSync(testsGenerator.name);
       }
+
       if (opts.disableValgrind)
         io.File(buildDir+'/.disable_valgrind').createSync(recursive: true);
-      if (opts.disableSanitizers)
-        io.File(buildDir+'/.disable_sanitizers').createSync(recursive: true);
+
+      final List<String> disabledSanitizers = opts.disableSanitizers;
+      if (disabledSanitizers.isNotEmpty) {
+        io.File(buildDir + '/.disable_sanitizers').writeAsStringSync(disabledSanitizers.join(' '));
+      }
 
       GradingLimits limits = opts.limits;
       String limitsYaml = limitsToYamlString(limits);
