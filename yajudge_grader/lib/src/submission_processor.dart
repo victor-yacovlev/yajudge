@@ -89,9 +89,10 @@ class SubmissionProcessor {
     return io.File(solutionPath+'/.disable_valgrind').existsSync();
   }
 
-  bool disableProblemSanitizers() {
+  List<String> disableProblemSanitizers() {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    return io.File(solutionPath+'/.disable_sanitizers').existsSync();
+    final confFile = io.File(solutionPath+'/.disable_sanitizers');
+    return confFile.existsSync()? confFile.readAsStringSync().trim().split(' ') : [];
   }
 
   String styleFileName(String suffix) {
@@ -135,6 +136,17 @@ class SubmissionProcessor {
     return true;
   }
 
+  List<String> getSanitizersList() {
+    if (disableValgrindAndSanitizers)
+      return [];
+    List<String> sanitizers = List.from(compilersConfig.enableSanitizers);
+    List<String> disabledSanitizers = disableProblemSanitizers();
+    for (String sanitizer in disabledSanitizers) {
+      sanitizers.remove(sanitizer);
+    }
+    return sanitizers;
+  }
+
   Future<bool> buildSolution() async {
     bool hasCMakeLists = false;
     bool hasMakefile = false;
@@ -157,12 +169,12 @@ class SubmissionProcessor {
     } else if (hasGoFiles) {
       return buildGoProject();
     } else {
-      bool plainOk = await buildProjectFromFiles(false);
+      bool plainOk = await buildProjectFromFiles([]);
       bool sanitizersOk = true;
-      if (compilersConfig.enableSanitizers) {
+      if (getSanitizersList().isNotEmpty) {
         final buildOptions = compileOptions() + linkOptions();
-        if (!buildOptions.contains('-nostdlib') && !disableProblemSanitizers()) {
-          sanitizersOk = await buildProjectFromFiles(true);
+        if (!buildOptions.contains('-nostdlib')) {
+          sanitizersOk = await buildProjectFromFiles(getSanitizersList());
         }
       }
       return plainOk && sanitizersOk;
@@ -256,7 +268,7 @@ class SubmissionProcessor {
     }
   }
 
-  Future<bool> buildProjectFromFiles(bool withSanitizers) async {
+  Future<bool> buildProjectFromFiles(List<String> sanitizersToUse) async {
     bool hasCFiles = false;
     bool hasGnuAsmFiles = false;
     bool hasCXXFiles = false;
@@ -279,9 +291,15 @@ class SubmissionProcessor {
     }
     String compiler = '';
     List<String> compilerBaseOptions = [];
-    List<String> sanitizerOptions = withSanitizers? compilersConfig.sanitizersOptions : [];
-    String objectSuffix = withSanitizers? '.san.o' : '.o';
-    String targetName = withSanitizers? 'solution-san' : 'solution';
+    List<String> sanitizerOptions = [];
+    for (String sanitizer in sanitizersToUse) {
+      sanitizerOptions.add('-fsanitize=$sanitizer');
+    }
+    if (sanitizersToUse.isNotEmpty) {
+      sanitizerOptions.add('-fno-sanitize-recover=all');
+    }
+    String objectSuffix = sanitizerOptions.isNotEmpty? '.san.o' : '.o';
+    String targetName = sanitizerOptions.isNotEmpty? 'solution-san' : 'solution';
     if (hasCXXFiles) {
       compiler = compilersConfig.cxxCompiler;
       compilerBaseOptions = compilersConfig.cBaseOptions;
@@ -388,7 +406,7 @@ class SubmissionProcessor {
     } else {
       log.fine('successfully linked target $targetName for ${submission.id}');
     }
-    if (withSanitizers)
+    if (sanitizersToUse.isNotEmpty)
       sanitizersBuildTarget = '/build/' + targetName;
     else
       plainBuildTarget = '/build/' + targetName;
@@ -458,9 +476,8 @@ class SubmissionProcessor {
 
     bool runSanitizersTarget =
         !disableValgrindAndSanitizers &&
-        !disableProblemSanitizers() &&
+        getSanitizersList().isNotEmpty &&
         !runTargetIsScript &&
-        compilersConfig.enableSanitizers &&
         sanitizersBuildTarget.isNotEmpty
     ;
     final sanitizersTargetPrefix = 'with-sanitizers';
