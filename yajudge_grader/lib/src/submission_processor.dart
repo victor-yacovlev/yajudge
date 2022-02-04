@@ -742,7 +742,8 @@ class SubmissionProcessor {
     timer.cancel();
     await stdoutListener;
     await stderrListener;
-    final stdoutFile = io.File('${runsDir.path}/$testBaseName.stdout');
+    String stdoutFilePath = '${runsDir.path}/$testBaseName.stdout';
+    final stdoutFile = io.File(stdoutFilePath);
     final stderrFile = io.File('${runsDir.path}/$testBaseName.stderr');
     stdoutFile.writeAsBytesSync(stdout);
     stderrFile.writeAsBytesSync(stderr);
@@ -760,6 +761,26 @@ class SubmissionProcessor {
       else if (problemAnsFile.existsSync()) {
         referenceStdout = problemAnsFile.readAsBytesSync();
         referencePath = problemAnsFile.path;
+      }
+      // Check for checker_options that overrides input files
+      final checkerData = problemChecker().trim().split('\n');
+      final checkerOpts = checkerData.length > 1? checkerData[1].split(' ') : [];
+      for (String opt in checkerOpts) {
+        if (opt.startsWith('stdin=')) {
+          stdinFilePath = runner.submissionWorkingDirectory(submission) + '/$wd/' + opt.substring(6);
+          final stdinFile = io.File(stdinFilePath);
+          stdinData = stdinFile.existsSync()? stdinFile.readAsBytesSync() : [];
+        }
+        if (opt.startsWith('stdout=')) {
+          stdoutFilePath = runner.submissionWorkingDirectory(submission) + '/$wd/' + opt.substring(7);
+          final stdoutFile = io.File(stdoutFilePath);
+          stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
+        }
+        if (opt.startsWith('reference=')) {
+          referencePath = runner.submissionWorkingDirectory(submission) + '/$wd/' + opt.substring(10);
+          final referenceFile = io.File(referencePath);
+          referenceStdout = referenceFile.existsSync()? referenceFile.readAsBytesSync() : [];
+        }
       }
       log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
       resultCheckerMessage = runChecker(arguments,
