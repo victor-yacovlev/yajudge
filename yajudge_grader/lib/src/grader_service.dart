@@ -216,6 +216,13 @@ class GraderService {
         io.File(buildDir+'/.disable_valgrind').createSync(recursive: true);
       if (opts.disableSanitizers)
         io.File(buildDir+'/.disable_sanitizers').createSync(recursive: true);
+
+      GradingLimits limits = opts.limits;
+      String limitsYaml = limitsToYamlString(limits);
+      if (limitsYaml.trim().isNotEmpty) {
+        io.File(buildDir+'/.limits').writeAsStringSync(limitsYaml);
+      }
+
       final gzip = io.gzip;
       int testNumber = 1;
       int testsCount = 0;

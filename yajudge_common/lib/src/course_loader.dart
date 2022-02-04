@@ -195,12 +195,12 @@ class CourseLoader {
       defaultLimits: _defaultLimits,
       sections: sectionsList,
     );
-    courseCache.lastModified = DateTime.now();
+    courseCache.lastChecked = DateTime.now();
     courseCache.loadError = null;
   }
 
   void _loadCourseSection() {
-    String name = _sectionMap['name'] is String? _sectionMap['name'] : '';
+    String title = _sectionMap['title'] is String? _sectionMap['title'] : '';
     String description = _sectionMap['description'] is String? _sectionMap['description'] : '';
     List<Lesson> lessonsList = [];
     YamlList lessons = _sectionMap['lessons'];
@@ -213,14 +213,14 @@ class CourseLoader {
       lessonsList.add(_lesson);
     }
     _section = _section.copyWith((s) {
-      s.name = name;
+      s.name = title;
       s.description = description;
       s.lessons.addAll(lessonsList);
     });
   }
 
   void _loadCourseLesson() {
-    String name = _lessonMap['name'] is String? _lessonMap['name'] : '';
+    String title = _lessonMap['title'] is String? _lessonMap['title'] : '';
     String description = _lessonMap['description'] is String? _lessonMap['description'] : '';
     List<TextReading> readingsList = [];
     List<ProblemData> problemsList = [];
@@ -266,7 +266,7 @@ class CourseLoader {
       }
     }
     _lesson = _lesson.copyWith((l) { 
-      l.name = name;
+      l.name = title;
       l.description = description;
       l.problems.addAll(problemsList);
       l.problemsMetadata.addAll(problemsMetadataList);

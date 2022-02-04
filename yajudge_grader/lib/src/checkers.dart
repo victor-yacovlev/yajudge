@@ -106,15 +106,46 @@ class DoubleSequenceChecker extends AbstractChecker {
     return '';
   }
   bool matchDoubles(String stdout, String reference, double epsilon) {
-    double? observedDouble = double.tryParse(stdout);
+    double? stdoutDouble = double.tryParse(stdout);
     double? referenceDouble = double.tryParse(reference);
-    if (observedDouble==null || referenceDouble==null) {
+    if (stdoutDouble==null || referenceDouble==null) {
       return false;
     }
-    double diff = observedDouble - referenceDouble;
+    double diff = stdoutDouble - referenceDouble;
     if (diff < 0)
       diff *= -1;
     return diff < epsilon;
+  }
+}
+
+class IntSequenceChecker extends AbstractChecker {
+  @override
+  bool get useFiles => false;
+  @override
+  String matchData(List<String> args, List<int> stdin, List<int> stdout, List<int> reference, String workDir, String root, String options) {
+    String stdoutString = utf8.decode(stdout, allowMalformed: true).trim();
+    String referenceString = utf8.decode(reference, allowMalformed: true).trim();
+    final rxDelim = RegExp(r'\s+');
+    final stdoutList = stdoutString.split(rxDelim);
+    final referenceList = referenceString.split(rxDelim);
+    if (stdoutList.length != referenceList.length) {
+      return 'Count of numbers mismatch.\nExpected:\n$referenceList\nGot:\n$stdoutList';
+    }
+    for (int i=0; i<stdoutList.length; i++) {
+      String stdoutValue = stdoutList[i];
+      String referenceValue = referenceList[i];
+      if (!matchInts(stdoutValue, referenceValue))
+        return 'Value mismatch. Expected $referenceValue, got $stdoutValue';
+    }
+    return '';
+  }
+  bool matchInts(String stdout, String reference) {
+    int? observedInt = int.tryParse(stdout);
+    int? referenceInt = int.tryParse(reference);
+    if (observedInt==null || referenceInt==null) {
+      return false;
+    }
+    return observedInt == referenceInt;
   }
 }
 
@@ -122,6 +153,7 @@ class StandardCheckersFactory {
   static final checkers = {
     'text': TextChecker(),
     'double-sequence': DoubleSequenceChecker(),
+    'int-sequence': IntSequenceChecker(),
   };
 
   static AbstractChecker getChecker(String name) {
