@@ -308,11 +308,14 @@ insert into submission_results(
                                killed_by_timer,
                                signal_killed,
                                valgrind_errors,
-                               valgrind_output
+                               valgrind_output,
+                               checker_output
 )
 values (@submissions_id,@test_number,@stdout,@stderr,
         @status,@standard_match,@killed_by_timer,
-        @signal_killed,@valgrind_errors,@valgrind_output)          
+        @signal_killed,
+        @valgrind_errors,@valgrind_output,
+        @checker_output)          
           ''',
           substitutionValues: {
             'submissions_id': request.id.toInt(),
@@ -325,6 +328,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
             'signal_killed': test.signalKilled,
             'valgrind_errors': test.valgrindErrors,
             'valgrind_output': test.valgrindOutput,
+            'checker_output': test.checkerOutput,
           }
         );
       }

@@ -100,27 +100,27 @@ class CourseLoader {
   }
 
   bool requiresToReloadCourse() {
+    if (courseCache.lastChecked==null || courseCache.data==null || courseCache.loadError!=null) {
+      return true;
+    }
+    DateTime lastChecked = courseCache.lastChecked!;
+    DateTime nextCheck = lastChecked.add(ProblemReloadInterval);
     DateTime now = DateTime.now();
-    DateTime nextCheck = now.add(CourseReloadInterval);
-    bool lastCheckTooOld =
-        courseCache.lastChecked != null &&
-        courseCache.lastChecked!.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
-    bool courseWasNotLoaded = courseCache.loadError!=null || courseCache.data==null;
-    return lastCheckTooOld || courseWasNotLoaded;
+    return now.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
   }
 
   bool requiresToReloadProblem(String problemId) {
+    if (!problemsCache.containsKey(problemId)) {
+      return true;
+    }
+    ProblemDataCacheItem item = problemsCache[problemId]!;
+    if (item.lastChecked==null || item.data==null || item.loadError!=null) {
+      return true;
+    }
+    DateTime lastChecked = item.lastChecked!;
+    DateTime nextCheck = lastChecked.add(ProblemReloadInterval);
     DateTime now = DateTime.now();
-    DateTime nextCheck = now.add(ProblemReloadInterval);
-    bool lastCheckTooOld =
-        problemsCache.containsKey(problemId) &&
-        problemsCache[problemId]!.lastChecked != null &&
-        problemsCache[problemId]!.lastChecked!.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
-    bool problemWasNotLoaded =
-        !problemsCache.containsKey(problemId) ||
-        problemsCache[problemId]!.loadError!=null ||
-        problemsCache[problemId]!.data==null;
-    return lastCheckTooOld || problemWasNotLoaded;
+    return now.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
   }
 
   void loadCourse() {

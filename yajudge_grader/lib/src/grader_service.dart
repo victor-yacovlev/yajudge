@@ -181,7 +181,6 @@ class GraderService {
       String testsDir = problemDir.path + '/tests';
       io.Directory(buildDir).createSync(recursive: true);
       io.Directory(testsDir).createSync(recursive: true);
-      problemTimeStampFile.writeAsStringSync('${response.lastModified.toInt()}\n');
       final problemData = response.data;
       final opts = problemData.gradingOptions;
       String compileOptions = opts.extraCompileOptions.join(' ');
@@ -250,6 +249,7 @@ class GraderService {
         testsCount ++;
       }
       io.File(testsDir+"/.tests_count").writeAsStringSync('$testsCount\n');
+      problemTimeStampFile.writeAsStringSync('${response.lastModified.toInt()}\n');
     }
   }
 

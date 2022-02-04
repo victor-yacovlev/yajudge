@@ -204,6 +204,7 @@ message TestResult {
   bool                killed_by_timer= 8;
   string              valgrind_output= 9;
   int32               valgrind_errors=10;
+  string              checker_output= 11;
 }
 
 message Submission {

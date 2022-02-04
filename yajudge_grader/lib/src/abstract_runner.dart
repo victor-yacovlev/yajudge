@@ -14,4 +14,5 @@ abstract class AbstractRunner {
   String submissionWorkingDirectory(Submission submission);
   String submissionProblemDirectory(Submission submission);
   String submissionRootPrefix(Submission submission);
+  String submissionFileSystemRootPrefix(Submission submission);
 }

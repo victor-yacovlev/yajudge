@@ -649,14 +649,17 @@ class SubmissionProcessor {
       arguments = problemArgsFile.readAsStringSync().trim().split(' ');
     }
 
-    List<int>? stdinData;
+    List<int> stdinData = [];
     final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
     final targetStdinFile = io.File('${runsDir.path}/$testBaseName.dat');
+    String stdinFilePath = '';
     if (targetStdinFile.existsSync()) {
       stdinData = targetStdinFile.readAsBytesSync();
+      stdinFilePath = targetStdinFile.path;
     }
     else if (problemStdinFile.existsSync()) {
       stdinData = problemStdinFile.readAsBytesSync();
+      stdinFilePath = problemStdinFile.path;
     }
     io.Process solutionProcess = await runner.start(submission.id.toInt(), firstArgs + arguments,
       workingDirectory: wd,
@@ -669,7 +672,7 @@ class SubmissionProcessor {
       killedByTimeout = true;
       log.fine('submission ${submission.id} ($description) killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
     });
-    if (stdinData != null) {
+    if (stdinData.isNotEmpty) {
       solutionProcess.stdin.add(stdinData);
       await solutionProcess.stdin.flush();
       solutionProcess.stdin.close();
@@ -696,20 +699,29 @@ class SubmissionProcessor {
     final stderrFile = io.File('${runsDir.path}/$testBaseName.stderr');
     stdoutFile.writeAsBytesSync(stdout);
     stderrFile.writeAsBytesSync(stderr);
-    bool resultMatch = false;
+    String resultCheckerMessage = '';
     int signalKilled = 0;
     if (exitStatus >= 0) {
       List<int> referenceStdout = [];
       final problemAnsFile = io.File('$testsPath/$testBaseName.ans');
       final targetAnsFile = io.File('${runsDir.path}/$testBaseName.ans');
+      String referencePath = '';
       if (targetAnsFile.existsSync()) {
         referenceStdout = targetAnsFile.readAsBytesSync();
+        referencePath = targetAnsFile.path;
       }
       else if (problemAnsFile.existsSync()) {
         referenceStdout = problemAnsFile.readAsBytesSync();
+        referencePath = problemAnsFile.path;
       }
       log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
-      resultMatch = runChecker(stdout, stdoutFile.path, referenceStdout, '$testsPath/$testBaseName.ans', wd);
+      resultCheckerMessage = runChecker(arguments,
+          stdinData==null? [] : stdinData, stdinFilePath,
+          stdout, stdoutFile.path,
+          referenceStdout, referencePath,
+          wd);
+      final checkerOutFile = io.File('${runsDir.path}/$testBaseName.checker');
+      checkerOutFile.writeAsStringSync(resultCheckerMessage);
     }
     else if (exitStatus < 0) {
       signalKilled = -exitStatus;
@@ -723,24 +735,34 @@ class SubmissionProcessor {
       stderr: utf8.decode(stderr),
       stdout: utf8.decode(stdout),
       killedByTimer: killedByTimeout,
-      standardMatch: resultMatch,
+      standardMatch: resultCheckerMessage.isEmpty,
+      checkerOutput: resultCheckerMessage,
       signalKilled: signalKilled,
     );
   }
 
-  bool runChecker(List<int> observed, String observedPath, List<int> reference, String referencePath, String wd) {
+  String runChecker(List<String> args,
+      List<int> stdin, String stdinName,
+      List<int> stdout, String stdoutName,
+      List<int> reference, String referenceName,
+      String wd)
+  {
     final checkerData = problemChecker().trim().split('\n');
     final checkerName = checkerData[0];
     final checkerOpts = checkerData.length > 1? checkerData[1] : '';
     wd = path.normalize(
         path.absolute(runner.submissionWorkingDirectory(submission)+'/'+wd)
     );
-    observedPath = path.normalize(
-      path.absolute(observedPath)
-    );
-    referencePath = path.normalize(
-      path.absolute(referencePath)
-    );
+    if (stdinName.isNotEmpty) {
+      stdinName = path.normalize(path.absolute(stdinName));
+    }
+    if (stdoutName.isNotEmpty) {
+      stdoutName = path.normalize(path.absolute(stdoutName));
+    }
+    if (referenceName.isNotEmpty) {
+      referenceName = path.normalize(path.absolute(referenceName));
+    }
+
     AbstractChecker checker;
     if (checkerName.startsWith('=')) {
       String standardCheckerName = checkerName.substring(1);
@@ -756,10 +778,11 @@ class SubmissionProcessor {
     else {
       throw UnimplementedError('dont know how to handle checker $checkerName');
     }
+    String root = runner.submissionFileSystemRootPrefix(submission);
     if (checker.useFiles) {
-      return checker.matchFiles(observedPath, referencePath, wd, checkerOpts);
+      return checker.matchFiles(args, stdinName, stdoutName, referenceName, wd, root, checkerOpts);
     } else {
-      return checker.matchData(observed, reference, wd, checkerOpts);
+      return checker.matchData(args, stdin, stdout, reference, wd, root, checkerOpts);
     }
   }
 

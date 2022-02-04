@@ -91,4 +91,9 @@ class SimpleRunner extends AbstractRunner {
     return submissionWorkingDirectory(submission);
   }
 
+  @override
+  String submissionFileSystemRootPrefix(Submission submission) {
+    return '/';
+  }
+
 }

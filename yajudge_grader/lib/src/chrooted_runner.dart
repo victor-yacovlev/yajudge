@@ -306,4 +306,10 @@ class ChrootedRunner extends AbstractRunner {
     return '/';
   }
 
+  @override
+  String submissionFileSystemRootPrefix(Submission submission) {
+    return submissionPrivateDirectory(submission);
+  }
+
+
 }

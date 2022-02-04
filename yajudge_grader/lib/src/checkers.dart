@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'dart:io' as io;
-import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 
 abstract class AbstractChecker {
   bool get useFiles;
-  bool matchData(List<int> observed, List<int> reference, String workDir, String options) => throw UnimplementedError();
-  bool matchFiles(String observedFileName, String referenceFileName, String workDir, String options) => throw UnimplementedError();
+  String matchData(List<String> args, List<int> stdin, List<int> stdout, List<int> reference, String workDir, String root, String options) => throw UnimplementedError();
+  String matchFiles(List<String> args, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) => throw UnimplementedError();
 }
 
 class PythonChecker extends AbstractChecker {
@@ -15,14 +13,32 @@ class PythonChecker extends AbstractChecker {
   PythonChecker({required this.checkerPy});
 
   @override
-  bool matchFiles(String observedFileName, String referenceFileName, String workDir, String options) {
+  String matchFiles(List<String> args, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) {
     String binDir = path.dirname(io.Platform.script.path);
     String pyWrapper = path.normalize(path.absolute(binDir, '../libexec/', 'checker_wrapper.py'));
     final arguments = [
-      pyWrapper, checkerPy, workDir, observedFileName, referenceFileName
+      pyWrapper, checkerPy, workDir, args.join(' '), stdinName, stdoutName, referenceName
     ];
-    final processResult = io.Process.runSync('python3', arguments, runInShell: true);
-    return processResult.exitCode == 0;
+    Map<String,String> environment = Map.from(io.Platform.environment);
+    environment['YAJUDGE_ROOT'] = root;
+    final processResult = io.Process.runSync(
+        'python3',
+        arguments,
+        environment: environment,
+        runInShell: true,
+    );
+    bool matchOk = processResult.exitCode == 0;
+    if (!matchOk) {
+      String message = processResult.stdout + '\n' + processResult.stderr;
+      message = message.trim();
+      if (message.isEmpty) {
+        message = 'Checker exited with code ${processResult.exitCode}';
+      }
+      return message;
+    }
+    else {
+      return '';
+    }
   }
 
   @override
@@ -31,25 +47,30 @@ class PythonChecker extends AbstractChecker {
 
 class TextChecker extends AbstractChecker {
   @override
-  bool matchData(List<int> observed, List<int> reference, String workDir, String options) {
+  String matchData(List<String> args, List<int> stdin, List<int> stdout, List<int> reference, String workDir, String root, String options) {
     final opts = options.split(' ');
-    final observedString = utf8.decode(observed, allowMalformed: true).trimRight();
+    final stdoutString = utf8.decode(stdout, allowMalformed: true).trimRight();
     final referenceString = utf8.decode(reference, allowMalformed: true).trimRight();
     if (opts.contains('strict')) {
-      return observedString == referenceString;
-    }
-    final observedLines = observedString.trimLeft().split('\n');
-    final referenceLines = referenceString.trimLeft().split('\n');
-    if (observedLines.length != referenceLines.length)
-      return false;
-    for (int i=0; i<observedLines.length; i++) {
-      final a = observedLines[i].trim();
-      final b = referenceLines[i].trim();
-      if (a != b) {
-        return false;
+      if (stdoutString == referenceString) {
+        return '';
+      }
+      else {
+        return 'Text mismatch in strict mode.\nExpected:\n$referenceString\nGot:\n$stdoutString';
       }
     }
-    return true;
+    final stdoutLines = stdoutString.trimLeft().split('\n');
+    final referenceLines = referenceString.trimLeft().split('\n');
+    if (stdoutLines.length != referenceLines.length)
+      return 'Line count mismatch.\nExpected:\n$referenceString\nGot:\n$stdoutString';
+    for (int i=0; i<stdoutLines.length; i++) {
+      final a = stdoutLines[i].trim();
+      final b = referenceLines[i].trim();
+      if (a != b) {
+        return 'Text line mismatch.\nExpected:\n$b\nGot:\n$a';
+      }
+    }
+    return '';
   }
   @override
   bool get useFiles => false;
@@ -59,11 +80,11 @@ class DoubleSequenceChecker extends AbstractChecker {
   @override
   bool get useFiles => false;
   @override
-  bool matchData(List<int> observed, List<int> reference, String workDir, String options) {
-    String observedString = utf8.decode(observed, allowMalformed: true).trim();
+  String matchData(List<String> args, List<int> stdin, List<int> stdout, List<int> reference, String workDir, String root, String options) {
+    String stdoutString = utf8.decode(stdout, allowMalformed: true).trim();
     String referenceString = utf8.decode(reference, allowMalformed: true).trim();
     final rxDelim = RegExp(r'\s+');
-    final observedList = observedString.split(rxDelim);
+    final stdoutList = stdoutString.split(rxDelim);
     final referenceList = referenceString.split(rxDelim);
     double epsilon = 0.000001;
     final opts = options.split(' ');
@@ -73,19 +94,19 @@ class DoubleSequenceChecker extends AbstractChecker {
         epsilon = double.parse(epsilonValue);
       }
     }
-    if (observedList.length != referenceList.length) {
-      return false;
+    if (stdoutList.length != referenceList.length) {
+      return 'Count of numbers mismatch.\nExpected:\n$referenceList\nGot:\n$stdoutList';
     }
-    for (int i=0; i<observedList.length; i++) {
-      String observedValue = observedList[i];
+    for (int i=0; i<stdoutList.length; i++) {
+      String stdoutValue = stdoutList[i];
       String referenceValue = referenceList[i];
-      if (!matchDoubles(observedValue, referenceValue, epsilon))
-        return false;
+      if (!matchDoubles(stdoutValue, referenceValue, epsilon))
+        return 'Value mismatch. Expected $referenceValue, got $stdoutValue, epsilon=$epsilon';
     }
-    return true;
+    return '';
   }
-  bool matchDoubles(String observed, String reference, double epsilon) {
-    double? observedDouble = double.tryParse(observed);
+  bool matchDoubles(String stdout, String reference, double epsilon) {
+    double? observedDouble = double.tryParse(stdout);
     double? referenceDouble = double.tryParse(reference);
     if (observedDouble==null || referenceDouble==null) {
       return false;
