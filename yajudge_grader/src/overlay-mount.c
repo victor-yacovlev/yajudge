@@ -100,19 +100,19 @@ static void process_unmount() {
     strcat(merged_proc, "/proc");
 
     int status = 0;
-    status = umount2(merged_tmp, MNT_FORCE);
+    status = umount2(merged_tmp, MNT_DETACH);
     if (0 != status) {
         perror("Umount /tmp in overlay failed");
     }
-    status = umount2(merged_devshm, MNT_FORCE);
+    status = umount2(merged_devshm, MNT_DETACH);
     if (0 != status) {
         perror("Umount /dev/shm in overlay failed");
     }
-    status = umount2(merged_proc, MNT_FORCE);
+    status = umount2(merged_proc, MNT_DETACH);
     if (0 != status) {
         perror("Umount /proc in overlay failed");
     }
-    status = umount2(merge, MNT_FORCE);
+    status = umount2(merge, MNT_DETACH);
     if (0 != status) {
         perror("Umount overlay failed");
         exit(1);
