@@ -1,12 +1,19 @@
 import 'screen_base.dart';
-import '../utils/utils.dart';
 import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-
-import '../client_app.dart';
 import 'package:flutter/material.dart';
 
 class DashboardScreen extends BaseScreen {
+
+  final CoursesList coursesList;
+
+  DashboardScreen({
+    required User user,
+    required this.coursesList,
+  }): super(loggedUser: user) {
+    print('Logged as user(id=${user.id}), showing Dashboard');
+  }
+
   @override
   State<StatefulWidget> createState() => DashboardScreenState();
 }
@@ -17,27 +24,23 @@ class DashboardScreenState extends BaseScreenState {
   DashboardScreenState() : super(title: 'Главная');
 
   List<Widget> _createMyCourses() {
-    if (AppState.instance.coursesList.courses.isEmpty) {
-      return List.empty();
+    final courses = (widget as DashboardScreen).coursesList.courses;
+    if (courses.isEmpty) {
+      return [];
     }
-    List<Widget> result = List.empty(growable: true);
+    List<Widget> result = [];
     Text title = Text(
       'Мои курсы',
       style: Theme.of(context).textTheme.headline6,
     );
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
-    for (CoursesList_CourseListEntry e in AppState.instance.coursesList.courses) {
+    for (final e in courses) {
       String title = e.course.name;
       String? roleTitle;
       if (e.role != Role.ROLE_STUDENT) {
         roleTitle = 'Вид глазами студента';
       }
       String link = '/' + e.course.urlPrefix + '/';
-      String? subroute = PlatformsUtils.getInstance()
-        .loadSettingsValue('Subroute/' + e.course.urlPrefix);
-      if (subroute != null) {
-        link += subroute;
-      }
       VoidCallback action = () {
         Navigator.pushNamed(context, link);
       };
@@ -48,8 +51,8 @@ class DashboardScreenState extends BaseScreenState {
   }
 
   List<Widget> _createAdminEntries() {
-    if (!isAdministrator()) {
-      return List.empty();
+    if (widget.loggedUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
+      return [];
     }
     List<Widget> result = List.empty(growable: true);
     Text title = Text(
@@ -69,15 +72,6 @@ class DashboardScreenState extends BaseScreenState {
       result.add(button);
     }
     return result;
-  }
-
-  bool isAdministrator() {
-    User? user = AppState.instance.userProfile;
-    if (user == null) {
-      return false;
-    }
-    Role userRole = user.defaultRole;
-    return userRole == Role.ROLE_ADMINISTRATOR;
   }
 
   @override

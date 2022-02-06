@@ -31,7 +31,7 @@ class ProblemDataCacheItem {
   });
 }
 
-TextReading? findReadingByKey(CourseData courseData, String key) {
+TextReading findReadingByKey(CourseData courseData, String key) {
   List<String> parts = key.substring(1).split('/');
   assert (parts.length >= 3);
   for (Section section in courseData.sections) {
@@ -47,10 +47,10 @@ TextReading? findReadingByKey(CourseData courseData, String key) {
       }
     }
   }
-  return null;
+  return TextReading();
 }
 
-ProblemData? findProblemByKey(CourseData courseData, String key) {
+ProblemData findProblemByKey(CourseData courseData, String key) {
   List<String> parts = key.substring(1).split('/');
   assert (parts.length >= 3);
   for (Section section in courseData.sections) {
@@ -66,10 +66,10 @@ ProblemData? findProblemByKey(CourseData courseData, String key) {
       }
     }
   }
-  return null;
+  return ProblemData();
 }
 
-ProblemData? findProblemById(CourseData courseData, String problemId) {
+ProblemData findProblemById(CourseData courseData, String problemId) {
   for (Section section in courseData.sections) {
     for (Lesson lesson in section.lessons) {
       for (ProblemData problem in lesson.problems) {
@@ -79,26 +79,20 @@ ProblemData? findProblemById(CourseData courseData, String problemId) {
       }
     }
   }
-  return null;
+  return ProblemData();
 }
 
-ProblemMetadata? findProblemMetadataByKey(CourseData courseData, String key) {
-  List<String> parts = key.substring(1).split('/');
-  assert (parts.length >= 3);
+ProblemMetadata findProblemMetadataByKey(CourseData courseData, String problemId) {
   for (Section section in courseData.sections) {
-    if (section.id == parts[0]) {
-      for (Lesson lesson in section.lessons) {
-        if (lesson.id == parts[1]) {
-          for (ProblemMetadata problem in lesson.problemsMetadata) {
-            if (problem.id == parts[2]) {
-              return problem;
-            }
-          }
+    for (Lesson lesson in section.lessons) {
+      for (ProblemMetadata problem in lesson.problemsMetadata) {
+        if (problem.id == problemId) {
+          return problem;
         }
       }
     }
   }
-  return null;
+  return ProblemMetadata();
 }
 
 GradingLimits parseDefaultLimits(YamlMap conf) {

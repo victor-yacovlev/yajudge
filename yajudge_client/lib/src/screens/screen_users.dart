@@ -1,11 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
-import '../client_app.dart';
-
 class UsersScreen extends BaseScreen {
+  UsersScreen({required User user}): super(loggedUser: user);
+
   @override
   State<StatefulWidget> createState() => UsersScreenState() ;
 }
@@ -42,7 +43,7 @@ class UsersScreenState extends BaseScreenState {
       });
       return;
     }
-    UserManagementClient service = AppState.instance.usersService;
+    UserManagementClient service = ConnectionController.instance!.usersService;
     service.getUsers(filter).then((UsersList usersList) {
       setState(() {
         _usersToShow = List.from(usersList.users);
@@ -227,7 +228,7 @@ class UsersScreenState extends BaseScreenState {
   }
 
   void _deleteSelectedItems() {
-    UserManagementClient service = AppState.instance.usersService;
+    UserManagementClient service = ConnectionController.instance!.usersService;
     UsersList toDelete = UsersList();
     assert (_usersToShow != null && _usersSelected != null);
     assert (_usersToShow!.length == _usersSelected!.length);

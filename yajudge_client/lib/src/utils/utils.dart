@@ -21,7 +21,8 @@ abstract class PlatformsUtils {
 
   void saveSettingsValue(String key, String? value) => throw 'Not implemented';
   String? loadSettingsValue(String key) => throw 'Not implemented';
-  Uri getApiLocation() => throw 'Not implemented';
+  Uri getGrpcApiUri(List<String>? arguments) => Uri();
+  Uri getWebApiUri(List<String>? arguments) => Uri();
 
   Future<LocalFile?> pickLocalFileOpen(List<String>? allowedSuffices) => throw 'Not implemented';
   void saveLocalFile(String suggestName, List<int> data) => throw 'Not implemented';

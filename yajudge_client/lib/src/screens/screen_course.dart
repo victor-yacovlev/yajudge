@@ -1,30 +1,27 @@
 import 'package:flutter/material.dart';
-import '../utils/utils.dart';
 import '../widgets/course_lessons_tree.dart';
 import '../widgets/unified_widgets.dart';
 import 'screen_base.dart';
+
 import 'package:path/path.dart' as path;
-
 import 'package:yajudge_common/yajudge_common.dart';
-
-import '../client_app.dart';
 
 
 class CourseScreen extends BaseScreen {
-  final String title;
-  final String courseId;
-  final String courseUrl;
-  String? sectionKey;
-  String? lessonKey;
 
-  CourseData? courseData;
+  final Course course;
+  final CourseData courseData;
+  final Section section;
+  final Lesson lesson;
 
-  CourseScreen(this.title, this.courseId, this.courseUrl, {
+  CourseScreen({
+    required User user,
+    required this.course,
+    required this.courseData,
+    required this.section,
+    required this.lesson,
     Key? key,
-    this.sectionKey,
-    this.lessonKey,
-    this.courseData,
-  }) : super(key: key);
+  }) : super(loggedUser: user, key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -36,79 +33,58 @@ class CourseScreen extends BaseScreen {
 class CourseScreenState extends BaseScreenState {
 
   final CourseScreen screen;
-  String? _errorString;
-  Lesson? _currentLesson;
-  Section? _currentSection;
 
-  CourseScreenState(CourseScreen screen)
-      : this.screen=screen, super(title: screen.title);
-
-  void _loadCourseData() {
-    AppState.instance.loadCourseData(screen.courseId)
-        .then((value) => setState((){
-          screen.courseData = value;
-          if (screen.sectionKey != null && screen.lessonKey != null) {
-            findLesson();
-          }
-        }))
-        .onError((err, stackTrace) => setState(() {
-          _errorString = err.toString() + '\n' + stackTrace.toString();
-        }));
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    if (screen.courseData == null) {
-      _loadCourseData();
-    }
-    if (screen.sectionKey != null && screen.lessonKey != null) {
-      findLesson();
-    }
-  }
+  CourseScreenState(CourseScreen screen): this.screen=screen, super(title: screen.course.name);
 
   Widget _buildTreeView(context) {
     CourseLessonsTree tree = CourseLessonsTree(
-      screen.courseData!,
-      screen.courseUrl,
+      screen.courseData,
+      screen.course.urlPrefix,
       callback: _onLessonPicked,
     );
     return tree;
   }
 
   void _onLessonPicked(String sectionKey, String lessonKey) {
-    String url = '/' + screen.courseUrl + '/';
+    String url = screen.course.urlPrefix;
     String subroute = '';
     if (sectionKey.isNotEmpty) {
-      subroute += sectionKey;
-    } else {
-      subroute += '_';
+      subroute += '/' + sectionKey;
     }
     subroute += '/' + lessonKey;
     url += subroute;
+    Section section = Section();
+    Lesson lesson = Lesson();
+    for (Section sectionEntry in screen.courseData.sections) {
+      if (sectionKey == sectionEntry.id) {
+        section = sectionEntry;
+        for (Lesson lessonEntry in section.lessons) {
+          if (lessonKey == lessonEntry.id) {
+            lesson = lessonEntry;
+            break;
+          }
+        }
+        break;
+      }
+    }
     PageRouteBuilder routeBuilder = PageRouteBuilder(
       settings: RouteSettings(name: url),
       pageBuilder: (_a, _b, _c) {
-        return CourseScreen(screen.title, screen.courseId, screen.courseUrl,
-          sectionKey: sectionKey,
-          lessonKey: lessonKey,
+        return CourseScreen(
+          user: widget.loggedUser,
+          course: screen.course,
           courseData: screen.courseData,
+          section: section,
+          lesson: lesson,
         );
       },
       transitionDuration: Duration(seconds: 0),
-    );
-    PlatformsUtils.getInstance().saveSettingsValue(
-      "Subroute/" + screen.courseUrl,
-      subroute,
     );
     Navigator.pushReplacement(context, routeBuilder);
   }
 
   @override
   Widget? buildNavigationWidget(BuildContext context) {
-    if (screen.courseData == null) {
-      return null;
-    }
     Widget treeView = Material(
         child: _buildTreeView(context)
     );
@@ -119,14 +95,6 @@ class CourseScreenState extends BaseScreenState {
       padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
     );
     return leftArea;
-  }
-
-  @override
-  Widget buildCentralWidget(BuildContext context) {
-    if (screen.courseData == null) {
-      return Center(child: Text(_errorString==null? 'Загружается...' : _errorString!));
-    }
-    return _createContentArea(context);
   }
 
   List<Widget> _createCommonLessonInformation(BuildContext context, Lesson lesson) {
@@ -153,20 +121,20 @@ class CourseScreenState extends BaseScreenState {
   }
 
   void _navigateToReading(Section section, Lesson lesson, TextReading reading) {
-    String courseUrl = screen.courseUrl;
+    String courseUrl = screen.course.urlPrefix;
     String sectionId = section.id;
     String lessonId = lesson.id;
     String readingId = reading.id;
-    String location = '/$courseUrl/$sectionId/$lessonId/readings/$readingId';
+    String location = path.normalize('/$courseUrl/$sectionId/$lessonId/readings/$readingId');
     Navigator.pushNamed(context, location);
   }
 
   void _navigateToProblem(Section section, Lesson lesson, ProblemData problem) {
-    String courseId = screen.courseUrl;
+    String courseId = screen.course.urlPrefix;
     String sectionId = section.id;
     String lessonId = lesson.id;
     String problemId = problem.id;
-    String location = '/$courseId/$sectionId/$lessonId/problems/$problemId/statement';
+    String location = path.normalize('/$courseId/$sectionId/$lessonId/problems/$problemId');
     Navigator.pushNamed(context, location);
   }
 
@@ -251,34 +219,15 @@ class CourseScreenState extends BaseScreenState {
     return result;
   }
 
-  void findLesson() {
-    if (screen.sectionKey == null || screen.lessonKey == null) {
-      return null;
-    }
-    if (screen.courseData == null) {
-      return null;
-    }
-    for (Section section in screen.courseData!.sections) {
-      if (section.id == screen.sectionKey) {
-        for (Lesson lesson in section.lessons) {
-          if (lesson.id == screen.lessonKey) {
-            _currentLesson = lesson;
-            _currentSection = section;
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  Widget _createContentArea(BuildContext context) {
-    if (_currentLesson == null || _currentSection == null) {
+  @override
+  Widget buildCentralWidget(BuildContext context) {
+    if (screen.lesson.id.isEmpty) {
       return Text('');
     }
-    List<Widget> items = List.empty(growable: true);
-    items.addAll(_createCommonLessonInformation(context, _currentLesson!));
-    items.addAll(_createReadingsIndex(context, _currentSection!, _currentLesson!));
-    items.addAll(_createProblemsIndex(context, _currentSection!, _currentLesson!));
+    List<Widget> items = [];
+    items.addAll(_createCommonLessonInformation(context, screen.lesson));
+    items.addAll(_createReadingsIndex(context, screen.section, screen.lesson));
+    items.addAll(_createProblemsIndex(context, screen.section, screen.lesson));
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(

@@ -119,44 +119,21 @@ class NativePlatformUtils extends PlatformsUtils {
   }
 
   @override
-  Uri getApiLocation() {
-    String filePath = globalSettingsFilePath('yajudge');
-    io.File file = io.File(filePath);
-    Uri defaultValue = Uri.http('localhost:9095', '/');
-    if (!file.existsSync()) {
-      return defaultValue;
-    }
-    YamlDocument yamlConfig = loadYaml(file.readAsStringSync(), sourceUrl: Uri.file(filePath));
-    YamlNode root = yamlConfig.contents;
-    if (root is YamlMap && root.containsKey('api_url')) {
-      YamlNode valueNode = root['api_url'];
-      if (valueNode is YamlScalar) {
-        Uri? value = Uri.tryParse(valueNode.toString());
-        if (value != null) {
-          return value;
+  Uri getGrpcApiUri(List<String>? arguments) {
+    Uri result = Uri.parse('grpc://localhost:9095/');
+    if (arguments==null)
+      return result;
+    for (String arg in arguments) {
+      Uri candidate = Uri();
+      if (!arg.startsWith('-')) {
+        candidate = Uri.parse(arg);
+        if (candidate.scheme=='grpc') {
+          result = candidate;
+          break;
         }
       }
-      if (valueNode is YamlMap) {
-        String scheme = defaultValue.scheme;
-        String host = defaultValue.host;
-        int port = defaultValue.port;
-        String path = defaultValue.path;
-        if (valueNode.containsKey('scheme')) {
-          scheme = valueNode['scheme'];
-        }
-        if (valueNode.containsKey('host')) {
-          host = valueNode['host'];
-        }
-        if (valueNode.containsKey('port')) {
-          port = valueNode['port'];
-        }
-        if (valueNode.containsKey('path')) {
-          path = valueNode['path'];
-        }
-        return Uri(scheme: scheme, host: host, port: port, path: path);
-      }
     }
-    return defaultValue;
+    return result;
   }
 
   @override

@@ -1,363 +1,320 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:grpc/grpc.dart';
-import 'package:grpc/grpc_connection_interface.dart';
+import 'package:logging/logging.dart';
+import 'screens/screen_course_problem_onepage.dart';
+import 'screens/screen_error.dart';
+import 'controllers/connection_controller.dart';
+import 'controllers/courses_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
+import 'package:path/path.dart' as path;
 
+import 'screens/screen_loading.dart';
 import 'screens/screen_course.dart';
-import 'screens/screen_course_problem.dart';
 import 'screens/screen_course_reading.dart';
 import 'screens/screen_dashboard.dart';
 import 'screens/screen_login.dart';
 import 'screens/screen_users.dart';
 import 'screens/screen_users_edit.dart';
 import 'screens/screen_users_import_csv.dart';
-import 'utils/utils.dart';
-import 'widgets/unified_widgets.dart';
+
 
 class App extends StatefulWidget {
-  final ClientChannelBase clientChannel;
-  App({required this.clientChannel}) : super();
+
+  App() : super();
 
   @override
   State<StatefulWidget> createState() {
-    String? userJson =
-        PlatformsUtils.getInstance().loadSettingsValue('User/object');
-    String? sessionJson =
-        PlatformsUtils.getInstance().loadSettingsValue('Session/object');
-    Session? initialSession;
-    User? initialUser;
-    if (sessionJson != null && sessionJson.isNotEmpty) {
-      initialSession = Session.fromJson(sessionJson);
-    }
-    if (userJson != null && userJson.isNotEmpty) {
-      initialUser = User.fromJson(userJson);
-    }
-    return AppState(initialSession, initialUser, clientChannel);
-  }
-}
-
-typedef void UserChangedCallback(User? user, CoursesList courseList);
-
-class AuthGrpcInterceptor implements ClientInterceptor {
-  String sessionCookie = '';
-
-  @override
-  ResponseStream<R> interceptStreaming<Q, R>(
-      ClientMethod<Q, R> method,
-      Stream<Q> requests,
-      CallOptions options,
-      ClientStreamingInvoker<Q, R> invoker) {
-    return invoker(method, requests, options);
-  }
-
-  @override
-  ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
-      CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
-    CallOptions newOptions =
-        options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
-    return invoker(method, request, newOptions);
+    return AppState();
   }
 }
 
 class AppState extends State<App> {
-  Session? _session;
-  User? _userProfile;
+  String title = 'Yajudge';
+  final log = Logger('AppState');
 
-  CoursesList _coursesList = CoursesList();
-  static AppState? _instance;
-  late final ClientChannelBase clientChannel;
-  late final UserManagementClient usersService;
-  late final CourseManagementClient coursesService;
-  late final SubmissionManagementClient submissionsService;
+  AppState(): super();
 
-  final AuthGrpcInterceptor authGrpcInterceptor = AuthGrpcInterceptor();
-
-  List<UserChangedCallback> _userChangedCallbacks = List.empty(growable: true);
-
-  AppState(Session? initialSession, User? initialUser,
-      ClientChannelBase clientChannel) {
-    _instance = this;
-    this.clientChannel = clientChannel;
-    usersService = UserManagementClient(clientChannel,
-        interceptors: [authGrpcInterceptor]);
-    coursesService = CourseManagementClient(clientChannel,
-        interceptors: [authGrpcInterceptor]);
-    submissionsService = SubmissionManagementClient(clientChannel,
-        interceptors: [authGrpcInterceptor]);
-
-    if (initialSession != null && initialUser != null) {
-      this.session = initialSession;
-      this.userProfile = initialUser;
-    }
-  }
-
-  void _loadCoursesListForUser(User user) {
-    CoursesFilter filter = CoursesFilter()..user = user;
-    coursesService.getCourses(filter).then((CoursesList coursesList) {
-      setState(() {
-        _coursesList = coursesList;
-      });
-      String route = initialRoute;
-      Navigator.pushReplacementNamed(context, route);
-    }).onError((error, stackTrace) {
-      Future.delayed(Duration(seconds: 2), () {
-        // try again
-        _loadCoursesListForUser(user);
-      });
-    });
-  }
-
-  void registerUserChangedCallback(UserChangedCallback cb) {
-    _userChangedCallbacks.add(cb);
-  }
-
-  static AppState get instance {
-    assert(_instance != null);
-    return _instance!;
-  }
-
-  User? get userProfile => _userProfile;
-
-  bool get loggedIn => userProfile != null && session != null;
-
-  set userProfile(User? u) {
-    _userProfile = u;
-    String jsonValue = '';
-    if (u == null) {
-      _session = null;
-      PlatformsUtils.getInstance().saveSettingsValue('Session/object', '');
-    }
-    if (u != null) {
-      jsonValue = json.encode(u.writeToJsonMap());
-      PlatformsUtils.getInstance().saveSettingsValue('User/object', jsonValue);
-      _loadCoursesListForUser(u);
-    }
-  }
-
-  Session? get session => _session;
-
-  CoursesList get coursesList => _coursesList;
-
-  set session(Session? s) {
-    _session = s;
-    authGrpcInterceptor.sessionCookie = s == null ? '' : s.cookie;
-    String jsonValue = '';
-    if (s != null) {
-      jsonValue = json.encode(s.writeToJsonMap());
-    }
-    PlatformsUtils.getInstance().saveSettingsValue('Session/object', jsonValue);
-    if (s == null) {
-      _userProfile = null;
-      PlatformsUtils.getInstance().saveSettingsValue('User/object', '');
-    } else {
-      usersService.getProfile(s).then((User u) => userProfile = u);
-    }
-  }
-
-  String _title = 'Yajudge';
-
-  void setTitle(String title) {
-    _title = title;
-  }
-
-  String get initialRoute {
-    if (_session == null) {
-      return '/login';
-    }
-    Course? defaultCourse;
-    String result = '/';
-    // if (_userProfile!.defaultRole == UserRole_Student) {
-    //   // check if there is only one course available to skip welcome screen
-    //   CoursesService.instance.getCourses(CoursesFilter()..user=_userProfile!)
-    //       .then((CoursesList coursesList) {
-    //         if (coursesList.courses.length == 1) {
-    //           defaultCourse = coursesList.courses.first.course;
-    //         }
-    //   });
-    // }
-    if (defaultCourse != null) {
-      result += defaultCourse.urlPrefix + '/';
-      String? subroute = PlatformsUtils.getInstance()
-          .loadSettingsValue('Subroute/' + defaultCourse.urlPrefix);
-      if (subroute != null) {
-        result += subroute;
-      }
-    }
-    return result;
-  }
-
-  Map<String, WidgetBuilder> createRoutes() {
-    return {
-      '/login': (_) => SizedBox.expand(
-            child: Container(
-                color: Theme.of(context).backgroundColor,
-                child: Center(
-                    child: Container(
-                        constraints: BoxConstraints(
-                          maxHeight: 400,
-                          maxWidth: 800,
-                        ),
-                        color: Theme.of(context).backgroundColor,
-                        child: LoginScreen()))),
-          ),
-      '/': (_) => DashboardScreen(),
-      '/users': (_) => UsersScreen(),
-      '/users/import_csv': (_) => UsersImportCSVScreen(),
-    };
+  Widget buildLoginScreen(BuildContext context, {String returnPath = ''}) {
+    return SizedBox.expand(
+      child: Container(
+          color: Theme.of(context).backgroundColor,
+          child: Center(
+              child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: 400,
+                    maxWidth: 800,
+                  ),
+                  color: Theme.of(context).backgroundColor,
+                  child: LoginScreen(appState: this),
+              )
+          )
+      ),
+    );
   }
 
   Widget generateWidgetForRoute(BuildContext context, RouteSettings settings) {
-    // when no static routes matched
-    final RegExp usersMatch = RegExp(r'/users/(\d+|new|myself)');
-    final String path = settings.name!;
-    if (usersMatch.hasMatch(path)) {
-      final String arg = usersMatch.matchAsPrefix(path)!.group(1)!;
-      return UsersEditScreen(arg);
+    String fullPath = path.normalize(settings.name!);
+    String sessionId = ConnectionController.instance!.sessionCookie;
+
+    log.info('generate widget for route $fullPath and session $sessionId');
+
+    if (sessionId.isEmpty) {
+      return buildLoginScreen(context);
     }
 
-    // text readings of problem on course
-    // Regexp to match:
-    // - group 1: course url prefix
-    // - group 2: section id
-    // - group 3: lesson id
-    // - group 4: 'readings' or 'problems' to choose proper page type
-    // - group 5: part name
-    // - group 6: /tab
-    // - group 7: tab
-    final RegExp rxCoursesLessonParts = RegExp(
-        r'/([0-9a-z_-]+)/([0-9a-z_-]*)/([0-9a-z_-]+)/(readings|problems)/([0-9a-z_-]+)(/(statement|submissions|discussion))?');
-    final RegExpMatch? lessonPartMatch = rxCoursesLessonParts.firstMatch(path);
-    if (lessonPartMatch != null) {
-      final String pathUrlPrefix = lessonPartMatch[1]!;
-      final String sectionId = lessonPartMatch[2]!;
-      final String lessonId = lessonPartMatch[3]!;
-      final String kind = lessonPartMatch[4]!;
-      final String name = lessonPartMatch[5]!;
-      final String key = '/' + sectionId + '/' + lessonId + '/' + name;
+    final futureLoggedUser = ConnectionController.instance!.usersService
+        .getProfile(Session(cookie: sessionId));
 
-      for (CoursesList_CourseListEntry courseEntry in _coursesList.courses) {
-        final String courseDataId = courseEntry.course.dataId;
-        final String courseUrlPrefix = courseEntry.course.urlPrefix;
-        if (courseUrlPrefix == pathUrlPrefix) {
-          if (kind == 'readings') {
-            return CourseReadingScreen(courseDataId, key, null);
-          } else if (kind == 'problems') {
-            String tab = 'statement';
-            if (lessonPartMatch[7] != null) {
-              tab = lessonPartMatch[7]!;
-            }
-            return CourseProblemScreen(courseEntry.course.id.toInt(),
-                courseDataId, key, null, null, tab);
-          }
+    return FutureBuilder(
+      future: futureLoggedUser,
+      builder: (BuildContext context, AsyncSnapshot<User> snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return loadingWaitWidget(context);
         }
-      }
-    }
-
-    // courses have short links names by them ID's
-    // Regexp to match:
-    // - group 1: course url prefix
-    // - group 3: section id
-    // - group 5: level id
-    final RegExp rxCourses =
-        RegExp(r'/([0-9a-z_-]+)(/([0-9a-z_-]*)(/([0-9a-z_-]+))?)?');
-    final RegExpMatch? coursesMatch = rxCourses.firstMatch(path);
-    if (coursesMatch != null) {
-      final int groupCount = coursesMatch.groupCount;
-      final String pathUrlPrefix = coursesMatch.group(1)!;
-      final String? sectionId = groupCount >= 3 ? coursesMatch[3] : null;
-      final String? lessonId = groupCount >= 5 ? coursesMatch[5] : null;
-      for (CoursesList_CourseListEntry courseEntry in _coursesList.courses) {
-        final String courseDataId = courseEntry.course.dataId;
-        final String courseUrlPrefix = courseEntry.course.urlPrefix;
-        if (courseUrlPrefix == pathUrlPrefix) {
-          return CourseScreen(
-            courseEntry.course.name,
-            courseDataId,
-            courseUrlPrefix,
-            sectionKey: sectionId,
-            lessonKey: lessonId,
-          );
-        }
-      }
-    }
-    return Center(
-        child: Container(
-            margin: EdgeInsets.all(50),
-            padding: EdgeInsets.all(20),
-            constraints: BoxConstraints(
-              minWidth: 400,
-              maxHeight: 400,
-            ),
-            decoration: BoxDecoration(
-              border:
-                  Border.all(color: Theme.of(context).errorColor, width: 2.0),
-            ),
-            child:
-                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text('Ошибка 404', style: Theme.of(context).textTheme.headline5),
-              Padding(
-                  child:
-                      Text(path, style: Theme.of(context).textTheme.bodyText1),
-                  padding: EdgeInsets.all(20)),
-              YTextButton('Назад', () {
-                Navigator.pop(context);
-              }, color: Theme.of(context).errorColor)
-            ])));
-  }
-
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    // String initialRoute;
-    // if (_sessionId.isNotEmpty) {
-    //   initialRoute = '/';
-    // } else {
-    //   initialRoute = '/login';
-    // }
-    return MaterialApp(
-      title: _title,
-      theme: ThemeData(
-          colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue)
-              .copyWith(secondary: Colors.deepPurple)),
-      initialRoute: initialRoute,
-      routes: createRoutes(),
-      onGenerateRoute: (RouteSettings settings) {
-        return MaterialPageRoute(
-            settings: settings,
-            builder: (BuildContext context) {
-              return generateWidgetForRoute(context, settings);
-            });
+        final loggedUser = snapshot.requireData;
+        return generateWidgetForPathAndLoggedUser(context, fullPath, loggedUser);
       },
     );
   }
 
-  Future<CourseData> loadCourseData(String courseId) async {
-    CourseContentResponse? cached = null;
-    // await PlatformsUtils.getInstance().findCachedCourse(courseId);
+  Widget generateWidgetForPathAndLoggedUser(BuildContext context, String fullPath, User loggedUser) {
 
-    // TODO remove from production code
-    // cache is null while in development
-    cached = null;
+    log.info('generate widget for path $fullPath and user ${loggedUser.id}');
 
-    CourseContentRequest request = CourseContentRequest()
-      ..courseDataId = courseId;
-    if (cached != null) {
-      request.cachedTimestamp = cached.lastModified;
+    // check if user logged
+    if (fullPath.startsWith('/login') || loggedUser.id == 0) {
+      return buildLoginScreen(context, returnPath: fullPath);
     }
-    late CourseContentResponse response;
-    try {
-      response = await coursesService.getCoursePublicContent(request);
-    } catch (error) {
-      return Future.error(error);
+
+    // check for static paths than do not require additional data but logged user
+    if (fullPath == '/users') {
+      return UsersScreen(user: loggedUser);
     }
-    if (response.status == ContentStatus.NOT_CHANGED) {
-      assert(cached != null);
-      return Future.value(cached!.data);
-    } else {
-      // PlatformsUtils.getInstance().storeCourseInCache(response);
-      return Future.value(response.data);
+    if (fullPath == '/users/import_csv') {
+      UsersImportCSVScreen(loggedInUser: loggedUser);
     }
+    final RegExp usersMatch = RegExp(r'/users/(\d+|new|myself)');
+    if (usersMatch.hasMatch(fullPath)) {
+      final String arg = usersMatch.matchAsPrefix(fullPath)!.group(1)!;
+      return UsersEditScreen(
+          loggedInUser: loggedUser, userIdOrNewOrMyself: arg);
+    }
+
+    final coursesFilter = CoursesFilter(user: loggedUser);
+    final futureCoursesList = ConnectionController.instance!.coursesService
+        .getCourses(coursesFilter);
+
+    return FutureBuilder(
+      future: futureCoursesList,
+      builder: (BuildContext context, AsyncSnapshot<CoursesList> snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return loadingWaitWidget(context);
+        }
+        final coursesList = snapshot.requireData;
+        return generateWidgetForPathAndLoggedUserAndCoursesList(
+            context, fullPath, loggedUser, coursesList
+        );
+      },
+
+    );
+  }
+
+  Widget generateWidgetForPathAndLoggedUserAndCoursesList(
+      BuildContext context,
+      String fullPath,
+      User loggedUser,
+      CoursesList coursesList,
+      )
+  {
+
+    log.info('generate widget for path $fullPath, user ${loggedUser.id} and courses list of size ${coursesList.courses.length}');
+
+    if (fullPath=='/') {
+      return DashboardScreen(user: loggedUser, coursesList: coursesList);
+    }
+
+    if (fullPath.startsWith('/')) {
+      fullPath = fullPath.substring(1);
+    }
+    if (fullPath.endsWith('/')) {
+      fullPath = fullPath.substring(0, fullPath.length-1);
+    }
+    fullPath = path.normalize(fullPath);
+    final pathParts = fullPath.split('/');
+
+    // extract course prefix
+    if (pathParts.isEmpty) {
+      return ErrorScreen('Ошибка 404', fullPath);
+    }
+
+    final courseUrlPrefix = pathParts[0];
+    CoursesList_CourseListEntry courseEntry = CoursesList_CourseListEntry();
+    for (final entry in coursesList.courses) {
+      if (entry.course.urlPrefix == courseUrlPrefix) {
+        courseEntry = entry;
+        break;
+      }
+    }
+    if (courseEntry.course.urlPrefix.isEmpty) {
+      return ErrorScreen('Ошибка 404', fullPath);
+    }
+    final courseTitle = courseEntry.course.name;
+    return FutureBuilder(
+      future: CoursesController.instance!.loadCourseData(courseEntry.course.dataId),
+      builder: (BuildContext context, AsyncSnapshot<CourseData> courseDataFuture) {
+        if (courseDataFuture.connectionState == ConnectionState.done) {
+          CourseData data = courseDataFuture.requireData;
+          return generateWidgetForCourse(context, loggedUser, courseEntry.course, data, pathParts);
+        }
+        else {
+          return LoadingScreen(courseTitle, '');
+        }
+      },
+    );
+  }
+
+  Widget generateWidgetForCourse(BuildContext context, User loggedUser, Course course, CourseData courseData, List<String> parts) {
+
+    log.info('generate widget for  parts $parts, user ${loggedUser.id} and course prefix ${course.urlPrefix}');
+
+    String sourcePath = parts.join('/'); // for error 404 message
+    parts = parts.sublist(1);
+
+    String sectionId = '';
+    String lessonId = '';
+    Section section = Section();
+    Lesson lesson = Lesson();
+
+    if (parts.isNotEmpty) {
+      if (courseData.sections.length == 1 && courseData.sections.single.id.isEmpty) {
+        lessonId = parts[0];
+        parts = parts.sublist(1);
+      }
+      else {
+        sectionId = parts[0];
+        parts = parts.sublist(1);
+        for (Section entry in courseData.sections) {
+          if (entry.id == sectionId) {
+            section = entry;
+            break;
+          }
+        }
+        if (section.id.isEmpty) {
+          return ErrorScreen('Ошибка 404', sourcePath);
+        }
+        if (parts.isNotEmpty) {
+          lessonId = parts[0];
+          parts = parts.sublist(1);
+          for (Lesson entry in section.lessons) {
+            if (entry.id == lessonId) {
+              lesson = entry;
+              break;
+            }
+          }
+          if (lesson.id.isEmpty) {
+            return ErrorScreen('Ошибка 404', sourcePath);
+          }
+        }
+      }
+    }
+    if (parts.isEmpty) {
+      // no more parts in path - return course content with tree
+      return CourseScreen(
+        user: loggedUser,
+        course: course,
+        courseData: courseData,
+        section: section,
+        lesson: lesson,
+      );
+    }
+
+    TextReading textReading = TextReading();
+    ProblemData problemData = ProblemData();
+    ProblemMetadata problemMetadata = ProblemMetadata();
+
+    if (parts.first == 'problems') {
+      // parse problem path and return problem screen
+      parts = parts.sublist(1);
+      if (parts.isEmpty) {
+        // no problem id provided => error 404
+        return ErrorScreen('Ошибка 404', sourcePath);
+      }
+      String problemId = parts[0];
+      parts = parts.sublist(1);
+      problemData = findProblemById(courseData, problemId);
+      problemMetadata = findProblemMetadataByKey(courseData, problemId);
+      if (problemData.id.isEmpty) {
+        return ErrorScreen('Ошибка 404', sourcePath);
+      }
+      String problemScreenState = 'statement';
+      if (parts.isNotEmpty) {
+        problemScreenState = parts[0];
+        parts = parts.sublist(1);
+        if (!['statement', 'submit', 'history'].contains(problemScreenState)) {
+          return ErrorScreen('Ошибка 404', sourcePath);
+        }
+      }
+      return CourseProblemScreenOnePage(
+        user: loggedUser,
+        course: course,
+        courseData: courseData,
+        problemData: problemData,
+        problemMetadata: problemMetadata,
+      );
+    }
+    else if (parts.first == 'readings') {
+      // parse text reading path and return reading screen
+      parts = parts.sublist(1);
+      if (parts.isEmpty) {
+        // no reading id provided => error 404
+        return ErrorScreen('Ошибка 404', sourcePath);
+      }
+      String readingId = parts[0];
+      parts = parts.sublist(1);
+      for (final entry in lesson.readings) {
+        if (entry.id == readingId) {
+          textReading = entry;
+          break;
+        }
+      }
+      if (textReading.id.isEmpty) {
+        return ErrorScreen('Ошибка 404', sourcePath);
+      }
+      return CourseReadingScreen(user: loggedUser, textReading: textReading);
+    }
+
+    // nothing matched - error 404
+    return ErrorScreen('Ошибка 404', sourcePath);
+  }
+
+  ThemeData buildThemeData() {
+    return ThemeData(
+        colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue)
+            .copyWith(secondary: Colors.deepPurple)
+    );
+  }
+
+  Widget loadingWaitWidget(BuildContext context) {
+    return LoadingScreen('', 'Загрузка данных...');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onGenerateRoute = (RouteSettings settings) {
+      return MaterialPageRoute(
+          settings: settings,
+          builder: (BuildContext context) {
+            return generateWidgetForRoute(context, settings);
+          }
+      );
+    };
+    MaterialApp app =  MaterialApp(
+      title: title,
+      theme: buildThemeData(),
+      // home: LoadingScreen('', 'Загрузка данных'),
+      onGenerateRoute: onGenerateRoute,
+      // initialRoute: appState.initialRoot,
+    );
+    return app;
   }
 }
+

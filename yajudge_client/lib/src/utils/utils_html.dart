@@ -57,7 +57,7 @@ class WebPlatformUtils extends PlatformsUtils {
     }
   }
 
-  Uri getApiLocation() {
+  Uri getWebApiUri(List<String>? arguements) {
     String scheme = Uri.base.scheme;
     String host = Uri.base.host;
     int port = Uri.base.port;

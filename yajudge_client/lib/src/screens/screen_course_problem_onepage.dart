@@ -10,31 +10,29 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 
-class CourseProblemScreen extends BaseScreen {
+class CourseProblemScreenOnePage extends BaseScreen {
   final Course course;
   final CourseData courseData;
   final ProblemData problemData;
   final ProblemMetadata problemMetadata;
 
-
-  CourseProblemScreen({
+  CourseProblemScreenOnePage({
     required User user,
     required this.course,
     required this.courseData,
     required this.problemData,
     required this.problemMetadata,
-    required String screenState,
     Key? key
-  }) : super(loggedUser: user, key: key, secondLevelTabId: screenState);
+  }) : super(loggedUser: user, key: key);
 
   @override
-  State<StatefulWidget> createState() => CourseProblemScreenState(this);
+  State<StatefulWidget> createState() => CourseProblemScreenOnePageState(this);
 
 }
 
-class CourseProblemScreenState extends BaseScreenState {
+class CourseProblemScreenOnePageState extends BaseScreenState {
 
-  final CourseProblemScreen screen;
+  final CourseProblemScreenOnePage screen;
 
   String _errorString = '';
   int _submissionsLimit = -1;
@@ -43,7 +41,7 @@ class CourseProblemScreenState extends BaseScreenState {
   List<File> _submissionFiles = [];
   late Timer _statusCheckTimer;
 
-  CourseProblemScreenState(this.screen) : super(title: screen.problemData.title);
+  CourseProblemScreenOnePageState(this.screen) : super(title: screen.problemData.title);
 
   @override
   void initState() {
@@ -51,13 +49,14 @@ class CourseProblemScreenState extends BaseScreenState {
     _submissionFiles = List.from(screen.problemData.solutionFiles.files);
     _submissionsLimit = screen.courseData.maxSubmissionsPerHour;
     _loadSubmissions();
+    _loadSubmissionLimitLeft();
     // TODO replace to use of Notifications API when it will be implemented
     _statusCheckTimer = Timer.periodic(Duration(seconds: 5), (_) {
       if (mounted) {
-        // _loadSubmissions();
+        _loadSubmissions();
+        _loadSubmissionLimitLeft();
       }
     });
-    log.fine('created problem state with tab name ${widget.secondLevelTabId}');
   }
 
   @override
@@ -105,32 +104,12 @@ class CourseProblemScreenState extends BaseScreenState {
     });
   }
 
-  List<SecondLevelNavigationTab> secondLevelNavigationTabs() {
-    Icon statementIcon = Icon(
-        Icons.article_outlined
-    );
-    Icon newSubmissionIcon = Icon(
-      Icons.add_box_outlined
-    );
-    Icon submissionsIcon = Icon(
-        Icons.rule
-    );
-    Icon discussionIcon = Icon(
-        Icons.chat_bubble_outline_rounded
-    );
-    return [
-      SecondLevelNavigationTab('statement', 'Условие задания', statementIcon, buildStatementWidget),
-      SecondLevelNavigationTab('submit', 'Отправка решения', newSubmissionIcon, buildNewSubmissionWidget),
-      SecondLevelNavigationTab('history', 'Предыдущие посылки', submissionsIcon, buildSubmissionsWidget),
-      // SecondLevelNavigationTab('Обсуждение', discussionIcon, buildDiscussionsWidget),
-    ];
-  }
 
   void _saveStatementFile(File file) {
     PlatformsUtils.getInstance().saveLocalFile(file.name, file.data);
   }
 
-  Widget buildStatementWidget(BuildContext context) {
+  List<Widget> buildStatementItems(BuildContext context) {
     List<Widget> contents = List.empty(growable: true);
     TextTheme theme = Theme.of(context).textTheme;
     if (_errorString.isNotEmpty) {
@@ -143,7 +122,7 @@ class CourseProblemScreenState extends BaseScreenState {
     final problemData = screen.problemData;
 
     // TODO add common problem information
-    contents.add(Text('Общая информация', style: theme.headline5));
+    contents.add(Text('Общая информация', style: theme.headline6));
     String hardeness = '';
     if (meta.fullScoreMultiplier == 1.0) {
       hardeness = 'обычная';
@@ -172,7 +151,7 @@ class CourseProblemScreenState extends BaseScreenState {
     contents.add(Text('Статус: ' + problemStatus));
     contents.add(Text('После прохождения тестов: ' + actionsOnPassed));
     contents.add(SizedBox(height: 20));
-    contents.add(Text('Условие', style: theme.headline5));
+    contents.add(Text('Постановка задачи', style: theme.headline6));
     contents.add(
       Container(
         decoration: BoxDecoration(
@@ -205,7 +184,7 @@ class CourseProblemScreenState extends BaseScreenState {
     }
     hasStyleFiles = problemStyleFiles.isNotEmpty;
     if (hasStatementFiles || hasStyleFiles) {
-      contents.add(Text('Файлы задания', style: theme.headline5));
+      contents.add(Text('Файлы задания', style: theme.headline6));
       for (File file in problemData.statementFiles.files + problemStyleFiles) {
         YCardLikeButton button = YCardLikeButton(file.name, () {
           _saveStatementFile(file);
@@ -217,22 +196,7 @@ class CourseProblemScreenState extends BaseScreenState {
       }
     }
 
-    Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
-    double screenWidth = MediaQuery.of(context).size.width;
-    double horizontalMargins = (screenWidth - 950) / 2;
-    if (horizontalMargins < 0) {
-      horizontalMargins = 0;
-    }
-    return SingleChildScrollView(
-      child: Container(
-        child: visible,
-        padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
-        margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
-        constraints: BoxConstraints(
-          minHeight: 300,
-        ),
-      )
-    );
+    return contents;
   }
 
   void _pickFileData(File file) {
@@ -256,7 +220,7 @@ class CourseProblemScreenState extends BaseScreenState {
 
   }
 
-  Widget buildNewSubmissionWidget(BuildContext context) {
+  List<Widget> buildNewSubmissionItems(BuildContext context) {
     List<Widget> contents = [];
     if (_errorString.isNotEmpty) {
       contents.add(Text(_errorString, style: TextStyle(color: Theme.of(context).errorColor)));
@@ -264,7 +228,7 @@ class CourseProblemScreenState extends BaseScreenState {
     TextTheme theme = Theme.of(context).textTheme;
 
     if (_submissionsLimit >= 0) {
-      contents.add(Text('Ограничение на число посылок', style: theme.headline5!));
+      contents.add(Text('Ограничение на число посылок', style: theme.headline6!));
       contents.add(Text('Количество посылок ограничено, тестируйте решение локально перед отправкой. '));
       contents.add(Text('Вы можете отправлять не более ${screen.courseData.maxSubmissionsPerHour} посылок в час. ' ));
       contents.add(Text('Осталось попыток: ${_submissionsLimit}.'));
@@ -275,7 +239,7 @@ class CourseProblemScreenState extends BaseScreenState {
       contents.add(SizedBox(height: 20));
     }
 
-    contents.add(Text('Загрузите файлы нового решения', style: theme.headline5!));
+    contents.add(Text('Выберете файлы нового решения', style: theme.headline6!));
     for (File file in _submissionFiles) {
       String title = file.name;
       String secondLine = '';
@@ -307,25 +271,10 @@ class CourseProblemScreenState extends BaseScreenState {
     }
     contents.add(SizedBox(height: 20));
 
-    Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
-    double screenWidth = MediaQuery.of(context).size.width;
-    double horizontalMargins = (screenWidth - 950) / 2;
-    if (horizontalMargins < 0) {
-      horizontalMargins = 0;
-    }
-    return SingleChildScrollView(
-        child: Container(
-          child: visible,
-          padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
-          margin: EdgeInsets.fromLTRB(horizontalMargins, 20, horizontalMargins, 20),
-          constraints: BoxConstraints(
-            minHeight: 300,
-          ),
-        )
-    );
+    return contents;
   }
 
-  Widget buildSubmissionsWidget(BuildContext context) {
+  List<Widget> buildSubmissionsItems(BuildContext context) {
     List<Widget> contents = [];
     if (_errorString.isNotEmpty) {
       contents.add(Text(_errorString, style: TextStyle(color: Theme.of(context).errorColor)));
@@ -333,10 +282,9 @@ class CourseProblemScreenState extends BaseScreenState {
     TextTheme theme = Theme.of(context).textTheme;
 
     if (_submissionsList.isEmpty) {
-      contents.add(Text('Посылок пока нет', style: theme.headline5!));
+      contents.add(Text('Посылок пока нет'));
     }
     else {
-      contents.add(Text('Предыдущие посылки', style: theme.headline5!));
       List<Submission> submissionsToShow = List.from(_submissionsList);
       submissionsToShow.sort((a, b) {
         if (a.timestamp < b.timestamp) {
@@ -436,6 +384,53 @@ class CourseProblemScreenState extends BaseScreenState {
         ));
       }
     }
+    return contents;
+  }
+
+  String formatDateTime(int timestamp) {
+    DateFormat formatter = DateFormat('yyyy-MM-dd, HH:mm:ss');
+    DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    return formatter.format(dateTime);
+  }
+
+  @override
+  Widget buildCentralWidget(BuildContext context) {
+    final theme = Theme.of(context);
+    List<Widget> contents = [];
+    final mainHeadStyle = theme.textTheme.headline4!.merge(TextStyle(color: theme.primaryColor));
+    final mainHeadPadding = EdgeInsets.fromLTRB(0, 10, 0, 20);
+    final dividerColor = Colors.black38;
+
+    contents.add(Container(
+        padding: mainHeadPadding,
+        child: Text('Условие', style: mainHeadStyle))
+    );
+    contents.addAll(buildStatementItems(context));
+    contents.add(Divider(
+      height: 40,
+      thickness: 2,
+      color: dividerColor,
+    ));
+
+    contents.add(Container(
+      padding: mainHeadPadding,
+      child: Text('Отправка решения', style: mainHeadStyle))
+    );
+    contents.addAll(buildNewSubmissionItems(context));
+    contents.add(_buildSubmitButton(context));
+    contents.add(Divider(
+      height: 40,
+      thickness: 2,
+      color: dividerColor,
+    ));
+
+    contents.add(Container(
+        padding: mainHeadPadding,
+        child: Text('Предыдущие посылки', style: mainHeadStyle))
+    );
+    contents.addAll(buildSubmissionsItems(context));
+
+
     Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
     double screenWidth = MediaQuery.of(context).size.width;
     double horizontalMargins = (screenWidth - 950) / 2;
@@ -453,20 +448,6 @@ class CourseProblemScreenState extends BaseScreenState {
         )
     );
   }
-
-  String formatDateTime(int timestamp) {
-    DateFormat formatter = DateFormat('yyyy-MM-dd, HH:mm:ss');
-    DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-    return formatter.format(dateTime);
-  }
-
-  Widget buildDiscussionsWidget(BuildContext context) {
-    return Text('Discussions');
-  }
-
-
-  @override
-  Widget? buildCentralWidget(BuildContext context) => null;
 
   void _submitSolution() {
     Submission request = Submission(
@@ -490,28 +471,66 @@ class CourseProblemScreenState extends BaseScreenState {
     });
   }
 
-  @override
-  ScreenSubmitAction? submitAction(BuildContext context) {
-    // TODO check for other tabs
+  Widget _buildSubmitButton(BuildContext context) {
+    String disabledTooltip = whySubmissionFilesNotReadyToSend();
+    bool disabled = disabledTooltip.isNotEmpty;
+
+    Color buttonColor;
+    MouseCursor mouseCursor = SystemMouseCursors.click;
+    if (disabled) {
+      // button disabled
+      buttonColor = Theme.of(context).disabledColor.withAlpha(35);
+      mouseCursor = SystemMouseCursors.basic;
+    } else {
+      // use default color
+      buttonColor = Theme.of(context).primaryColor;
+    }
+    Widget button = ElevatedButton(
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all<Color>(buttonColor),
+        mouseCursor: MaterialStateProperty.all<MouseCursor>(mouseCursor),
+      ),
+      child: Container(
+        height: 60,
+        padding: EdgeInsets.all(8),
+        child: Center(
+            child: Text('Отправить решение', style: TextStyle(fontSize: 20, color: Colors.white))
+        ),
+      ),
+      onPressed: disabled? null : _submitSolution,
+    );
+
+    return Tooltip(
+      message: disabledTooltip,
+      child: Container(
+        child: Padding(
+          child: button,
+          padding: EdgeInsets.all(8),
+        )
+      )
+    );
+  }
+
+  String whySubmissionFilesNotReadyToSend() {
     if (_submissionFiles.isEmpty) {
-      return null;
+      return 'Нечего отправлять';
     }
     if (_submissionsLimit == 0) {
-      return null;
+      return 'Исчерпан лимит на количество посылок решения в час';
     }
     bool allFilesFilled = _submissionFiles.isNotEmpty;
     for (File file in _submissionFiles) {
       allFilesFilled &= file.data.isNotEmpty;
     }
     if (!allFilesFilled) {
-      return null;
+      return _submissionFiles.length==1
+          ? 'Не выбран файл для отправки'
+          : 'Не все файлы выбраны для отправки'
+      ;
     }
-    ScreenSubmitAction submitAction = ScreenSubmitAction(
-      title: 'Отправить решение',
-      onAction: _submitSolution,
-    );
-    return submitAction;
+    else {
+      return '';
+    }
   }
-
 
 }

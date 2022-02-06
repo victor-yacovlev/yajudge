@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../client_app.dart';
+import '../controllers/connection_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'screen_base.dart';
 import '../utils/csv_parser.dart';
@@ -13,6 +13,7 @@ import '../widgets/unified_widgets.dart';
 
 
 class UsersImportCSVScreen extends BaseScreen {
+  UsersImportCSVScreen({required User loggedInUser}): super(loggedUser: loggedInUser);
   @override
   State<StatefulWidget> createState() => UsersImportCSVScreenState();
 }
@@ -367,30 +368,30 @@ class UsersImportCSVScreenState extends BaseScreenState {
     }
   }
 
-  bool _sumbitInProgress = false;
+  bool _submitInProgress = false;
   void _submit() {
     setState(() {
-      _sumbitInProgress = true;
+      _submitInProgress = true;
     });
-    UserManagementClient service = AppState.instance.usersService;
+    UserManagementClient service = ConnectionController.instance!.usersService;
     service.batchCreateStudents(UsersList(users: _users)).then((value) {
       setState(() {
         _errorMessage = null;
-        _sumbitInProgress = false;
+        _submitInProgress = false;
         Navigator.pop(context);
       });
     }).onError((error, stackTrace) {
       setState(() {
         _errorMessage = error.toString();
-        _sumbitInProgress = false;
+        _submitInProgress = false;
       });
     });
   }
 
   ScreenSubmitAction? submitAction(BuildContext context) {
     return ScreenSubmitAction(
-      title: _sumbitInProgress? 'Сохранение...' : 'Сохранить',
-      onAction: _users==null || _sumbitInProgress ? null : _submit
+      title: _submitInProgress? 'Сохранение...' : 'Сохранить',
+      onAction: _users==null || _submitInProgress ? null : _submit
     );
   }
 

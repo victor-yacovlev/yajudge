@@ -1,14 +1,22 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
+import '../controllers/connection_controller.dart';
 import '../widgets/expandable_fab.dart';
-import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
-import '../client_app.dart';
-
 abstract class BaseScreen extends StatefulWidget {
-  BaseScreen({Key? key}) : super(key: key) ;
+  final User loggedUser;
+  final bool allowUnauthorized;
+  final String secondLevelTabId;
+
+  BaseScreen({
+    required this.loggedUser,
+    this.allowUnauthorized=false,
+    this.secondLevelTabId='',
+    Key? key
+  }) : super(key: key) ;
 }
 
 class ScreenSubmitAction {
@@ -64,54 +72,65 @@ class ScreenActions {
 }
 
 class SecondLevelNavigationTab {
+  final String id;
   final String title;
   final Icon icon;
   final Widget Function(BuildContext context) builder;
 
-  SecondLevelNavigationTab(this.title, this.icon, this.builder);
+  SecondLevelNavigationTab(this.id, this.title, this.icon, this.builder);
 }
 
-abstract class BaseScreenState extends State<BaseScreen> {
+abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProviderStateMixin {
   String title;
-  final bool isLoginScreen;
-  final bool isFirstScreen;
+  final log = Logger('BaseScreenState');
+
+  final secondLevelNavigationKey = GlobalKey<NavigatorState>();
 
   final double leftNavigationWidthThreshold = 750;
   final double shortProfileNameWidthThreshold = 750;
   final double leftNavigationPadding = 320;
 
-  BaseScreenState({required String title, bool? isLoginScreen, bool? isFirstScreen})
-      : this.title = title,
-        this.isLoginScreen = isLoginScreen!=null? isLoginScreen : false,
-        this.isFirstScreen = isFirstScreen!=null? isFirstScreen : false,
-        super()
-  ;
+  TabController? _secondLevelTabController;
+
+  BaseScreenState({required this.title}) : super();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance!.addPostFrameCallback((timeStamp) {
-      if (!AppState.instance.loggedIn && !isLoginScreen) {
-          setState(() {
-            Navigator.pushReplacementNamed(context, '/login');
-          }
-        );
-      }
-    });
+    final tabs = secondLevelNavigationTabs();
+    if (tabs.isNotEmpty) {
+      _secondLevelTabController = TabController(
+          length: tabs.length,
+          vsync: this,
+      );
+    }
+    // WidgetsBinding.instance!.addPostFrameCallback((timeStamp) {
+    //   if (widget.loggedUser.id==0 && !widget.allowUnauthorized) {
+    //       setState(() {
+    //         Navigator.pushReplacementNamed(context, '/login');
+    //       }
+    //     );
+    //   }
+    // });
+  }
+
+  @override
+  void dispose() {
+    if (_secondLevelTabController != null) {
+      _secondLevelTabController!.dispose();
+    }
+    super.dispose();
   }
 
 
   String _userProfileName(BuildContext context) {
-    if (AppState.instance.userProfile == null) {
+    if (widget.loggedUser.id == 0) {
       return '';
     }
     String visibleName;
     double screenWidth = MediaQuery.of(context).size.width;
-    User user = AppState.instance.userProfile!;
-    if (user.firstName != null &&
-        user.firstName.isNotEmpty &&
-        user.lastName != null &&
-        user.lastName.isNotEmpty)
+    User user = widget.loggedUser;
+    if (user.firstName.isNotEmpty && user.lastName.isNotEmpty)
     {
       if (screenWidth < shortProfileNameWidthThreshold) {
         visibleName = user.firstName[0] + user.lastName[0];
@@ -130,39 +149,20 @@ abstract class BaseScreenState extends State<BaseScreen> {
 
 
   void _doLogout() {
-    AppState app = AppState.instance;
-    app.session = null;
-    Navigator.pushReplacementNamed(context, '/login');
+    ConnectionController.instance!.sessionCookie = '';
+    setState(() {
+      Navigator.pushReplacementNamed(context, '/login');
+    });
   }
 
   void _goToProfile() {
     Navigator.pushNamed(context, '/users/myself');
   }
 
-  void _showProfileActions() {
-    List<Widget> actions = [
-      YTextButton('Профиль', () {
-        Navigator.pop(context);
-        _goToProfile();
-      }, fontSize: 18),
-      YTextButton('Выйти', () {
-        Navigator.pop(context);
-        _doLogout();
-      }, color: Colors.red, fontSize: 18)
-    ];
-    showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) {
-          return AlertDialog(content: Container(
-            height: 100,
-            child: Center(child: Column(children: actions)),
-          ));
-        }
-    );
-  }
-
-  Widget _buildUserProfileWidget(BuildContext context) {
+  Widget? _buildUserProfileWidget(BuildContext context) {
+    if (widget.loggedUser.id==0) {
+      return null;
+    }
     Color profileColor = Colors.white;
     TextStyle textStyle = TextStyle(
       color: profileColor,
@@ -229,7 +229,6 @@ abstract class BaseScreenState extends State<BaseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    Widget central = buildCentralWidget(context);
     ThemeData theme = Theme.of(context);
     TextStyle titleStyle = theme.textTheme.headline5!.merge(TextStyle(
       fontWeight: FontWeight.w500,
@@ -245,15 +244,13 @@ abstract class BaseScreenState extends State<BaseScreen> {
     double availableWidth = MediaQuery.of(context).size.width - 200;
     textPainter.layout(maxWidth: availableWidth);
     bool titleOverflow = textPainter.didExceedMaxLines;
-    int titleMaxLines = 1;
-    bool softWrap = false;
+
     if (titleOverflow) {
       titleStyle = titleStyle.merge(TextStyle(
         fontSize: titleStyle.fontSize! * 0.7
       ));
-      titleMaxLines = 2;
-      softWrap = true;
     }
+
     List<TextSpan> titleWordSpans = List.empty(growable: true);
     List<String> titleWords = title.split(' ');
     for (String titleWord in titleWords) {
@@ -261,8 +258,7 @@ abstract class BaseScreenState extends State<BaseScreen> {
         titleWordSpans.add(TextSpan(text: ' '));
       titleWordSpans.add(TextSpan(text: titleWord));
     }
-    Widget titleItem =
-      Container(
+    Widget titleItem = Container(
         padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
         width: MediaQuery.of(context).size.width - 200,
         child: Row(
@@ -273,18 +269,22 @@ abstract class BaseScreenState extends State<BaseScreen> {
           ],
         )
       );
-    Widget userProfileItem = _buildUserProfileWidget(context);
+    Widget? userProfileItem = _buildUserProfileWidget(context);
     Drawer? drawer;
     Widget? navItem = buildNavigationWidget(context);
-    late Widget body;
+    Widget? body;
+    Widget? central = buildCentralWidget(context);
     if (navItem != null && MediaQuery.of(context).size.width < leftNavigationWidthThreshold) {
       drawer = Drawer(
         child: navItem,
       );
-      body = SingleChildScrollView(
-          child: Padding(child: central, padding: internalPadding())
-      );
-    } else if (navItem != null) {
+      if (central != null) {
+        body = SingleChildScrollView(
+            child: Padding(child: central, padding: internalPadding())
+        );
+      }
+    }
+    else if (navItem != null && central != null) {
       body = Row(
         children: [
           _wrapNavigationFloatBoxPanelMaterial(navItem)!,
@@ -295,19 +295,84 @@ abstract class BaseScreenState extends State<BaseScreen> {
           )
         ],
       );
-    } else {
+    }
+    else if (central != null) {
       body = SingleChildScrollView(
           child: Padding(child: central, padding: internalPadding())
       );
     }
-    List<Tab> tabs = List.empty(growable: true);
-    for (SecondLevelNavigationTab tabData in secondLevelNavigationTabs()) {
-      tabs.add(Tab(text: tabData.title, icon: tabData.icon));
+    final tabs = secondLevelNavigationTabs();
+    List<Widget> tabWidgets = [];
+    List<Tab> tabButtons = [];
+    int selectedIndex = 0;
+    int currentIndex = 0;
+    Map<String, Widget Function(BuildContext context)> tabWidgetsByName = {};
+    for (final tab in tabs) {
+      final builder = tab.builder;
+      // final tabWidget = builder(context);
+      // tabWidgets.add(tabWidget);
+      tabWidgetsByName[tab.id] = builder;
+      tabButtons.add(Tab(
+          text: tab.title,
+          icon: tab.icon,
+      ));
+      if (widget.secondLevelTabId.isNotEmpty && tab.id==widget.secondLevelTabId) {
+        selectedIndex = currentIndex;
+      }
+      currentIndex ++;
     }
-    TabBar? tabBar = tabs.isEmpty? null : TabBar(tabs: tabs);
+    TabBar? tabBar = tabs.isEmpty? null : TabBar(
+      tabs: tabButtons,
+      controller: _secondLevelTabController,
+      onTap: (index) {
+        final tabData = tabs[index];
+        List<String> currentPath = ModalRoute.of(context)!.settings.name!.split('/');
+        String lastPart = currentPath.last;
+        bool isTabLabel = false;
+        for (final testTab in tabs) {
+          if (testTab.id == lastPart) {
+            isTabLabel = true;
+          }
+        }
+        if (isTabLabel && tabData.id.isNotEmpty) {
+          currentPath.removeLast();
+          currentPath.add(tabData.id)
+          String newPath = currentPath.join('/');
+          // secondLevelNavigationKey.currentState!.pushReplacementNamed(tabData.id);
+          setState(() {
+            secondLevelNavigationKey.currentState!.pushReplacementNamed(tabData.id);
+          });
+          //
+          // Navigator.pushReplacementNamed(context, newPath);
+        }
+      },
+    );
+    if (body == null && tabWidgets.isNotEmpty) {
+      _secondLevelTabController!.index = selectedIndex;
+      body = Navigator(
+        key: secondLevelNavigationKey,
+        initialRoute: widget.secondLevelTabId,
+        onGenerateRoute: (RouteSettings settings) {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: tabWidgetsByName[settings.name!]!,
+            // builder: (context) {
+            //   return TabBarView(
+            //   controller: _secondLevelTabController,
+            //   children: tabWidgets,
+            // );
+          );
+        }
+      );
+      log.fine('build screen base with inner navigator initial value ${widget.secondLevelTabId}');
+    }
+    List<Widget> titleRowItems = [titleItem];
+    if (userProfileItem!=null) {
+      titleRowItems.addAll([Spacer(), userProfileItem]);
+    }
     Scaffold scaffold = Scaffold(
       appBar: AppBar(
-        title: Row(children: [titleItem, Spacer(), userProfileItem]),
+        title: Row(children: titleRowItems),
         bottom: tabBar,
       ),
       body: body,
@@ -316,15 +381,11 @@ abstract class BaseScreenState extends State<BaseScreen> {
       drawer: drawer,
       drawerEnableOpenDragGesture: false,
     );
-    DefaultTabController tabController = DefaultTabController(
-        length: tabs.length,
-        child: scaffold
-    );
-    return tabController;
+    return scaffold;
   }
 
   @protected
-  Widget buildCentralWidget(BuildContext context) ;
+  Widget? buildCentralWidget(BuildContext context) => null;
 
   @protected
   ScreenActions? buildPrimaryScreenActions(BuildContext context) => null;
@@ -414,17 +475,6 @@ abstract class BaseScreenState extends State<BaseScreen> {
         ),
         padding: EdgeInsets.all(8),
       )
-    );
-  }
-
-  Widget? _wrapNavigationFloatBoxPanel(Widget? child) {
-    return Container(
-      child: child,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        color: Color.fromARGB(255, 250, 250, 250),
-        borderRadius: BorderRadius.circular(10),
-      ),
     );
   }
 

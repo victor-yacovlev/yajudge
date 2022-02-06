@@ -1,11 +1,15 @@
 import 'package:fixnum/fixnum.dart';
+import '../client_app.dart';
+import '../controllers/connection_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
-import '../client_app.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
-  LoginScreen({Key? key}) : super(key: key);
+
+  final AppState appState;
+
+  LoginScreen({required this.appState, Key? key}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -14,7 +18,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class LoginScreenState extends State<LoginScreen> {
-  UserManagementClient _service = AppState.instance.usersService;
+
   RegExp _emailRegExp = new RegExp(
     r'^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$',
     multiLine: false,
@@ -27,19 +31,18 @@ class LoginScreenState extends State<LoginScreen> {
   String? _errorText;
   bool _buttonDisabled = false;
 
-  LoginScreenState()
-      : _service = AppState.instance.usersService,
-        super();
+  LoginScreenState() : super();
 
   void setError(Object errorObj) {
     _errorText = errorObj.toString();
   }
 
   void processLogin() {
-    _service.authorize(_candidate).then((Session session) {
-      AppState.instance.session = session;
-      Future.delayed(Duration(seconds: 2)).then((value) {
-        Navigator.pushReplacementNamed(context, AppState.instance.initialRoute);
+    ConnectionController.instance!.usersService.authorize(_candidate).then((Session session) {
+      ConnectionController.instance!.sessionCookie = session.cookie;
+      setState(() {
+        print('Successfully logger user(id=${session.userId})');
+        Navigator.pushReplacementNamed(context, '/');
       });
     }).catchError((Object error) {
       setState(() {
@@ -55,7 +58,6 @@ class LoginScreenState extends State<LoginScreen> {
         'Для продолжения работы необходимо войти с использованием '
         'целочисленного ID пользователя или EMail при регистрации.'
     ;
-    Text greetingItem = Text(greetingMessage, textAlign: TextAlign.center);
     String? Function(String? value) loginValidator = (String? value) {
       if (value == null || value.isEmpty) {
         return 'Необходимо указать ID или EMail';
@@ -98,8 +100,6 @@ class LoginScreenState extends State<LoginScreen> {
         processLogin();
       }
     };
-    String loginLabel = 'Логин';
-    String passwordLabel = 'Пароль';
     String loginHint = 'ID пользователя или EMail';
     String passwordHint = 'Пароль';
     String buttonText = 'Войти';
@@ -120,7 +120,7 @@ class LoginScreenState extends State<LoginScreen> {
     );
     loginButton = TextButton(
       child: Text(buttonText.toUpperCase()),
-      onPressed: _buttonDisabled || AppState.instance.session!=null ? null : buttonHandler,
+      onPressed: _buttonDisabled ? null : buttonHandler,
     );
     form = Form(
         key: _formKey,

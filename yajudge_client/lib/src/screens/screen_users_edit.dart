@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import '../client_app.dart';
+import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -11,7 +12,10 @@ import 'package:yajudge_common/yajudge_common.dart';
 class UsersEditScreen extends BaseScreen {
   final String userIdOrNewOrMyself;
 
-  UsersEditScreen(this.userIdOrNewOrMyself): super() ;
+  UsersEditScreen({
+    required User loggedInUser,
+    required this.userIdOrNewOrMyself,
+  }): super(loggedUser: loggedInUser) ;
 
   @override
   State<StatefulWidget> createState() => UserEditScreenState();
@@ -21,59 +25,53 @@ class UsersEditScreen extends BaseScreen {
 class UserEditScreenState extends BaseScreenState {
 
   UserEditScreenState() : super(title: 'Профиль пользователя');
-  String? _errorString;
-  String? _statusText;
-
-  bool get isAdministrator {
-    User myself = AppState.instance.userProfile!;
-    return myself.defaultRole == Role.ROLE_ADMINISTRATOR;
-  }
+  String _errorString = '';
+  String _statusText = '';
 
   bool get isMyself {
-    if (_user == null) {
+    if (_user.id == 0) {
       return false;
     }
-    User myself = AppState.instance.userProfile!;
-    return userId != null && myself.id == userId!;
+    User myself = widget.loggedUser;
+    return myself.id == userId;
   }
 
-  int? get userId {
+  Int64 get userId {
     UsersEditScreen editScreen = widget as UsersEditScreen;
     String arg = editScreen.userIdOrNewOrMyself;
     if (arg == 'new') {
-      return null;
+      return Int64();
     }
     if (arg == 'myself') {
-      return AppState.instance.userProfile!.id.toInt();
+      return widget.loggedUser.id;
     }
     int? id = int.tryParse(arg, radix: 10);
     if (id == null) {
       _errorString = 'Неправильный аргумент';
-      return null;
+      return Int64();
     }
-    return id;
+    return Int64(id);
   }
 
-  User? _user;
+  User _user = User();
 
   void _loadUserProfile() {
-    int? uid = userId;
-    if (uid == null) {
+    if (_user.id == 0) {
       return;
     }
-    UserManagementClient service = AppState.instance.usersService;
+    UserManagementClient service = ConnectionController.instance!.usersService;
     UsersFilter usersFilter = UsersFilter();
-    usersFilter.user = User()..id=Int64(uid);
+    usersFilter.user = User()..id=_user.id;
     service.getUsers(usersFilter).then((UsersList usersList) {
       if (usersList.users.length == 0) {
         setState(() {
           _errorString = 'Нет пользователя с таким ID';
-          _user = null;
+          _user = User();
         });
       } else {
         assert (usersList.users.length == 1);
         setState(() {
-          _errorString = null;
+          _errorString = '';
           _user = usersList.users[0];
           _roleController.text = '';
           _emailController.text = '';
@@ -87,7 +85,7 @@ class UserEditScreenState extends BaseScreenState {
     }).onError((error, stackTrace) {
       setState(() {
         _errorString = error.toString();
-        _user = null;
+        _user = User();
       });
     });
   }
@@ -139,7 +137,7 @@ class UserEditScreenState extends BaseScreenState {
                 ? Theme.of(context).textTheme.bodyText1!.color
                 : Theme.of(context).disabledColor,
           ),
-          onChanged: (_) => setState(() {_checkIsCanSubmit();}),
+          onChanged: (_) => setState(() {_checkIfCanSubmit();}),
         )
     ));
     if (actionWidget != null) {
@@ -156,10 +154,10 @@ class UserEditScreenState extends BaseScreenState {
   }
 
   void _resetPassword() {
-    UserManagementClient service = AppState.instance.usersService;
-    service.resetUserPassword(_user!).then((User changed) {
+    UserManagementClient service = ConnectionController.instance!.usersService;
+    service.resetUserPassword(_user).then((changed) {
       setState(() {
-        _errorString = null;
+        _errorString = '';
         _user = changed;
         _passwordController.text = changed.password;
       });
@@ -174,15 +172,15 @@ class UserEditScreenState extends BaseScreenState {
     if (_passwordController.text.trim().isEmpty) {
       setState(() {
         _errorString = 'Пароль не может быть пустым';
-        _statusText = null;
+        _statusText = '';
       });
       return;
     }
-    _user!.password = _passwordController.text.trim();
-    UserManagementClient service = AppState.instance.usersService;
-    service.changePassword(_user!).then((User changed) {
+    _user.password = _passwordController.text.trim();
+    UserManagementClient service = ConnectionController.instance!.usersService;
+    service.changePassword(_user).then((changed) {
       setState(() {
-        _errorString = null;
+        _errorString = '';
         _user = changed;
         _statusText = 'Пароль успешно изменен';
         _passwordController.text = '';
@@ -190,7 +188,7 @@ class UserEditScreenState extends BaseScreenState {
     }).onError((error, stackTrace) {
       setState(() {
         _errorString = error.toString();
-        _statusText = null;
+        _statusText = '';
       });
     });
   }
@@ -213,7 +211,7 @@ class UserEditScreenState extends BaseScreenState {
           roleItems.add(YTextButton(e.value, () {
             setState(() {
               _roleController.text = e.value;
-              _checkIsCanSubmit();
+              _checkIfCanSubmit();
             });
             Navigator.of(context).pop();
           }));
@@ -246,29 +244,25 @@ class UserEditScreenState extends BaseScreenState {
     return password;
   }
 
-  @override
-  Widget buildCentralWidgetCupertino(BuildContext context) {
-    return _buildCentralWidgetUnified(context);
-  }
 
   @override
-  Widget _buildCentralWidgetUnified(BuildContext context) {
-    List<Widget> items = List.empty(growable: true);
+  Widget buildCentralWidget(BuildContext context) {
+    List<Widget> items = [];
+    bool isAdministrator = widget.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR;
     if (!isAdministrator) {
       items.add(Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Text(
           'Некоторые поля нельзя изменить.'
           ' Обратитесь к лектору курса, если обнаружите неточности.')
       ));
     }
-    if (_user != null) {
-      items.add(_buildFieldItem(context, 'ID пользователя', _userIdController, _user!.id.toString(), false));
+    if (_user.id > 0) {
+      items.add(_buildFieldItem(context, 'ID пользователя', _userIdController, _user.id.toString(), false));
     }
-
-    items.add(_buildFieldItem(context, 'Фамилия', _lastNameController, _user==null? '' : _user!.lastName, isAdministrator));
-    items.add(_buildFieldItem(context, 'Имя', _firstNameController, _user==null? '' : _user!.firstName, isAdministrator));
-    items.add(_buildFieldItem(context, 'Отчество', _midNameController, _user==null || _user!.midName==null ? '' : _user!.midName, isAdministrator));
-    items.add(_buildFieldItem(context, 'Группа', _groupNameController, _user==null || _user!.groupName==null ? '' : _user!.groupName, isAdministrator));
-    items.add(_buildFieldItem(context, 'EMail', _emailController, _user==null || _user!.email==null ? '' : _user!.email, isAdministrator));
+    items.add(_buildFieldItem(context, 'Фамилия', _lastNameController, _user.lastName, isAdministrator));
+    items.add(_buildFieldItem(context, 'Имя', _firstNameController, _user.firstName, isAdministrator));
+    items.add(_buildFieldItem(context, 'Отчество', _midNameController, _user.midName, isAdministrator));
+    items.add(_buildFieldItem(context, 'Группа', _groupNameController, _user.groupName, isAdministrator));
+    items.add(_buildFieldItem(context, 'EMail', _emailController, _user.email, isAdministrator));
 
     String passwordValue = '';
     String? passwordHint = '';
@@ -276,25 +270,27 @@ class UserEditScreenState extends BaseScreenState {
     YTextButton? passwordActionButton = null;
     if (isMyself) {
       passwordEditable = true;
-      if (_user!.password.isNotEmpty) {
-        passwordValue = _user!.password;
+      if (_user.password.isNotEmpty) {
+        passwordValue = _user.password;
         passwordHint = null;
       } else {
         passwordValue = '';
         passwordHint = 'Не отображается, но можно изменить';
       }
       passwordActionButton = YTextButton('Изменить', _changePassword);
-    } else if (isAdministrator && _user!=null) {
+    }
+    else if (isAdministrator && _user.id>0) {
       passwordEditable = false;
-      if (_user!.password!=null && _user!.password.isNotEmpty) {
-        passwordValue = _user!.password;
+      if (_user.password.isNotEmpty) {
+        passwordValue = _user.password;
         passwordHint = null;
       } else {
         passwordValue = '';
         passwordHint = 'Пароль был изменен пользователем';
       }
       passwordActionButton = YTextButton('Сбросить', _resetPassword);
-    } else if (_user == null) {
+    }
+    else if (_user.id == 0) {
       passwordValue = generateRandomPassword();
     }
     items.add(_buildFieldItem(context, 'Пароль', _passwordController,
@@ -302,44 +298,36 @@ class UserEditScreenState extends BaseScreenState {
         hintText: passwordHint,
         actionWidget: passwordActionButton));
 
-
     YTextButton? roleActionButton = null;
     String roleName = '';
     if (isAdministrator) {
       roleActionButton = YTextButton('Изменить', _pickRole);
     }
-    if (_user == null) {
+    if (_user.id == 0) {
       if (_roleController.text.trim().isNotEmpty)
         roleName = _roleController.text.trim();
       else
         roleName = RoleNames[Role.ROLE_STUDENT]!;
-    } else {
-      roleName = RoleNames[_user!.defaultRole]!;
+    }
+    else {
+      roleName = RoleNames[_user.defaultRole]!;
     }
     items.add(_buildFieldItem(context, 'Роль по умолчанию',
         _roleController, roleName, false,
         actionWidget: roleActionButton
     ));
 
-    if (_errorString != null) {
-      items.add(Padding(padding: EdgeInsets.all(10), child: Text(
-        _errorString!,
+    if (_errorString.isNotEmpty) {
+      items.add(Padding(padding: EdgeInsets.all(10), child: Text(_errorString,
         style: TextStyle(color: Theme.of(context).errorColor),
       )));
     }
-    if (_statusText != null) {
-      items.add(Padding(padding: EdgeInsets.all(10), child: Text(
-        _statusText!,
+    if (_statusText.isNotEmpty) {
+      items.add(Padding(padding: EdgeInsets.all(10), child: Text(_statusText,
         style: TextStyle(color: Theme.of(context).primaryColor),
       )));
     }
-
     return Column(children: items);
-  }
-
-  @override
-  Widget buildCentralWidget(BuildContext context) {
-    return _buildCentralWidgetUnified(context);
   }
 
   bool _isSubmitting = false;
@@ -349,12 +337,10 @@ class UserEditScreenState extends BaseScreenState {
     setState(() {
       _isSubmitting = true;
     });
-    User user;
-    if (_user != null) {
-      user = _user!;
-    } else {
-      user = User()..id = Int64(0);
-    }
+    User user = User();
+    if (_user.id > 0) {
+      user = _user;
+    } 
     user.firstName = _firstNameController.text.trim();
     user.lastName = _lastNameController.text.trim();
     user.midName = _midNameController.text.trim();
@@ -363,11 +349,11 @@ class UserEditScreenState extends BaseScreenState {
     user.email = _emailController.text.trim();
     user.defaultRole = _roleByName(_roleController.text.trim());
     user.disabled = false;
-    UserManagementClient service = AppState.instance.usersService;
+    UserManagementClient service = ConnectionController.instance!.usersService;
     service.createOrUpdateUser(user).then((changedUser) {
       setState(() {
         _user = changedUser;
-        _errorString = null;
+        _errorString = '';
         Navigator.pop(context);
       });
       Future.delayed(Duration(milliseconds: 500), () {
@@ -391,22 +377,23 @@ class UserEditScreenState extends BaseScreenState {
     });
   }
 
-  void _checkIsCanSubmit() {
+  void _checkIfCanSubmit() {
     bool canSubmit = false;
     bool firstNameSet = _firstNameController.text.trim().isNotEmpty;
     bool lastNameSet = _lastNameController.text.trim().isNotEmpty;
-    bool passwordSet = _user != null;
-    if (_user == null) {
+    bool passwordSet = _user.id > 0;
+    if (_user.id == 0) {
       passwordSet = _passwordController.text.trim().isNotEmpty;
       canSubmit = firstNameSet && lastNameSet && passwordSet;
-    } else {
+    }
+    else {
       Role newRole = _roleByName(_roleController.text.trim());
-      bool firstNameChanged = _user!.firstName != _firstNameController.text.trim();
-      bool lastNameChanged = _user!.lastName != _lastNameController.text.trim();
-      bool midNameChanged = _user!.midName != _midNameController.text.trim();
-      bool groupNameChanged = _user!.groupName != _groupNameController.text.trim();
-      bool emailChanged = _user!.email != _emailController.text.trim();
-      bool roleChanged = _user!.defaultRole != newRole;
+      bool firstNameChanged = _user.firstName != _firstNameController.text.trim();
+      bool lastNameChanged = _user.lastName != _lastNameController.text.trim();
+      bool midNameChanged = _user.midName != _midNameController.text.trim();
+      bool groupNameChanged = _user.groupName != _groupNameController.text.trim();
+      bool emailChanged = _user.email != _emailController.text.trim();
+      bool roleChanged = _user.defaultRole != newRole;
       bool changed =
           firstNameChanged || lastNameChanged || midNameChanged ||
               groupNameChanged || emailChanged || roleChanged

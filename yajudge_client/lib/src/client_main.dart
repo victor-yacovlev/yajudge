@@ -1,32 +1,24 @@
-import 'package:grpc/grpc_connection_interface.dart';
-import 'package:grpc/grpc_or_grpcweb.dart';
+import 'package:logging/logging.dart';
+
+import 'controllers/courses_controller.dart';
+import 'controllers/connection_controller.dart';
 import 'client_app.dart';
 import 'package:flutter/material.dart';
-import 'utils/utils.dart';
 
 
-void main(List<String>? arguments) async {
+void main(List<String>? arguments) {
+  List<String> args = arguments!=null? arguments : [];
 
-  PlatformsUtils platformsSettings = PlatformsUtils.getInstance();
-  platformsSettings.disableCoursesCache = true;
+  bool verboseLogging = args.contains('--verbose') || args.contains('-v');
+  Logger.root.level = verboseLogging ? Level.ALL : Level.INFO;
+  Logger.root.onRecord.listen((LogRecord record) {
+    print('${record.time} - ${record.loggerName}: ${record.level.name} - ${record.message}');
+  });
+  Logger.root.info('log level set to ${Logger.root.level.name}');
+  ConnectionController.initialize(args);
+  CoursesController.initialize();
 
-  Uri apiLocation = platformsSettings.getApiLocation();
-  if (platformsSettings.isNativeApp() && arguments!=null) {
-    for (String argument in arguments) {
-      if (!argument.startsWith('-')) {
-        apiLocation = Uri.parse(argument);
-      }
-    }
-  }
-
-  ClientChannelBase clientChannel = GrpcOrGrpcWebClientChannel.toSeparatePorts(
-    host: apiLocation.host,
-    grpcPort: apiLocation.port,
-    grpcWebPort: apiLocation.port,
-    grpcTransportSecure: false,
-    grpcWebTransportSecure: apiLocation.scheme=='https',
-  );
-
-  App app = App(clientChannel: clientChannel);
+  App app = App();
   runApp(app);
+
 }
