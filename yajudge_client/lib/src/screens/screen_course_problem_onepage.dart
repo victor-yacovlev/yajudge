@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
+import 'package:yajudge_client/src/screens/screen_submission.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../utils/utils.dart';
@@ -218,8 +219,23 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     });
   }
 
-  void _navigateToSubmission(int submissionId) {
-
+  void _navigateToSubmission(Submission submission) {
+    String currentUrl = ModalRoute.of(context)!.settings.name!;
+    String newUrl = '$currentUrl/${submission.id}';
+    final routeBuilder = PageRouteBuilder(
+      settings: RouteSettings(name: newUrl),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return SubmissionScreen(
+          user: screen.loggedUser,
+          course: screen.course,
+          courseData: screen.courseData,
+          problemData: screen.problemData,
+          problemMetadata: screen.problemMetadata,
+          submission: submission,
+        );
+      }
+    );
+    Navigator.pushReplacement(context, routeBuilder);
   }
 
   List<Widget> buildNewSubmissionItems(BuildContext context) {
@@ -300,9 +316,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           return 0;
         }
       });
-      for (Submission sub in _submissionsList.reversed) {
-        String firstLine = 'ID = ' + sub.id.toString() + ', ' + formatDateTime(sub.timestamp.toInt());
-        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, sub.status);
+      for (Submission submission in _submissionsList.reversed) {
+        String firstLine = 'ID = ' + submission.id.toString() + ', ' + formatDateTime(submission.timestamp.toInt());
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, submission.status);
         String secondLine = statusView.item1;
         IconData iconData = statusView.item2;
         Color iconColor = statusView.item3;
@@ -313,7 +329,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           child: YCardLikeButton(
             firstLine,
             () {
-              _navigateToSubmission(sub.id.toInt());
+              _navigateToSubmission(submission);
             },
             leadingIcon: leadingIcon,
             subtitle: secondLine,
@@ -322,12 +338,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       }
     }
     return contents;
-  }
-
-  String formatDateTime(int timestamp) {
-    DateFormat formatter = DateFormat('yyyy-MM-dd, HH:mm:ss');
-    DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-    return formatter.format(dateTime);
   }
 
   @override
@@ -545,4 +555,10 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
       break;
   }
   return Tuple3(secondLine, iconData, iconColor);
+}
+
+String formatDateTime(int timestamp) {
+  DateFormat formatter = DateFormat('yyyy-MM-dd, HH:mm:ss');
+  DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+  return formatter.format(dateTime);
 }

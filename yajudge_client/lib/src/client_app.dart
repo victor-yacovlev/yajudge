@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:yajudge_client/src/screens/screen_submission.dart';
 import 'screens/screen_course_problem_onepage.dart';
 import 'screens/screen_error.dart';
 import 'controllers/connection_controller.dart';
@@ -279,12 +280,49 @@ class AppState extends State<App> {
       if (problemData.id.isEmpty) {
         return ErrorScreen('Ошибка 404', '');
       }
-      return CourseProblemScreenOnePage(
-        user: loggedUser,
-        course: course,
-        courseData: courseData,
-        problemData: problemData,
-        problemMetadata: problemMetadata,
+      if (parts.isEmpty) {
+        return CourseProblemScreenOnePage(
+          user: loggedUser,
+          course: course,
+          courseData: courseData,
+          problemData: problemData,
+          problemMetadata: problemMetadata,
+        );
+      }
+      int? submissionId = int.tryParse(parts[0]);
+      if (submissionId == null) {
+        return ErrorScreen('Ошибка 404', '');
+      }
+      final submissionsFilter = SubmissionFilter(user: loggedUser, course: course, problemId: problemId);
+      final futureSubmissionsList = ConnectionController.instance!.submissionsService.getSubmissions(submissionsFilter);
+      return FutureBuilder(
+        future: futureSubmissionsList,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            final content = snapshot.requireData as SubmissionList;
+            Submission? submission;
+            for (final sub in content.submissions) {
+              if (sub.id.toInt() == submissionId!) {
+                submission = sub;
+                break;
+              }
+            }
+            if (submission == null) {
+              return ErrorScreen('Ошибка 404', '');
+            }
+            return SubmissionScreen(
+              user: loggedUser,
+              course: course,
+              courseData: courseData,
+              problemData: problemData,
+              problemMetadata: problemMetadata,
+              submission: submission,
+            );
+          }
+          else {
+            return LoadingScreen('Посылка $submissionId', '');
+          }
+        },
       );
     }
     else if (parts.first == 'readings') {

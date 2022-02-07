@@ -452,7 +452,6 @@ message CheckCourseStatusRequest {
   Course  course    = 2;
 }
 
-
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
