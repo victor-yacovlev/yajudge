@@ -19,7 +19,8 @@ const PrivateMethods = [
 const StudentsMethods = [
   'GetProfile', 'ChangePassword',
   'GetCourses', 'GetCoursePublicContent',
-  'CheckSubmissionsCountLimit', 'SubmitProblemSolution', 'GetSubmissions'
+  'CheckSubmissionsCountLimit', 'SubmitProblemSolution', 'GetSubmissions',
+  'CheckCourseStatus'
 ];
 
 const MaxErrorsPerMinute = 3;
