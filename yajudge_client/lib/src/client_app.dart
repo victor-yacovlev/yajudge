@@ -139,14 +139,15 @@ class AppState extends State<App> {
       fullPath = fullPath.substring(0, fullPath.length-1);
     }
     fullPath = path.normalize(fullPath);
-    final pathParts = fullPath.split('/');
+    List<String> pathParts = fullPath.split('/');
 
     // extract course prefix
     if (pathParts.isEmpty) {
-      return ErrorScreen('Ошибка 404', fullPath);
+      return ErrorScreen('Ошибка 404', '');
     }
 
     final courseUrlPrefix = pathParts[0];
+    pathParts = pathParts.sublist(1);
     CoursesList_CourseListEntry courseEntry = CoursesList_CourseListEntry();
     for (final entry in coursesList.courses) {
       if (entry.course.urlPrefix == courseUrlPrefix) {
@@ -155,15 +156,22 @@ class AppState extends State<App> {
       }
     }
     if (courseEntry.course.urlPrefix.isEmpty) {
-      return ErrorScreen('Ошибка 404', fullPath);
+      return ErrorScreen('Ошибка 404', '');
     }
     final courseTitle = courseEntry.course.name;
+    String pathTail = pathParts.join('/');
     return FutureBuilder(
       future: CoursesController.instance!.loadCourseData(courseEntry.course.dataId),
       builder: (BuildContext context, AsyncSnapshot<CourseData> courseDataFuture) {
         if (courseDataFuture.connectionState == ConnectionState.done) {
           CourseData data = courseDataFuture.requireData;
-          return generateWidgetForCourse(context, loggedUser, courseEntry.course, data, pathParts);
+          return generateWidgetForCourse(
+              context,
+              loggedUser,
+              courseEntry.course,
+              data,
+              pathTail,
+          );
         }
         else {
           return LoadingScreen(courseTitle, '');
@@ -172,12 +180,11 @@ class AppState extends State<App> {
     );
   }
 
-  Widget generateWidgetForCourse(BuildContext context, User loggedUser, Course course, CourseData courseData, List<String> parts) {
+  Widget generateWidgetForCourse(BuildContext context, User loggedUser, Course course, CourseData courseData, String sourcePath) {
 
-    log.info('generate widget for  parts $parts, user ${loggedUser.id} and course prefix ${course.urlPrefix}');
+    log.info('generate widget for $sourcePath, user ${loggedUser.id} and course prefix ${course.urlPrefix}');
 
-    String sourcePath = parts.join('/'); // for error 404 message
-    parts = parts.sublist(1);
+    List<String> parts = sourcePath.split('/');
 
     String sectionId = '';
     String lessonId = '';
@@ -188,6 +195,13 @@ class AppState extends State<App> {
       if (courseData.sections.length == 1 && courseData.sections.single.id.isEmpty) {
         lessonId = parts[0];
         parts = parts.sublist(1);
+        section = courseData.sections.single;
+        for (Lesson entry in section.lessons) {
+          if (entry.id == lessonId) {
+            lesson = entry;
+            break;
+          }
+        }
       }
       else {
         sectionId = parts[0];
@@ -199,7 +213,7 @@ class AppState extends State<App> {
           }
         }
         if (section.id.isEmpty) {
-          return ErrorScreen('Ошибка 404', sourcePath);
+          return ErrorScreen('Ошибка 404', '');
         }
         if (parts.isNotEmpty) {
           lessonId = parts[0];
@@ -211,7 +225,7 @@ class AppState extends State<App> {
             }
           }
           if (lesson.id.isEmpty) {
-            return ErrorScreen('Ошибка 404', sourcePath);
+            return ErrorScreen('Ошибка 404', '');
           }
         }
       }
@@ -236,22 +250,14 @@ class AppState extends State<App> {
       parts = parts.sublist(1);
       if (parts.isEmpty) {
         // no problem id provided => error 404
-        return ErrorScreen('Ошибка 404', sourcePath);
+        return ErrorScreen('Ошибка 404', '');
       }
       String problemId = parts[0];
       parts = parts.sublist(1);
       problemData = findProblemById(courseData, problemId);
       problemMetadata = findProblemMetadataByKey(courseData, problemId);
       if (problemData.id.isEmpty) {
-        return ErrorScreen('Ошибка 404', sourcePath);
-      }
-      String problemScreenState = 'statement';
-      if (parts.isNotEmpty) {
-        problemScreenState = parts[0];
-        parts = parts.sublist(1);
-        if (!['statement', 'submit', 'history'].contains(problemScreenState)) {
-          return ErrorScreen('Ошибка 404', sourcePath);
-        }
+        return ErrorScreen('Ошибка 404', '');
       }
       return CourseProblemScreenOnePage(
         user: loggedUser,
@@ -266,7 +272,7 @@ class AppState extends State<App> {
       parts = parts.sublist(1);
       if (parts.isEmpty) {
         // no reading id provided => error 404
-        return ErrorScreen('Ошибка 404', sourcePath);
+        return ErrorScreen('Ошибка 404', '');
       }
       String readingId = parts[0];
       parts = parts.sublist(1);
@@ -277,13 +283,13 @@ class AppState extends State<App> {
         }
       }
       if (textReading.id.isEmpty) {
-        return ErrorScreen('Ошибка 404', sourcePath);
+        return ErrorScreen('Ошибка 404', '');
       }
       return CourseReadingScreen(user: loggedUser, textReading: textReading);
     }
 
     // nothing matched - error 404
-    return ErrorScreen('Ошибка 404', sourcePath);
+    return ErrorScreen('Ошибка 404', '');
   }
 
   ThemeData buildThemeData() {
