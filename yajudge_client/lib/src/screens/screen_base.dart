@@ -481,7 +481,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
   Widget? _wrapNavigationFloatBoxPanelMaterial(Widget? child) {
     return Container(
       child: child,
-      width: 330,
+      width: 450,
       height: MediaQuery.of(context).size.height - 56,
       decoration: BoxDecoration(
         border: Border(right: BorderSide(

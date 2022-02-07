@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:tuple/tuple.dart';
+import 'package:yajudge_client/src/screens/screen_course_problem_onepage.dart';
+import '../controllers/connection_controller.dart';
 import '../widgets/course_lessons_tree.dart';
 import '../widgets/unified_widgets.dart';
 import 'screen_base.dart';
@@ -11,15 +16,17 @@ class CourseScreen extends BaseScreen {
 
   final Course course;
   final CourseData courseData;
-  final Section section;
-  final Lesson lesson;
+  final CourseStatus courseStatus;
+  final String selectedKey;
+  final double navigatorInitialScrollOffset;
 
   CourseScreen({
     required User user,
     required this.course,
     required this.courseData,
-    required this.section,
-    required this.lesson,
+    required this.courseStatus,
+    required this.selectedKey,
+    this.navigatorInitialScrollOffset = 0.0,
     Key? key,
   }) : super(loggedUser: user, key: key);
 
@@ -33,40 +40,62 @@ class CourseScreen extends BaseScreen {
 class CourseScreenState extends BaseScreenState {
 
   final CourseScreen screen;
+  late CourseStatus _courseStatus;
+  late Timer _statusCheckTimer;
 
-  CourseScreenState(CourseScreen screen): this.screen=screen, super(title: screen.course.name);
+  CourseScreenState(CourseScreen screen):
+        this.screen=screen, super(title: screen.course.name) {
+    _courseStatus = screen.courseStatus.clone();
+  }
+
+
+  @override
+  void initState() {
+    super.initState();
+    _statusCheckTimer = Timer.periodic(Duration(seconds: 5), (_) {
+      if (mounted) {
+        // _loadCourseStatus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _statusCheckTimer.cancel();
+    super.dispose();
+  }
+
+  void _updateCourseStatus() {
+    final request = CheckCourseStatusRequest(
+      user: screen.loggedUser,
+      course: screen.course,
+    );
+    ConnectionController.instance!.submissionsService.checkCourseStatus(request)
+    .then((CourseStatus status) {
+      setState(() {
+        _courseStatus = status;
+      });
+    });
+  }
 
   Widget _buildTreeView(context) {
     CourseLessonsTree tree = CourseLessonsTree(
-      screen.courseData,
-      screen.course.urlPrefix,
+      courseData: screen.courseData,
+      courseUrl: screen.course.urlPrefix,
       callback: _onLessonPicked,
+      courseStatus: _courseStatus,
+      selectedKey: screen.selectedKey,
     );
     return tree;
   }
 
-  void _onLessonPicked(String sectionKey, String lessonKey) {
+  void _onLessonPicked(String key, double initialScrollOffset) {
     String url = screen.course.urlPrefix;
     String subroute = '';
-    if (sectionKey.isNotEmpty) {
-      subroute += '/' + sectionKey;
+    if (!key.startsWith('#')) {
+      subroute = path.normalize('/$key');
     }
-    subroute += '/' + lessonKey;
     url += subroute;
-    Section section = Section();
-    Lesson lesson = Lesson();
-    for (Section sectionEntry in screen.courseData.sections) {
-      if (sectionKey == sectionEntry.id) {
-        section = sectionEntry;
-        for (Lesson lessonEntry in section.lessons) {
-          if (lessonKey == lessonEntry.id) {
-            lesson = lessonEntry;
-            break;
-          }
-        }
-        break;
-      }
-    }
     PageRouteBuilder routeBuilder = PageRouteBuilder(
       settings: RouteSettings(name: url),
       pageBuilder: (_a, _b, _c) {
@@ -74,8 +103,9 @@ class CourseScreenState extends BaseScreenState {
           user: widget.loggedUser,
           course: screen.course,
           courseData: screen.courseData,
-          section: section,
-          lesson: lesson,
+          courseStatus: _courseStatus,
+          selectedKey: key,
+          navigatorInitialScrollOffset: initialScrollOffset,
         );
       },
       transitionDuration: Duration(seconds: 0),
@@ -90,11 +120,51 @@ class CourseScreenState extends BaseScreenState {
     );
     Container leftArea = Container(
       // height: MediaQuery.of(context).size.height - 96,
-      width: 300,
+      width: 500,
       child: treeView,
       padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
     );
     return leftArea;
+  }
+
+  List<Widget> _createCommonCourseInformation(BuildContext context) {
+    List<Widget> result = [];
+    final title = Text('О курсе', textAlign: TextAlign.start,
+      style: Theme.of(context).textTheme.headline4!.merge(TextStyle(color: Theme.of(context).textTheme.bodyText1!.color)),
+    );
+    result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 0, 0, 20)));
+
+    final addText = (String text) {
+      result.add(
+        Padding(
+          child: Text(text,
+            style: Theme.of(context).textTheme.bodyText1!.merge(
+              TextStyle(
+                fontSize: 16,
+              )
+            ),
+          ),
+          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
+        )
+      );
+    };
+
+    final status = screen.courseStatus;
+
+    final descriptionLines = screen.courseData.description.split('\n');
+    for (final line in descriptionLines) {
+      addText(line);
+    }
+    addText('Всего в курсе ${status.problemsTotal} задач, ${status.problemsRequired} из которых являются обязательными.');
+    addText('Каждая задача оценивается в баллах, в зависимости от сложности. Максимальный балл за курс равен ${status.scoreMax.toInt()}.');
+
+    final titleStatus = Text('Cтатус прохождения', style: Theme.of(context).textTheme.headline6,);
+    result.add(Padding(child: titleStatus, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
+    addText('Решено ${status.problemsSolved} задач, из них ${status.problemsRequiredSolved} обязательных.');
+    addText('Текущий балл ${status.scoreGot.toInt()} (${(100*status.scoreGot/status.scoreMax).round()}%)');
+    addText('Осталось решить ${status.problemsTotal-status.problemsSolved} задач, из них ${status.problemsRequired-status.problemsRequiredSolved} обязательных.');
+
+    return result;
   }
 
   List<Widget> _createCommonLessonInformation(BuildContext context, Lesson lesson) {
@@ -120,25 +190,23 @@ class CourseScreenState extends BaseScreenState {
     return result;
   }
 
-  void _navigateToReading(Section section, Lesson lesson, TextReading reading) {
+  void _navigateToReading(TextReading reading) {
     String courseUrl = screen.course.urlPrefix;
-    String sectionId = section.id;
-    String lessonId = lesson.id;
+    String lessonPrefix = screen.selectedKey;
     String readingId = reading.id;
-    String location = path.normalize('/$courseUrl/$sectionId/$lessonId/readings/$readingId');
+    String location = path.normalize('/$courseUrl/$lessonPrefix/readings/$readingId');
     Navigator.pushNamed(context, location);
   }
 
-  void _navigateToProblem(Section section, Lesson lesson, ProblemData problem) {
-    String courseId = screen.course.urlPrefix;
-    String sectionId = section.id;
-    String lessonId = lesson.id;
+  void _navigateToProblem(ProblemData problem) {
+    String courseUrl = screen.course.urlPrefix;
+    String lessonPrefix = screen.selectedKey;
     String problemId = problem.id;
-    String location = path.normalize('/$courseId/$sectionId/$lessonId/problems/$problemId');
+    String location = path.normalize('/$courseUrl/$lessonPrefix/problems/$problemId');
     Navigator.pushNamed(context, location);
   }
 
-  List<Widget> _createReadingsIndex(BuildContext context, Section section, Lesson lesson) {
+  List<Widget> _createReadingsIndex(BuildContext context, Lesson lesson) {
     List<Widget> result = List.empty(growable: true);
     if (lesson.readings.isEmpty) {
       return result;
@@ -150,7 +218,7 @@ class CourseScreenState extends BaseScreenState {
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
     for (TextReading reading in lesson.readings) {
       VoidCallback action = () {
-        _navigateToReading(section, lesson, reading);
+        _navigateToReading(reading);
       };
       Icon leadingIcon = Icon(
         Icons.article_outlined,
@@ -169,43 +237,47 @@ class CourseScreenState extends BaseScreenState {
     return result;
   }
 
-  List<Widget> _createProblemsIndex(BuildContext context, Section section, Lesson lesson) {
+  List<Widget> _createProblemsIndex(BuildContext context, Lesson lesson) {
     List<Widget> result = List.empty(growable: true);
     if (lesson.problems.isEmpty) {
       return result;
     }
-    Text title = Text(
-      'Задачи',
-      style: Theme.of(context).textTheme.headline6,
-    );
+    Text title = Text('Задачи', style: Theme.of(context).textTheme.headline6);
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
     for (int i=0; i<lesson.problems.length; i++) {
       ProblemData problem = lesson.problems[i];
       ProblemMetadata metadata = lesson.problemsMetadata[i];
+      ProblemStatus status = findProblemStatus(_courseStatus, problem.id);
       VoidCallback action = () {
-        _navigateToProblem(section, lesson, problem);
+        _navigateToProblem(problem);
       };
-      bool problemPassed = false;  // TODO check for passed problems
       bool problemIsRequired = metadata.blocksNextProblems;
-      bool problemBlocked = false;
+      bool problemBlocked = status.blockedByPrevious;
       IconData iconData;
-      String secondLineText = '';
-      if (problemPassed) {
-        iconData = Icons.check_circle;
-      } else {
-        if (problemBlocked) {
-          iconData = Icons.cancel_outlined;
-          secondLineText = 'Необходимо решить все предыдущие обязательные задачи';
-        } else if (problemIsRequired) {
-          secondLineText = 'Это обязательная задача';
-          iconData = Icons.error_outline;
-        }
-        else {
-          iconData = Icons.radio_button_off_outlined;
+      Color iconColor = Colors.grey;
+      String secondLineText = problemIsRequired? 'Это обязательная задача' : '';
+      String disabledHint = '';
+      if (problemBlocked) {
+        iconData = Icons.cancel_outlined;
+        disabledHint = 'Необходимо решить все предыдущие обязательные задачи';
+        if (screen.loggedUser != Role.ROLE_STUDENT) {
+          disabledHint += '. Но администратор или преподаватель все равно может отправлять решения';
         }
       }
-      Icon leadingIcon = Icon(iconData, size: 36,
-          color: problemPassed? Theme.of(context).primaryColor : Colors.grey);
+      else if (status.lastSolutionStatus != SolutionStatus.ANY_STATUS_OR_NULL) {
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, status.lastSolutionStatus);
+        String secondLine = statusView.item1;
+        iconData = statusView.item2;
+        iconColor = statusView.item3;
+        if (secondLineText.isNotEmpty) {
+          secondLineText += '. ';
+        }
+        secondLineText += secondLine;
+      }
+      else {
+        iconData = problemIsRequired? Icons.error_outline : Icons.radio_button_off_outlined;
+      }
+      Icon leadingIcon = Icon(iconData, size: 36, color: iconColor);
       result.add(Padding(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 8),
         child: YCardLikeButton(
@@ -213,6 +285,8 @@ class CourseScreenState extends BaseScreenState {
           action,
           leadingIcon: leadingIcon,
           subtitle: secondLineText.isNotEmpty? secondLineText : null,
+          disabled: problemBlocked && screen.loggedUser.defaultRole==Role.ROLE_STUDENT,
+          disabledHint: disabledHint,
         ),
       ));
     }
@@ -221,21 +295,24 @@ class CourseScreenState extends BaseScreenState {
 
   @override
   Widget buildCentralWidget(BuildContext context) {
-    if (screen.lesson.id.isEmpty) {
-      return Text('');
-    }
     List<Widget> items = [];
-    items.addAll(_createCommonLessonInformation(context, screen.lesson));
-    items.addAll(_createReadingsIndex(context, screen.section, screen.lesson));
-    items.addAll(_createProblemsIndex(context, screen.section, screen.lesson));
+    if (screen.selectedKey == '#') {
+      items.addAll(_createCommonCourseInformation(context));
+    }
+    else {
+      Lesson lesson = findLessonByKey(screen.courseData, screen.selectedKey);
+      items.addAll(_createCommonLessonInformation(context, lesson));
+      items.addAll(_createReadingsIndex(context, lesson));
+      items.addAll(_createProblemsIndex(context, lesson));
+    }
     return Container(
       padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         // color: Theme.of(context).backgroundColor.withAlpha(30)
       ),
       constraints: BoxConstraints(
-        minWidth: MediaQuery.of(context).size.width - 300,
-        minHeight: MediaQuery.of(context).size.height - 46,
+        minWidth: MediaQuery.of(context).size.width - 500,
+        minHeight: MediaQuery.of(context).size.height - 100,
       ),
       child: Column(
         children: items,

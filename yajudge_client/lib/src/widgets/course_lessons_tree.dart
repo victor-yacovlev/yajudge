@@ -1,71 +1,58 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_treeview/flutter_treeview.dart';
-import '../utils/utils.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
-typedef CourseSelectCallback = void Function(String sectionKey, String lessonKey);
+typedef CourseSelectCallback = void Function(String selectedKey, double initialScrollOffset);
 
 class CourseLessonsTree extends StatefulWidget {
-  final String? sectionKey;
-  final String? lessonKey;
+
   final String courseUrl;
   final CourseData courseData;
+  final CourseStatus courseStatus;
+  final String selectedKey;
   final CourseSelectCallback? callback;
+  final double initialScrollOffset; 
 
   CourseLessonsTree(
-      this.courseData,
-      this.courseUrl,
       {
-        this.sectionKey,
-        this.lessonKey,
+        required this.courseData,
+        required this.courseUrl,
+        required this.courseStatus,
+        required this.selectedKey,
+        this.initialScrollOffset = 0.0,
         this.callback,
         Key? key,
       }
   ) : super(key: key);
 
-  static Map<String,CourseLessonsTreeState> lastStates = Map();
 
   @override
-  State<StatefulWidget> createState() {
-    CourseLessonsTreeState? lastState;
-    if (lastStates.containsKey(courseUrl)) {
-      lastState = lastStates[courseUrl];
-    }
-    CourseLessonsTreeState state = CourseLessonsTreeState(prevState: lastState);
-    lastStates[courseUrl] = state;
-    return state;
-  }
+  State<StatefulWidget> createState() => CourseLessonsTreeState();
 }
 
 class CourseLessonsTreeState extends State<CourseLessonsTree> {
 
-  CourseLessonsTreeState? prevState;
+  late TreeViewController treeViewController;
+  late ScrollController scrollController;
 
-  TreeViewController? treeViewController;
-  ScrollController? scrollController;
+  CourseLessonsTreeState() : super();
 
-  double savedScrollPosition = 0.0;
-  void saveScrollPosition() {
-    if (scrollController != null) {
-      savedScrollPosition = scrollController!.offset;
-    }
+  @override
+  void initState() {
+    super.initState();
+    scrollController = ScrollController(initialScrollOffset: widget.initialScrollOffset);
+    _createTreeViewController(widget.selectedKey, widget.courseStatus);
   }
-
-  CourseLessonsTreeState({this.prevState});
 
   @override
   Widget build(BuildContext context) {
-    if (treeViewController == null) {
-      return Text('Загрузка...');
-    }
     TreeViewTheme theme;
     theme = _createTreeViewTheme(context);
-    assert (treeViewController != null);
+
     TreeView treeView = TreeView(
       primary: false,
       shrinkWrap: true,
-      controller: treeViewController!,
+      controller: treeViewController,
       theme: theme,
       onNodeTap: _navigationNodeSelected,
     );
@@ -77,9 +64,7 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
       ),
       child: treeView,
     );
-    scrollController = ScrollController(
-      initialScrollOffset: prevState==null? 0.0 : prevState!.savedScrollPosition
-    );
+
     SingleChildScrollView scrollView = SingleChildScrollView(
       controller: scrollController,
       scrollDirection: Axis.vertical,
@@ -88,123 +73,113 @@ class CourseLessonsTreeState extends State<CourseLessonsTree> {
     return scrollView;
   }
 
-  String? _selectedKey;
+  void _createTreeViewController(String selectedKey, CourseStatus courseStatus) {
+    if (selectedKey.isEmpty) {
+      selectedKey = '#';
+    }
+    final items = _buildTreeViewControllerItems(selectedKey, courseStatus);
+    treeViewController = TreeViewController(children: items, selectedKey: selectedKey);
+  }
 
-  String? _createTreeViewController(String? selectedKey) {
-    List<Node> firstLevelNodes = List.empty(growable: true);
+  List<Node> _buildTreeViewControllerItems(String selectedKey, CourseStatus courseStatus) {
+    List<Node> firstLevelNodes = [];
     int firstLevelNumber = 1;
+    firstLevelNodes.add(Node(
+      key: '#',
+      label: 'О курсе',
+      icon: Icons.info_outlined,
+    ));
     for (Section section in widget.courseData.sections) {
       String sectionKey = '/' + section.id;
       late List<Node> listToAddLessons;
+      SectionStatus sectionStatus;
+      int sectionIndex = widget.courseData.sections.indexOf(section);
+      sectionStatus = courseStatus.sections[sectionIndex];
       if (section.name.isNotEmpty) {
         List<Node> secondLevelNodes = List.empty(growable: true);
         listToAddLessons = secondLevelNodes;
         int sectionNumber = firstLevelNumber;
-        late bool expanded;
-        if (selectedKey == null && firstLevelNumber == 1) {
+        bool expanded = false;
+        if (firstLevelNumber == 1) {
           expanded = true;
-        } else if (selectedKey != null) {
+        }
+        else if (selectedKey.isNotEmpty) {
           expanded = selectedKey.startsWith(sectionKey);
         }
         firstLevelNumber ++;
         String sectionPrefix = 'Часть ' + sectionNumber.toString();
         String sectionTitle = sectionPrefix + ':\n' + section.name;
+        IconData? sectionIcon;
+
+        if (sectionStatus.completed) {
+          sectionIcon = Icons.done;
+        }
+        int scoreGot = sectionStatus.scoreGot.toInt();
+        int scoreMax = sectionStatus.scoreMax.toInt();
+        sectionTitle += ' ($scoreGot/$scoreMax)';
+
         Node sectionNode = Node(
           label: sectionTitle,
           key: sectionKey,
           children: secondLevelNodes,
           expanded: expanded,
+          icon: sectionIcon,
         );
         firstLevelNodes.add(sectionNode);
       } else {
         listToAddLessons = firstLevelNodes;
       }
       for (Lesson lesson in section.lessons) {
+        int lessonIndex = section.lessons.indexOf(lesson);
+        final lessonStatus = sectionStatus.lessons[lessonIndex];
+
         final String lessonKey = sectionKey + '/' + lesson.id;
-        if (selectedKey == null) {
-          selectedKey = lessonKey;
+        IconData? lessonIcon;
+        Color? lessonIconColor;
+        String lessonTitle = lesson.name;
+
+        if (lessonStatus.completed) {
+          lessonIcon = Icons.check;
         }
+        else if (!lessonStatus.blockedByPrevious && lessonStatus.blocksNext) {
+          lessonIcon = Icons.arrow_forward_sharp;
+        }
+        else {
+          lessonIcon = Icons.circle_outlined;
+          lessonIconColor = Colors.transparent;
+        }
+        int scoreGot = lessonStatus.scoreGot.toInt();
+        int scoreMax = lessonStatus.scoreMax.toInt();
+        lessonTitle += ' ($scoreGot/$scoreMax)';
+
         Node lessonNode = Node(
-          label: lesson.name,
+          label: lessonTitle,
           key: lessonKey,
+          icon: lessonIcon,
+          iconColor: lessonIconColor,
+          selectedIconColor: lessonIconColor,
         );
         listToAddLessons.add(lessonNode);
       }
     }
-    treeViewController = TreeViewController(
-      children: firstLevelNodes,
-      selectedKey: selectedKey,
-    );
-    return selectedKey;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    String? selectedKey;
-    if (widget.sectionKey != null && widget.lessonKey != null) {
-      selectedKey = '/' + widget.sectionKey! + '/' + widget.lessonKey!;
-    }
-    if (prevState != null && prevState!.treeViewController != null) {
-      selectedKey = prevState!.treeViewController!.selectedKey;
-      treeViewController = prevState!.treeViewController!.copyWith(
-        selectedKey: selectedKey
-      );
-      for (Node node in prevState!.treeViewController!.children) {
-        if (node.expanded) {
-          treeViewController = treeViewController!.withExpandToNode(node.key);
-        }
-      }
-    }
-    // if (selectedKey == null) {
-    //   selectedKey = PlatformsUtils.getInstance().loadSettingsValue(
-    //     'selected_lesson/' + widget.courseUrl
-    //   );
-    // }
-    if (treeViewController != null) {
-      if (selectedKey != null) {
-        treeViewController = treeViewController!.copyWith(selectedKey: selectedKey);
-      }
-    }
-    else {
-      selectedKey = _createTreeViewController(selectedKey);
-    }
-    if (prevState == null) {
-      // first load of tree view:  navigate explicitly to selected item
-      Future.delayed(Duration(milliseconds: 100), () {
-        if (selectedKey != null) {
-          setState(() {
-            _navigationNodeSelected(selectedKey!);
-          });
-        }
-      });
-    } else {
-      _selectedKey = selectedKey;
-    }
+    return firstLevelNodes;
   }
 
   void _selectNavItem(String key) {
     setState(() {
       treeViewController =
-          treeViewController!.copyWith(selectedKey: key).withExpandToNode(key);
+          treeViewController.copyWith(selectedKey: key).withExpandToNode(key);
     });
   }
 
   void _navigationNodeSelected(String key) {
-    if (key == _selectedKey) {
+    if (key == widget.selectedKey) {
       return;
     }
-    _selectedKey = key;
-    PlatformsUtils.getInstance().saveSettingsValue(
-      'selected_lesson/' + widget.courseData.id,
-      key,
-    );
     _selectNavItem(key);
-    List<String> parts = key.substring(1).split('/');
-    assert (parts.length == 2);
-    saveScrollPosition();
+    double initialSrollOffset = scrollController.offset;
     if (widget.callback != null) {
-      widget.callback!(parts[0], parts[1]);
+      widget.callback!(key, initialSrollOffset);
     }
   }
 

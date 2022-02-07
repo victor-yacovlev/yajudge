@@ -21,34 +21,164 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   });
 
   @override
-  Future<CheckCourseStatusResponse> checkCourseStatus(ServiceCall call, CheckCourseStatusRequest request) async {
-    Map<String,SolutionStatus> result = Map();
-    List<dynamic> rows = await connection.query(
-      '''
-      select problem_id,status from submissions
-      where users_id=%users_id and courses_id=%courses_id
+  Future<CourseStatus> checkCourseStatus(ServiceCall call, CheckCourseStatusRequest request) async {
+    final user = request.user;
+    final course = request.course;
+    final courseDataId = course.dataId;
+
+    final usersId = user.id.toInt();
+    final coursesId = course.id.toInt();
+
+    Map<String,SolutionStatus> statuses = {};
+    Map<String,Int64> timestamps = {};
+
+    List<dynamic> rows = [];
+
+    try {
+      rows = await connection.query(
+          '''
+      select problem_id,status,timestamp from submissions
+      where users_id=@users_id and courses_id=@courses_id
       order by timestamp 
       ''',
-      substitutionValues: {
-        'users_id': request.user.id.toInt(),
-        'courses_id': request.course.id.toInt(),
-      }
-    );
+          substitutionValues: {
+            'users_id': usersId,
+            'courses_id': coursesId,
+          }
+      );
+    } catch (error) {
+      log.severe('sql query at checkCourseStatus: $error');
+    }
+
+    final finalStatuses = [SolutionStatus.OK, SolutionStatus.DISQUALIFIED];
     for (List<dynamic> fields in rows) {
       String problemId = fields[0];
       SolutionStatus status = SolutionStatus.valueOf(fields[1])!;
-      if (result.containsKey(problemId)) {
-        if (status!=SolutionStatus.OK && status!=SolutionStatus.DISQUALIFIED && status!=SolutionStatus.PLAGIARISM_DETECTED) {
-          result[problemId] = status;
+      Int64 timestamp = Int64(fields[2]);
+      if (statuses.containsKey(problemId)) {
+        statuses[problemId] = status;
+        final previousStatus = statuses[problemId];
+        if (!finalStatuses.contains(previousStatus)) {
+          statuses[problemId] = status;
+          timestamps[problemId] = timestamp;
         }
       } else {
-        result[problemId] = status;
+        statuses[problemId] = status;
       }
     }
-    return CheckCourseStatusResponse(
-      problemStatuses: result.entries.map((e) => ProblemStatus(
-          problemId: e.key, status: e.value
-      ))
+    final courseData = parent.courseManagementService.getCourseData(courseDataId);
+    double courseScoreGot = 0.0;
+    double courseScoreMax = 0.0;
+    bool courseCompleted = true;
+    int problemsTotal = 0;
+    int problemsRequired = 0;
+    int problemsSolved = 0;
+    int problemsRequiredSolved = 0;
+
+    List<SectionStatus> sectionStatuses = [];
+    for (final section in courseData.sections) {
+      double sectionScoreGot = 0.0;
+      double sectionScoreMax = 0.0;
+      bool sectionBlocked = !courseCompleted;
+      bool sectionCompleted = true;
+
+      List<LessonStatus> lessonStatuses = [];
+      for (final lesson in section.lessons) {
+        double lessonScoreGot = 0.0;
+        double lessonScoreMax = 0.0;
+        bool lessonBlocked = !sectionCompleted;
+        bool lessonCompleted = true;
+
+        List<ProblemStatus> problemStatuses = [];
+        for (final problemMetadata in lesson.problemsMetadata) {
+          problemsTotal ++;
+          if (problemMetadata.blocksNextProblems) {
+            problemsRequired ++;
+          }
+          final problemId = problemMetadata.id;
+          bool problemCompleted;
+          bool problemBlocked = !lessonCompleted;
+          double problemScoreGot = 0.0;
+          double problemScoreMax = 100.0 * problemMetadata.fullScoreMultiplier;
+          Int64 problemSubmitted = Int64(0);
+          SolutionStatus lastSolutionStatus = SolutionStatus.ANY_STATUS_OR_NULL;
+          if (statuses.containsKey(problemMetadata.id)) {
+            final problemStatus = statuses[problemId];
+            if (timestamps.containsKey(problemId)) {
+              problemSubmitted = timestamps[problemId]!;
+            }
+            lastSolutionStatus = problemStatus!;
+            problemCompleted = problemStatus==SolutionStatus.OK;
+            if (problemCompleted) {
+              // TODO check for deadlines
+              problemScoreGot = problemScoreMax;
+              problemsSolved ++;
+              if (problemMetadata.blocksNextProblems) {
+                problemsRequiredSolved ++;
+              }
+            }
+          }
+          else {
+            problemCompleted = false;
+          }
+
+          lessonScoreGot += problemScoreGot;
+          lessonScoreMax += problemScoreMax;
+          sectionScoreGot += problemScoreGot;
+          sectionScoreMax += problemScoreMax;
+          courseScoreGot += problemScoreGot;
+          courseScoreMax += problemScoreMax;
+          if (problemMetadata.blocksNextProblems && !problemCompleted) {
+            lessonCompleted = false;
+            sectionCompleted = false;
+            courseCompleted = false;
+          }
+
+          problemStatuses.add(ProblemStatus(
+            problemId: problemId,
+            scoreGot: problemScoreGot,
+            scoreMax: problemScoreMax,
+            blockedByPrevious: problemBlocked,
+            blocksNext: problemMetadata.blocksNextProblems,
+            completed: problemCompleted,
+            submitted: problemSubmitted,
+            lastSolutionStatus: lastSolutionStatus,
+          ));
+        }
+
+        lessonStatuses.add(LessonStatus(
+          lessonId: lesson.id,
+          completed: lessonCompleted,
+          blocksNext: !lessonCompleted,
+          blockedByPrevious: lessonBlocked,
+          scoreGot: lessonScoreGot,
+          scoreMax: lessonScoreMax,
+          problems: problemStatuses,
+        ));
+
+      }
+
+      sectionStatuses.add(SectionStatus(
+        sectionId: section.id,
+        completed: sectionCompleted,
+        blocksNext: false, // TODO add course-specific parameter
+        scoreGot: sectionScoreGot,
+        scoreMax: sectionScoreMax,
+        lessons: lessonStatuses,
+      ));
+
+    }
+
+    return CourseStatus(
+      course: course,
+      user: user,
+      scoreGot: courseScoreGot,
+      scoreMax: courseScoreMax,
+      sections: sectionStatuses,
+      problemsRequired: problemsRequired,
+      problemsSolved: problemsSolved,
+      problemsTotal: problemsTotal,
+      problemsRequiredSolved: problemsRequiredSolved,
     );
   }
 
@@ -147,7 +277,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       conditions.add('problem_id=@problem_id');
       queryArguments['problem_id'] = request.problemId;
     }
-    if (request.status != SolutionStatus.ANY_STATUS) {
+    if (request.status != SolutionStatus.ANY_STATUS_OR_NULL) {
       conditions.add('status=@status');
       queryArguments['status'] = request.status.value;
     }

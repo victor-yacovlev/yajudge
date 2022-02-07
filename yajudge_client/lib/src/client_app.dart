@@ -6,6 +6,7 @@ import 'controllers/connection_controller.dart';
 import 'controllers/courses_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart' as path;
+import 'package:tuple/tuple.dart';
 
 import 'screens/screen_loading.dart';
 import 'screens/screen_course.dart';
@@ -160,16 +161,27 @@ class AppState extends State<App> {
     }
     final courseTitle = courseEntry.course.name;
     String pathTail = pathParts.join('/');
+    final courseContentGenerator = () async {
+      final futureData = CoursesController.instance!.loadCourseData(courseEntry.course.dataId);
+      final statusRequest = CheckCourseStatusRequest(
+        user: loggedUser,
+        course: courseEntry.course,
+      );
+      final futureStatus = ConnectionController.instance!.submissionsService.checkCourseStatus(statusRequest);
+      return Tuple2(await futureData, await futureStatus);
+    };
+    final futureCourseContent = courseContentGenerator();
     return FutureBuilder(
-      future: CoursesController.instance!.loadCourseData(courseEntry.course.dataId),
-      builder: (BuildContext context, AsyncSnapshot<CourseData> courseDataFuture) {
-        if (courseDataFuture.connectionState == ConnectionState.done) {
-          CourseData data = courseDataFuture.requireData;
+      future: futureCourseContent,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          final content = snapshot.requireData as Tuple2<CourseData,CourseStatus>;
           return generateWidgetForCourse(
               context,
               loggedUser,
               courseEntry.course,
-              data,
+              content.item1,
+              content.item2,
               pathTail,
           );
         }
@@ -180,7 +192,7 @@ class AppState extends State<App> {
     );
   }
 
-  Widget generateWidgetForCourse(BuildContext context, User loggedUser, Course course, CourseData courseData, String sourcePath) {
+  Widget generateWidgetForCourse(BuildContext context, User loggedUser, Course course, CourseData courseData, CourseStatus courseStatus, String sourcePath) {
 
     log.info('generate widget for $sourcePath, user ${loggedUser.id} and course prefix ${course.urlPrefix}');
 
@@ -230,14 +242,22 @@ class AppState extends State<App> {
         }
       }
     }
+
     if (parts.isEmpty) {
       // no more parts in path - return course content with tree
+      String selectedKey = '';
+      if (section.id.isNotEmpty) {
+        selectedKey += sectionId + '/';
+      }
+      if (lesson.id.isNotEmpty) {
+        selectedKey += lesson.id;
+      }
       return CourseScreen(
         user: loggedUser,
         course: course,
         courseData: courseData,
-        section: section,
-        lesson: lesson,
+        courseStatus: courseStatus,
+        selectedKey: selectedKey.isEmpty? '#' : selectedKey,
       );
     }
 

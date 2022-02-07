@@ -86,8 +86,12 @@ class YCardLikeButton extends StatelessWidget {
   final String title;
   final Icon? leadingIcon;
   final String? subtitle;
+  final bool disabled;
+  final String? disabledHint;
 
-  YCardLikeButton(this.title, this.action, {this.leadingIcon, this.subtitle}) : super();
+  YCardLikeButton(this.title, this.action, {
+    this.leadingIcon, this.subtitle, this.disabled=false, this.disabledHint
+  }) : super();
 
   @override
   Widget build(BuildContext context) {
@@ -140,14 +144,23 @@ class YCardLikeButton extends StatelessWidget {
     );
     Color buttonColor = Theme.of(context).primaryColor;
     buttonColor = Color.alphaBlend(Color.fromARGB(230, 240, 240, 240), buttonColor);
-    return ElevatedButton(
+    final button = ElevatedButton(
       style: ButtonStyle(
         backgroundColor: MaterialStateProperty.all(buttonColor),
         minimumSize: MaterialStateProperty.all(Size.fromHeight(80)),
       ),
       child: cardContainer,
-      onPressed: action,
+      onPressed: disabled? null : action,
     );
+    if (disabledHint == null || disabledHint!.isEmpty) {
+      return button;
+    }
+    else {
+      return Tooltip(
+        message: disabledHint,
+        child: button,
+      );
+    }
   }
 }
 

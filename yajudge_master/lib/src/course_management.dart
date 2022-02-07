@@ -177,12 +177,12 @@ class CourseManagementService extends CourseManagementServiceBase {
     }
   }
 
-  @override
-  Future<CourseContentResponse> getCoursePublicContent(ServiceCall? call, CourseContentRequest request) async {
-    String courseId = request.courseDataId;
-    if (courseId.isEmpty) {
-      throw GrpcError.invalidArgument('course data id is required');
-    }
+  CourseData getCourseData(String courseId) {
+    final loader = _getCourseLoader(courseId);
+    return loader.courseData();
+  }
+
+  CourseLoader _getCourseLoader(String courseId) {
     CourseLoader loader;
     if (!courseLoaders.containsKey(courseId)) {
       courseLoaders[courseId] = loader = CourseLoader(
@@ -194,6 +194,16 @@ class CourseManagementService extends CourseManagementServiceBase {
     } else {
       loader = courseLoaders[courseId]!;
     }
+    return loader;
+  }
+
+  @override
+  Future<CourseContentResponse> getCoursePublicContent(ServiceCall? call, CourseContentRequest request) async {
+    String courseId = request.courseDataId;
+    if (courseId.isEmpty) {
+      throw GrpcError.invalidArgument('course data id is required');
+    }
+    final loader = _getCourseLoader(courseId);
     try {
       DateTime lastModified = loader.courseLastModified();
       if (lastModified.millisecondsSinceEpoch > request.cachedTimestamp.toInt()) {

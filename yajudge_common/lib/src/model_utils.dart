@@ -31,6 +31,52 @@ class ProblemDataCacheItem {
   });
 }
 
+Lesson findLessonByKey(CourseData courseData, String key) {
+  List<String> parts = key.substring(1).split('/');
+  parts.removeWhere((element) => element.isEmpty);
+  Section section = Section();
+  String lessonId;
+  if (courseData.sections.length==1 && courseData.sections.single.id.isEmpty) {
+    section = courseData.sections.single;
+    assert (parts.length >= 1);
+    lessonId = parts[0];
+  }
+  else {
+    assert(parts.length >= 2);
+    String sectionId = parts[0];
+    lessonId = parts[1];
+    for (final entry in courseData.sections) {
+      if (entry.id == sectionId) {
+        section = entry;
+        break;
+      }
+    }
+  }
+
+  Lesson lesson = Lesson();
+  for (final entry in section.lessons) {
+    if (entry.id == lessonId) {
+      lesson = entry;
+      break;
+    }
+  }
+
+  return lesson;
+}
+
+ProblemStatus findProblemStatus(CourseStatus course, String problemId) {
+  for (final section in course.sections) {
+    for (final lesson in section.lessons) {
+      for (final problem in lesson.problems) {
+        if (problem.problemId == problemId) {
+          return problem;
+        }
+      }
+    }
+  }
+  return ProblemStatus();
+}
+
 TextReading findReadingByKey(CourseData courseData, String key) {
   List<String> parts = key.substring(1).split('/');
   assert (parts.length >= 3);

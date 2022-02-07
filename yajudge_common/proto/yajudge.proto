@@ -155,7 +155,7 @@ message ProblemMetadata {
 
 
 enum SolutionStatus {
-  ANY_STATUS          = 0;
+  ANY_STATUS_OR_NULL  = 0;
   SUBMITTED           = 1;
   GRADE_IN_PROGRESS   = 2;
   STYLE_CHECK_ERROR   = 3;
@@ -175,6 +175,54 @@ enum SolutionStatus {
 
   // INTERNAL STATUSES
   GRADER_ASSIGNED     = 201;
+}
+
+message ProblemStatus {
+  string              problem_id = 1;
+  bool                blocks_next = 2;
+  bool                blocked_by_previous = 3;
+  bool                completed = 4;
+  double              score_got = 5;
+  double              score_max = 6;
+  int64               submitted = 7;
+  int64               soft_deadline = 8;
+  int64               hard_deadline = 9;
+  double              deadline_penalty = 10;
+  SolutionStatus      last_solution_status = 11;
+}
+
+message LessonStatus {
+  string              lesson_id = 1;
+  repeated ProblemStatus problems = 2;
+  bool                blocked_by_previous = 3;
+  bool                blocks_next = 4;
+  bool                completed = 5;
+  double              score_got = 6;
+  double              score_max = 7;
+}
+
+message SectionStatus {
+  string              section_id = 1;
+  repeated LessonStatus lessons = 2;
+  bool                blocked_by_previous = 3;
+  bool                blocks_next = 4;
+  bool                completed = 5;
+  double              score_got = 6;
+  double              score_max = 7;
+}
+
+message CourseStatus {
+  Course              course = 1;
+  User                user = 2;
+  repeated SectionStatus sections = 3;
+  int64               hard_deadline = 4;
+  bool                completed = 5;
+  double              score_got = 6;
+  double              score_max = 7;
+  int32               problems_total = 8;
+  int32               problems_required = 9;
+  int32               problems_solved = 10;
+  int32               problems_required_solved = 11;
 }
 
 message ReviewComment {
@@ -404,23 +452,12 @@ message CheckCourseStatusRequest {
   Course  course    = 2;
 }
 
-message ProblemStatus {
-  string          problem_id  = 1;
-  SolutionStatus  status      = 2;
-  bool            blocked     = 3;
-  double          deadline_penalty = 4;
-  ProblemMetadata metadata    = 5;
-}
-
-message CheckCourseStatusResponse {
-  repeated ProblemStatus  problem_statuses = 1;
-}
 
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
   rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
-  rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CheckCourseStatusResponse) {}
+  rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus) {}
 
   // anounce grader alive and receive stream of submissions to be graded
 //  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:tuple/tuple.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../utils/utils.dart';
@@ -275,6 +276,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     return contents;
   }
 
+
   List<Widget> buildSubmissionsItems(BuildContext context) {
     List<Widget> contents = [];
     if (_errorString.isNotEmpty) {
@@ -300,77 +302,11 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       });
       for (Submission sub in _submissionsList.reversed) {
         String firstLine = 'ID = ' + sub.id.toString() + ', ' + formatDateTime(sub.timestamp.toInt());
-        String secondLine = '';
-        IconData iconData = Icons.error;
-        Color iconColor = Colors.grey;
-        switch (sub.status) {
-          case SolutionStatus.SUBMITTED:
-            iconData = Icons.access_time_rounded;
-            secondLine = 'В очереди на тестирование';
-            break;
-          case SolutionStatus.GRADE_IN_PROGRESS:
-            iconData = Icons.access_time_rounded;
-            secondLine = 'В очереди на тестирование';
-            break;
-          case SolutionStatus.GRADER_ASSIGNED:
-            iconData = Icons.access_time_rounded;
-            secondLine = 'Отправлено тестироваться грейдеру ${sub.graderName}';
-            break;
-          case SolutionStatus.STYLE_CHECK_ERROR:
-            iconData = Icons.error_outline;
-            secondLine = 'Нарушение форматирования кода';
-            break;
-          case SolutionStatus.COMPILATION_ERROR:
-            iconData = Icons.error_outline;
-            secondLine = 'Ошибка компиляции';
-            break;
-          case SolutionStatus.RUNTIME_ERROR:
-            iconData = Icons.error_outline;
-            secondLine = 'Программа упала на одном из тестов';
-            break;
-          case SolutionStatus.VALGRIND_ERRORS:
-            iconData = Icons.error_outline;
-            secondLine = 'Программа имеет ошибки Valgrind';
-            break;
-          case SolutionStatus.TIME_LIMIT:
-            iconData = Icons.error_outline;
-            secondLine = 'Программа выполнялась слишком долго на одном из тестов';
-            break;
-          case SolutionStatus.WRONG_ANSWER:
-            iconData = Icons.error_outline;
-            secondLine = 'Неправильный ответ в одном из тестов';
-            break;
-          case SolutionStatus.PENDING_REVIEW:
-            iconData = Icons.access_time_rounded;
-            secondLine = 'Решение ожидает проверки';
-            break;
-          case SolutionStatus.CODE_REVIEW_REJECTED:
-            iconData = Icons.error_outline;
-            secondLine = 'Необходимо устранить замечания проверяющего';
-            break;
-          case SolutionStatus.ACCEPTABLE:
-            iconData = Icons.check_circle_outline;
-            secondLine = 'Решение допущено до защиты';
-            break;
-          case SolutionStatus.DEFENCE_FAILED:
-            iconData = Icons.error_outline;
-            secondLine = 'Необходимо повторно защитить решение';
-            break;
-          case SolutionStatus.PLAGIARISM_DETECTED:
-            iconData = Icons.error_outline;
-            secondLine = 'Подозрение на плагиат';
-            break;
-          case SolutionStatus.DISQUALIFIED:
-            iconData = Icons.error;
-            secondLine = 'Решение дисквалифицировано за плагиат';
-            iconColor = Theme.of(context).errorColor;
-            break;
-          case SolutionStatus.OK:
-            iconData = Icons.check_circle;
-            secondLine = 'Решение зачтено';
-            iconColor = Theme.of(context).primaryColor;
-            break;
-        }
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, sub.status);
+        String secondLine = statusView.item1;
+        IconData iconData = statusView.item2;
+        Color iconColor = statusView.item3;
+
         Icon leadingIcon = Icon(iconData, color: iconColor, size: 36);
         contents.add(Padding(
           padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
@@ -534,4 +470,79 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     }
   }
 
+}
+
+Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, SolutionStatus status) {
+  String secondLine = '';
+  IconData iconData = Icons.error;
+  Color iconColor = Colors.grey;
+  switch (status) {
+    case SolutionStatus.SUBMITTED:
+      iconData = Icons.access_time_rounded;
+      secondLine = 'В очереди на тестирование';
+      break;
+    case SolutionStatus.GRADE_IN_PROGRESS:
+      iconData = Icons.access_time_rounded;
+      secondLine = 'В очереди на тестирование';
+      break;
+    case SolutionStatus.GRADER_ASSIGNED:
+      iconData = Icons.access_time_rounded;
+      secondLine = 'Выполняется тестирование';
+      break;
+    case SolutionStatus.STYLE_CHECK_ERROR:
+      iconData = Icons.error_outline;
+      secondLine = 'Нарушение форматирования кода';
+      break;
+    case SolutionStatus.COMPILATION_ERROR:
+      iconData = Icons.error_outline;
+      secondLine = 'Ошибка компиляции';
+      break;
+    case SolutionStatus.RUNTIME_ERROR:
+      iconData = Icons.error_outline;
+      secondLine = 'Программа упала на одном из тестов';
+      break;
+    case SolutionStatus.VALGRIND_ERRORS:
+      iconData = Icons.error_outline;
+      secondLine = 'Программа имеет ошибки Valgrind';
+      break;
+    case SolutionStatus.TIME_LIMIT:
+      iconData = Icons.error_outline;
+      secondLine = 'Программа выполнялась слишком долго на одном из тестов';
+      break;
+    case SolutionStatus.WRONG_ANSWER:
+      iconData = Icons.error_outline;
+      secondLine = 'Неправильный ответ в одном из тестов';
+      break;
+    case SolutionStatus.PENDING_REVIEW:
+      iconData = Icons.access_time_rounded;
+      secondLine = 'Решение ожидает проверки';
+      break;
+    case SolutionStatus.CODE_REVIEW_REJECTED:
+      iconData = Icons.error_outline;
+      secondLine = 'Необходимо устранить замечания проверяющего';
+      break;
+    case SolutionStatus.ACCEPTABLE:
+      iconData = Icons.check_circle_outline;
+      secondLine = 'Решение допущено до защиты';
+      break;
+    case SolutionStatus.DEFENCE_FAILED:
+      iconData = Icons.error_outline;
+      secondLine = 'Необходимо повторно защитить решение';
+      break;
+    case SolutionStatus.PLAGIARISM_DETECTED:
+      iconData = Icons.error_outline;
+      secondLine = 'Подозрение на плагиат';
+      break;
+    case SolutionStatus.DISQUALIFIED:
+      iconData = Icons.error;
+      secondLine = 'Решение дисквалифицировано за плагиат';
+      iconColor = Theme.of(context).errorColor;
+      break;
+    case SolutionStatus.OK:
+      iconData = Icons.check_circle;
+      secondLine = 'Решение зачтено';
+      iconColor = Theme.of(context).primaryColor;
+      break;
+  }
+  return Tuple3(secondLine, iconData, iconColor);
 }
