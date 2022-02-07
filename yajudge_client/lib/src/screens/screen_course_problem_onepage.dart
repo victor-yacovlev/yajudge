@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
@@ -124,12 +124,13 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     // TODO add common problem information
     contents.add(Text('Общая информация', style: theme.headline6));
     String hardeness = '';
+    int score = (meta.fullScoreMultiplier * 100).toInt();
     if (meta.fullScoreMultiplier == 1.0) {
-      hardeness = 'обычная';
+      hardeness = 'обычная, за решение $score баллов';
     } else if (meta.fullScoreMultiplier < 1.0) {
-      hardeness = 'легкая, коэффициент сложности '+meta.fullScoreMultiplier.toString();
+      hardeness = 'легкая, за решение $score баллов';
     } else if (meta.fullScoreMultiplier > 1.0) {
-      hardeness = 'трудная, коэффициент сложности ' +meta.fullScoreMultiplier.toString();
+      hardeness = 'трудная, за решение $score баллов';
     }
     String problemStatus = '';
     if (meta.blocksNextProblems) {
