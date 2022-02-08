@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
-import 'package:yajudge_client/src/screens/screen_course_problem_onepage.dart';
+import 'screen_course_problem_onepage.dart';
 import '../controllers/connection_controller.dart';
 import '../widgets/course_lessons_tree.dart';
 import '../widgets/unified_widgets.dart';
@@ -15,6 +15,7 @@ import 'package:yajudge_common/yajudge_common.dart';
 class CourseScreen extends BaseScreen {
 
   final Course course;
+  final Role userRoleForCourse;
   final CourseData courseData;
   final CourseStatus courseStatus;
   final String selectedKey;
@@ -26,6 +27,7 @@ class CourseScreen extends BaseScreen {
     required this.courseData,
     required this.courseStatus,
     required this.selectedKey,
+    required this.userRoleForCourse,
     this.navigatorInitialScrollOffset = 0.0,
     Key? key,
   }) : super(loggedUser: user, key: key);
@@ -106,6 +108,7 @@ class CourseScreenState extends BaseScreenState {
           courseStatus: _courseStatus,
           selectedKey: key,
           navigatorInitialScrollOffset: initialScrollOffset,
+          userRoleForCourse: screen.userRoleForCourse,
         );
       },
       transitionDuration: Duration(seconds: 0),
@@ -260,7 +263,7 @@ class CourseScreenState extends BaseScreenState {
       if (problemBlocked) {
         iconData = Icons.cancel_outlined;
         disabledHint = 'Необходимо решить все предыдущие обязательные задачи';
-        if (screen.loggedUser != Role.ROLE_STUDENT) {
+        if (screen.userRoleForCourse != Role.ROLE_STUDENT) {
           disabledHint += '. Но администратор или преподаватель все равно может отправлять решения';
         }
       }

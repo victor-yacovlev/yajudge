@@ -180,7 +180,7 @@ class AppState extends State<App> {
           return generateWidgetForCourse(
               context,
               loggedUser,
-              courseEntry.course,
+              courseEntry,
               content.item1,
               content.item2,
               pathTail,
@@ -193,9 +193,9 @@ class AppState extends State<App> {
     );
   }
 
-  Widget generateWidgetForCourse(BuildContext context, User loggedUser, Course course, CourseData courseData, CourseStatus courseStatus, String sourcePath) {
+  Widget generateWidgetForCourse(BuildContext context, User loggedUser, CoursesList_CourseListEntry courseEntry, CourseData courseData, CourseStatus courseStatus, String sourcePath) {
 
-    log.info('generate widget for $sourcePath, user ${loggedUser.id} and course prefix ${course.urlPrefix}');
+    log.info('generate widget for $sourcePath, user ${loggedUser.id} and course prefix ${courseEntry.course.urlPrefix}');
 
     List<String> parts = sourcePath.split('/');
 
@@ -253,10 +253,15 @@ class AppState extends State<App> {
       if (lesson.id.isNotEmpty) {
         selectedKey += lesson.id;
       }
+      Role userRoleForCourse = loggedUser.defaultRole;
+      if (userRoleForCourse != Role.ROLE_ADMINISTRATOR) {
+        userRoleForCourse = courseEntry.role;
+      }
       return CourseScreen(
         user: loggedUser,
-        course: course,
+        course: courseEntry.course,
         courseData: courseData,
+        userRoleForCourse: userRoleForCourse,
         courseStatus: courseStatus,
         selectedKey: selectedKey.isEmpty? '#' : selectedKey,
       );
@@ -283,7 +288,7 @@ class AppState extends State<App> {
       if (parts.isEmpty) {
         return CourseProblemScreenOnePage(
           user: loggedUser,
-          course: course,
+          course: courseEntry.course,
           courseData: courseData,
           problemData: problemData,
           problemMetadata: problemMetadata,
@@ -293,8 +298,12 @@ class AppState extends State<App> {
       if (submissionId == null) {
         return ErrorScreen('Ошибка 404', '');
       }
-      final submissionsFilter = SubmissionFilter(user: loggedUser, course: course, problemId: problemId);
+      final submissionsFilter = SubmissionFilter(user: loggedUser, course: courseEntry.course, problemId: problemId);
       final futureSubmissionsList = ConnectionController.instance!.submissionsService.getSubmissions(submissionsFilter);
+      Role userRoleForCourse = loggedUser.defaultRole;
+      if (userRoleForCourse != Role.ROLE_ADMINISTRATOR) {
+        userRoleForCourse = courseEntry.role;
+      }
       return FutureBuilder(
         future: futureSubmissionsList,
         builder: (context, snapshot) {
@@ -302,7 +311,7 @@ class AppState extends State<App> {
             final content = snapshot.requireData as SubmissionList;
             Submission? submission;
             for (final sub in content.submissions) {
-              if (sub.id.toInt() == submissionId!) {
+              if (sub.id.toInt() == submissionId) {
                 submission = sub;
                 break;
               }
@@ -312,7 +321,7 @@ class AppState extends State<App> {
             }
             return SubmissionScreen(
               user: loggedUser,
-              course: course,
+              course: courseEntry.course,
               courseData: courseData,
               problemData: problemData,
               problemMetadata: problemMetadata,
