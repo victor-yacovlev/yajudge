@@ -300,7 +300,12 @@ class AppState extends State<App> {
         return ErrorScreen('Ошибка 404', '');
       }
       final submissionsService = ConnectionController.instance!.submissionsService;
-      final futureSubmission = submissionsService.getSubmissionResult(Submission(id: Int64(submissionId)));
+      final futureSubmission = submissionsService.getSubmissionResult(
+        Submission(
+          id: Int64(submissionId),
+          course: courseEntry.course,
+        )
+      );
       Role userRoleForCourse = loggedUser.defaultRole;
       if (userRoleForCourse != Role.ROLE_ADMINISTRATOR) {
         userRoleForCourse = courseEntry.role;
