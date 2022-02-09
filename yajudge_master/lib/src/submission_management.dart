@@ -351,7 +351,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
     }
     if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
-      if (courseEnroll==null || courseEnroll.role==Role.ROLE_STUDENT && userId != currentUser.id) {
+      bool noCourseEnroll = courseEnroll == null;
+      bool userNotMatch = userId != currentUser.id.toInt();
+      if (noCourseEnroll || courseEnroll.role==Role.ROLE_STUDENT && userNotMatch) {
         throw GrpcError.permissionDenied('cant access not own submissions');
       }
     }
