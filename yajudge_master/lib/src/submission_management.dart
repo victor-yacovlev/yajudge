@@ -212,10 +212,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         earliestSubmission = currentSubmission;
       }
     }
-    CourseContentResponse courseContent = await parent.courseManagementService.getCoursePublicContent(
-        call, CourseContentRequest(courseDataId: request.course.dataId)
-    );
-    int limit = courseContent.data.maxSubmissionsPerHour - submissionsCount;
+    final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
+    final problemData = findProblemById(courseData, problemId);
+    int limit = problemData.maxSubmissionsPerHour>0 ? problemData.maxSubmissionsPerHour : courseData.maxSubmissionsPerHour;
+    limit -= submissionsCount;
     if (limit < 0) {
       limit = 0;
     }
@@ -301,7 +301,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         midName: midName!=null? midName : '',
         groupName: groupName!=null? groupName : '',
       );
-      List<File> submissionFiles = await getSubmissionFiles(id);
       Submission submission = Submission(
         id: Int64(id),
         user: submittedUser,
@@ -309,13 +308,147 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         problemId: problemId,
         timestamp: Int64(timestamp),
         status: SolutionStatus.valueOf(problemStatus)!,
-        solutionFiles: FileSet(files: submissionFiles),
       );
       result.add(submission);
     }
     return SubmissionList(submissions: result);
   }
 
+  @override
+  Future<Submission> getSubmissionResult(ServiceCall call, Submission request) async {
+    User currentUser = await parent.userManagementService.getUserFromContext(call);
+    int submissionId = request.id.toInt();
+    String query =
+    '''
+    select users_id, problem_id, timestamp, status, style_error_log, compile_error_log
+    from submissions
+    where id=@id 
+      ''';
+    final submissionRows = await connection.query(query, substitutionValues: {'id': submissionId});
+    if (submissionRows.isEmpty) {
+      throw GrpcError.notFound('no submission found: $submissionId');
+    }
+    final firstSubmissionRow = submissionRows.first;
+    int userId = firstSubmissionRow[0];
+    String problemId = firstSubmissionRow[1];
+    int timestamp = firstSubmissionRow[2];
+    SolutionStatus status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
+    String? styleErrorLog = firstSubmissionRow[4];
+    String? compileErrorLog = firstSubmissionRow[5];
+    if (styleErrorLog == null) {
+      styleErrorLog = '';
+    }
+    if (compileErrorLog == null) {
+      compileErrorLog = '';
+    }
+
+    List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
+    Enrollment? courseEnroll;
+    for (Enrollment e in enrollments) {
+      if (e.course.id == request.course.id) {
+        courseEnroll = e;
+        break;
+      }
+    }
+    if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
+      if (courseEnroll==null || courseEnroll.role==Role.ROLE_STUDENT && userId != currentUser.id) {
+        throw GrpcError.permissionDenied('cant access not own submissions');
+      }
+    }
+
+    final solutionFiles = getSubmissionFiles(submissionId);
+    final testResults = getSubmissionTestResults(status, submissionId);
+
+    return Submission(
+      id: Int64(submissionId),
+      user: currentUser,
+      timestamp: Int64(timestamp),
+      status: status,
+      problemId: problemId,
+      solutionFiles: FileSet(files: await solutionFiles),
+      testResults: await testResults,
+      styleErrorLog: styleErrorLog,
+      buildErrorLog: compileErrorLog,
+    );
+  }
+
+  Future<List<TestResult>> getSubmissionTestResults(SolutionStatus solutionStatus, int submissionId) async {
+    final haveTestsStatuses = [
+      SolutionStatus.OK,
+      SolutionStatus.WRONG_ANSWER,
+      SolutionStatus.RUNTIME_ERROR,
+      SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.TIME_LIMIT,
+    ];
+    if (!haveTestsStatuses.contains(solutionStatus)) {
+      return [];
+    }
+    String query =
+    '''
+    select test_number, stdout, stderr, standard_match, signal_killed, 
+      valgrind_errors, valgrind_output, killed_by_timer, checker_output,
+      status, exit_status
+    from submission_results
+    where submissions_id=@id 
+      ''';
+    final testResultsRows = await connection.query(query, substitutionValues: {'id': submissionId});
+    List<TestResult> results = [];
+    for (final row in testResultsRows) {
+      int testNumber = row[0];
+      String stdout = row[1];
+      String stderr = row[2];
+      bool standardMatch = row[3];
+      int signalKilled = row[4];
+      int valgrindErrors = row[5];
+      String valgrindOutput = row[6];
+      bool killedByTimer = row[7];
+      String checkerOutput = row[8];
+      // int status = row[9];
+      int exitStatus = row[10];
+      if (signalKilled > 0 && !killedByTimer) {
+        results.add(TestResult(
+          testNumber: testNumber,
+          stdout: stdout,
+          stderr: stderr,
+          signalKilled: signalKilled,
+          status: SolutionStatus.RUNTIME_ERROR,
+        ));
+      }
+      else if (killedByTimer) {
+        results.add(TestResult(
+          testNumber: testNumber,
+          killedByTimer: killedByTimer,
+          status: SolutionStatus.TIME_LIMIT
+        ));
+      }
+      else if (valgrindErrors > 0) {
+        results.add(TestResult(
+          testNumber: testNumber,
+          valgrindErrors: valgrindErrors,
+          valgrindOutput: valgrindOutput,
+          status: SolutionStatus.VALGRIND_ERRORS,
+          exitStatus: exitStatus,
+        ));
+      }
+      else if (!standardMatch) {
+        results.add(TestResult(
+          testNumber: testNumber,
+          stdout: stdout,
+          checkerOutput: checkerOutput,
+          status: SolutionStatus.WRONG_ANSWER,
+          exitStatus: exitStatus,
+        ));
+      }
+      else {
+        results.add(TestResult(
+          testNumber: testNumber,
+          status: SolutionStatus.OK,
+          exitStatus: exitStatus,
+        ));
+      }
+    }
+    return results;
+  }
 
   @override
   Future<Submission> submitProblemSolution(ServiceCall call, Submission request) async {
@@ -414,18 +547,32 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     await connection.transaction((connection) async {
+      // modify submission itself
       await connection.query(
         '''
-        update submissions set status=@status, grader_name=@grader_name 
+        update 
+          submissions set status=@status, grader_name=@grader_name,
+          style_error_log=@style_error_log, compile_error_log=@compile_error_log
         where id=@id
         ''',
         substitutionValues: {
           'status': request.status.value,
           'grader_name': request.graderName,
           'id': request.id.toInt(),
+          'style_error_log': request.styleErrorLog,
+          'compile_error_log': request.buildErrorLog,
         }
       );
-      for (TestResult test in request.testResult) {
+      // there might be older test results in case of rejudging submission
+      // so delete them if exists
+      await connection.query(
+        ''' 
+        delete from submission_results where submissions_id=@id
+        ''',
+        substitutionValues: { 'id': request.id.toInt() }
+      );
+      // insert new test results
+      for (TestResult test in request.testResults) {
         connection.query(
           '''
 insert into submission_results(
@@ -434,6 +581,7 @@ insert into submission_results(
                                stdout,
                                stderr,
                                status,
+                               exit_status,
                                standard_match,
                                killed_by_timer,
                                signal_killed,
@@ -442,7 +590,7 @@ insert into submission_results(
                                checker_output
 )
 values (@submissions_id,@test_number,@stdout,@stderr,
-        @status,@standard_match,@killed_by_timer,
+        @status,@exit_status,@standard_match,@killed_by_timer,
         @signal_killed,
         @valgrind_errors,@valgrind_output,
         @checker_output)          
@@ -452,7 +600,8 @@ values (@submissions_id,@test_number,@stdout,@stderr,
             'test_number': test.testNumber,
             'stdout': test.stdout,
             'stderr': test.stderr,
-            'status': test.status,
+            'status': test.status.value,
+            'exit_status': test.exitStatus,
             'standard_match': test.standardMatch,
             'killed_by_timer': test.killedByTimer,
             'signal_killed': test.signalKilled,

@@ -29,7 +29,9 @@ class SubmissionScreen extends BaseScreen {
     required this.problemMetadata,
     required this.submission,
     Key? key
-  }) : super(loggedUser: user, key: key);
+  }) : super(loggedUser: user, key: key) {
+
+  }
 
   @override
   State<StatefulWidget> createState() => SubmissionScreenState(this);
@@ -141,14 +143,14 @@ class SubmissionScreenState extends BaseScreenState {
           padding: fileHeadPadding,
           child: Text('Ошибки компиляции:', style: fileHeadStyle))
       );
-      fileContent = submission.buildErrors;
+      fileContent = submission.buildErrorLog;
     }
     else if (submission.status == SolutionStatus.STYLE_CHECK_ERROR) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Ошибки форматирования кода:', style: fileHeadStyle))
       );
-      fileContent = submission.buildErrors;
+      fileContent = submission.styleErrorLog;
     }
     else if (submission.status == SolutionStatus.RUNTIME_ERROR) {
       contents.add(Container(
@@ -190,8 +192,15 @@ class SubmissionScreenState extends BaseScreenState {
   }
 
   TestResult findFirstBrokenTest() {
-    for (final test in screen.submission.testResult) {
-      if (test.killedByTimer || test.signalKilled!=0 || test.valgrindErrors>0 || !test.standardMatch) {
+    final brokenStatuses = [
+      SolutionStatus.WRONG_ANSWER,
+      SolutionStatus.RUNTIME_ERROR,
+      SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.TIME_LIMIT,
+    ];
+    for (final test in screen.submission.testResults) {
+      final status = test.status;
+      if (brokenStatuses.contains(status)) {
         return test;
       }
     }

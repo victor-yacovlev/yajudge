@@ -1,3 +1,4 @@
+import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_client/src/screens/screen_submission.dart';
@@ -298,34 +299,24 @@ class AppState extends State<App> {
       if (submissionId == null) {
         return ErrorScreen('Ошибка 404', '');
       }
-      final submissionsFilter = SubmissionFilter(user: loggedUser, course: courseEntry.course, problemId: problemId);
-      final futureSubmissionsList = ConnectionController.instance!.submissionsService.getSubmissions(submissionsFilter);
+      final submissionsService = ConnectionController.instance!.submissionsService;
+      final futureSubmission = submissionsService.getSubmissionResult(Submission(id: Int64(submissionId)));
       Role userRoleForCourse = loggedUser.defaultRole;
       if (userRoleForCourse != Role.ROLE_ADMINISTRATOR) {
         userRoleForCourse = courseEntry.role;
       }
       return FutureBuilder(
-        future: futureSubmissionsList,
+        future: futureSubmission,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
-            final content = snapshot.requireData as SubmissionList;
-            Submission? submission;
-            for (final sub in content.submissions) {
-              if (sub.id.toInt() == submissionId) {
-                submission = sub;
-                break;
-              }
-            }
-            if (submission == null) {
-              return ErrorScreen('Ошибка 404', '');
-            }
+            final content = snapshot.requireData as Submission;
             return SubmissionScreen(
               user: loggedUser,
               course: courseEntry.course,
               courseData: courseData,
               problemData: problemData,
               problemMetadata: problemMetadata,
-              submission: submission,
+              submission: content,
             );
           }
           else {

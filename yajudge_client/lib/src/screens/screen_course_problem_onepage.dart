@@ -1,8 +1,7 @@
 import 'dart:typed_data';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
-import 'package:yajudge_client/src/screens/screen_submission.dart';
+import 'screen_submission.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../utils/utils.dart';
@@ -129,9 +128,14 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     int score = (meta.fullScoreMultiplier * 100).toInt();
     if (meta.fullScoreMultiplier == 1.0) {
       hardeness = 'обычная, за решение $score баллов';
-    } else if (meta.fullScoreMultiplier < 1.0) {
+    }
+    else if (meta.fullScoreMultiplier == 0.0) {
+      hardeness = 'тривиальная, за решение баллы не начисляются';
+    }
+    else if (meta.fullScoreMultiplier < 1.0) {
       hardeness = 'легкая, за решение $score баллов';
-    } else if (meta.fullScoreMultiplier > 1.0) {
+    }
+    else if (meta.fullScoreMultiplier > 1.0) {
       hardeness = 'трудная, за решение $score баллов';
     }
     String problemStatus = '';
@@ -220,22 +224,25 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _navigateToSubmission(Submission submission) {
-    String currentUrl = ModalRoute.of(context)!.settings.name!;
-    String newUrl = '$currentUrl/${submission.id}';
-    final routeBuilder = PageRouteBuilder(
-      settings: RouteSettings(name: newUrl),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return SubmissionScreen(
-          user: screen.loggedUser,
-          course: screen.course,
-          courseData: screen.courseData,
-          problemData: screen.problemData,
-          problemMetadata: screen.problemMetadata,
-          submission: submission,
-        );
-      }
-    );
-    Navigator.pushReplacement(context, routeBuilder);
+    final service = ConnectionController.instance!.submissionsService;
+    service.getSubmissionResult(submission).then((submissionWithData) {
+      String currentUrl = ModalRoute.of(context)!.settings.name!;
+      String newUrl = '$currentUrl/${submission.id}';
+      final routeBuilder = PageRouteBuilder(
+          settings: RouteSettings(name: newUrl),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return SubmissionScreen(
+              user: screen.loggedUser,
+              course: screen.course,
+              courseData: screen.courseData,
+              problemData: screen.problemData,
+              problemMetadata: screen.problemMetadata,
+              submission: submissionWithData,
+            );
+          }
+      );
+      Navigator.push(context, routeBuilder);
+    });
   }
 
   List<Widget> buildNewSubmissionItems(BuildContext context) {
@@ -245,10 +252,15 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     }
     TextTheme theme = Theme.of(context).textTheme;
 
+    int maxSubmissionsPerHour = screen.courseData.maxSubmissionsPerHour;
+    if (screen.problemData.maxSubmissionsPerHour > 0) {
+      maxSubmissionsPerHour = screen.problemData.maxSubmissionsPerHour;
+    }
+
     if (_submissionsLimit >= 0) {
       contents.add(Text('Ограничение на число посылок', style: theme.headline6!));
       contents.add(Text('Количество посылок ограничено, тестируйте решение локально перед отправкой. '));
-      contents.add(Text('Вы можете отправлять не более ${screen.courseData.maxSubmissionsPerHour} посылок в час. ' ));
+      contents.add(Text('Вы можете отправлять не более $maxSubmissionsPerHour посылок в час. ' ));
       contents.add(Text('Осталось попыток: ${_submissionsLimit}.'));
       if (_submissionsLimit==0 && _nextLimitReset >= 0) {
         String nextReset = formatDateTime(_nextLimitReset);

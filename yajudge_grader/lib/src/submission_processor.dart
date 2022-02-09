@@ -113,21 +113,41 @@ class SubmissionProcessor {
       String styleFile = styleFileName(fileSuffix);
       if (styleFile == '.clang-format') {
         // Run clang-format to check
-        io.Process clangProcess = await runner.start(
+        List<int> clangStdout = [];
+        final clangProcess = await runner.start(
           submission.id.toInt(),
           ['clang-format', '-style=file', fileName],
           workingDirectory: '/build',
         );
+        final clangStdoutListener = clangProcess.stdout.listen((List<int> chunk) {
+          clangStdout.addAll(chunk);
+        }).asFuture();
         int exitCode = await clangProcess.exitCode;
-        List<int> clangStdout = await clangProcess.stdout.first;
-        String formattedCode = utf8.decode(clangStdout).trim();
+        await clangStdoutListener;
+
         String submissionPath = runner.submissionPrivateDirectory(submission);
-        String sourcePath = path.normalize('${submissionPath}/build/${fileName}');
-        String sourceCode = io.File(sourcePath).readAsStringSync().trim();
-        if (formattedCode != sourceCode) {
-          submission = submission.copyWith((changed) {
-            changed.buildErrors = formattedCode;
-            changed.status = SolutionStatus.STYLE_CHECK_ERROR;
+        String sourcePath = path.normalize('$submissionPath/build/$fileName');
+        String formattedPath = sourcePath + '.formatted';
+        final formattedFile = io.File(formattedPath);
+        formattedFile.writeAsBytesSync(clangStdout);
+
+        List<int> diffOut = [];
+        final diffProcess = await runner.start(
+          submission.id.toInt(),
+          ['diff', fileName, '$fileName.formatted'],
+          workingDirectory: '/build',
+        );
+        final diffStdoutListener = diffProcess.stdout.listen((List<int> chunk) {
+          diffOut.addAll(chunk);
+        }).asFuture();
+        exitCode = await diffProcess.exitCode;
+        await diffStdoutListener;
+
+        String diffContent = utf8.decode(diffOut, allowMalformed: true);
+        if (exitCode != 0) {
+          submission = submission.copyWith((s) {
+            s.styleErrorLog = diffContent;
+            s.status = SolutionStatus.STYLE_CHECK_ERROR;
           });
           return false;
         }
@@ -205,7 +225,7 @@ class SubmissionProcessor {
       io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrors = message;
+        changed.buildErrorLog = message;
       });
       return false;
     } else {
@@ -230,7 +250,7 @@ class SubmissionProcessor {
       io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrors = message;
+        changed.buildErrorLog = message;
       });
       return false;
     }
@@ -240,7 +260,7 @@ class SubmissionProcessor {
       io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrors = message;
+        changed.buildErrorLog = message;
       });
       return false;
     }
@@ -371,7 +391,7 @@ class SubmissionProcessor {
         log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compilerCommand.join(' ')}\n$message');
         submission = submission.copyWith((changed) {
           changed.status = SolutionStatus.COMPILATION_ERROR;
-          changed.buildErrors = message;
+          changed.buildErrorLog = message;
         });
         return false;
       } else {
@@ -400,7 +420,7 @@ class SubmissionProcessor {
       io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrors = message;
+        changed.buildErrorLog = message;
       });
       return false;
     } else {
@@ -462,7 +482,6 @@ class SubmissionProcessor {
   }
 
   Future<void> runTests() async {
-    String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
     String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
     bool hasRuntimeError = false;
     bool hasTimeLimit = false;
@@ -554,6 +573,7 @@ class SubmissionProcessor {
         }
         if (valgrindErrors > 0) {
           result = result.copyWith((r) {
+            r.status = SolutionStatus.VALGRIND_ERRORS;
             r.valgrindErrors = valgrindErrors;
             r.valgrindOutput = valgrindOut;
           });
@@ -607,7 +627,7 @@ class SubmissionProcessor {
     }
     submission = submission.copyWith((s) {
       s.status = newStatus;
-      s.testResult.addAll(testResults);
+      s.testResults.addAll(testResults);
     });
   }
 
@@ -796,10 +816,39 @@ class SubmissionProcessor {
       log.fine('submission ${submission.id} ($description) killed by signal $signalKilled on test $testBaseName');
       exitStatus = 0;
     }
+    SolutionStatus solutionStatus = SolutionStatus.OK;
+    if (killedByTimeout) {
+      solutionStatus = SolutionStatus.TIME_LIMIT;
+    }
+    else if (signalKilled > 0) {
+      solutionStatus = SolutionStatus.RUNTIME_ERROR;
+    }
+    else if (resultCheckerMessage.isNotEmpty) {
+      String waMessage = '=== Checker ouput:\n$resultCheckerMessage\n';
+      String args = arguments.join(' ');
+      waMessage += '=== Arguments: ${args}\n';
+      final maxInputSizeToShow = 50 * 1024;
+      List<int> stdinBytesToShow = [];
+      if (stdinData.length > maxInputSizeToShow) {
+        stdinBytesToShow = stdinData.sublist(0, maxInputSizeToShow);
+      } else {
+        stdinBytesToShow = stdinData;
+      }
+      String inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: true);
+      if (stdinData.length > maxInputSizeToShow) {
+        inputDataToShow += '  \n(input is too big, truncated to $maxInputSizeToShow bytes)\n';
+      }
+      if (inputDataToShow.isNotEmpty) {
+        waMessage += '=== Input data: $inputDataToShow';
+      }
+      resultCheckerMessage = waMessage;
+      solutionStatus = SolutionStatus.WRONG_ANSWER;
+    }
     return TestResult(
       testNumber: testNumber,
       target: runsDirPrefix,
-      status: exitStatus,
+      exitStatus: exitStatus,
+      status: solutionStatus,
       stderr: utf8.decode(stderr),
       stdout: utf8.decode(stdout),
       killedByTimer: killedByTimeout,

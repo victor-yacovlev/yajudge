@@ -132,24 +132,7 @@ class CourseLoader {
     updateCourseLastModified(courseFile);
     YamlMap courseMap = loadYaml(courseFile.readAsStringSync());
     String description = courseMap['description'] is String? courseMap['description'] : '';
-    final codeStylesFile = io.File(problemPath('')+'/code-styles.yaml');
-    List<CodeStyle> codeStyles = [];
-    if (codeStylesFile.existsSync()) {
-      updateCourseLastModified(codeStylesFile);
-      YamlMap codeStylesMap = loadYaml(codeStylesFile.readAsStringSync());
-      for (final entry in codeStylesMap.entries) {
-        String suffix = entry.key;
-        String styleFileName = entry.value;
-        final styleFile = io.File(problemPath('')+'/'+styleFileName);
-        List<int> styleFileData = styleFile.readAsBytesSync();
-        updateCourseLastModified(styleFile);
-        codeStyles.add(CodeStyle(
-          sourceFileSuffix: suffix,
-          styleFile: File(name: styleFileName, data: styleFileData),
-        ));
-      }
-    }
-    _codeStyles = codeStyles;
+    _codeStyles = _loadCourseCodeStyles('');
     final defaultLimitsFile = io.File(problemPath('')+'/default-limits.yaml');
     if (defaultLimitsFile.existsSync()) {
       updateCourseLastModified(defaultLimitsFile);
@@ -288,6 +271,10 @@ class CourseLoader {
     String title = data['title'] is String? data['title'] : problemId;
     String uniqueId = data['unique_id'] is String? data['unique_id'] : problemId;
     String statement = statementFile.readAsStringSync();
+    int maxSubmissionsPerHour = data['max_submissions_per_hour'] is int
+        ? data['max_submissions_per_hour'] : _maxSubmissionsPerHour;
+    int maxSubmissionFileSize = data['max_submission_file_size'] is int
+        ? data['max_submission_file_size'] : _maxSubmissionFileSize;
     List<File> solutionFiles = [];
     if (data['solution_files'] is YamlList) {
       YamlList yamlList = data['solution_files'];
@@ -316,6 +303,8 @@ class CourseLoader {
       statementText: statement,
       statementContentType: 'text/markdown',
       gradingOptions: gradingOptions,
+      maxSubmissionsPerHour: maxSubmissionsPerHour,
+      maxSubmissionFileSize: maxSubmissionFileSize,
     );
   }
 
@@ -402,13 +391,14 @@ class CourseLoader {
       limits = parseDefaultLimits(yamlMap);
     }
     List<TestCase> testCases = _loadProblemTestCases(problemId);
+    final codeStyles = _loadCourseCodeStyles(problemId);
     return GradingOptions(
       platformRequired: gradingPlatform,
       standardChecker: checker,
       standardCheckerOpts: checkerOpts,
       customChecker: customChecker,
       customInteractor: customInteractor,
-      codeStyles: _codeStyles,
+      codeStyles: codeStyles,
       extraBuildFiles: FileSet(files: publicFiles.files + privateFiles.files),
       testCases: testCases,
       extraCompileOptions: compileOptions.split(' '),
@@ -418,6 +408,30 @@ class CourseLoader {
       disableValgrind: disableValgrind,
       testsGenerator: testsGenerator,
     );
+  }
+
+  List<CodeStyle> _loadCourseCodeStyles(String problemId) {
+    final codeStylesFile = io.File(problemPath('')+'/code-styles.yaml');
+    List<CodeStyle> codeStyles = [];
+    if (codeStylesFile.existsSync()) {
+      updateCourseLastModified(codeStylesFile);
+      if (problemId.isNotEmpty) {
+        updateProblemLastModified(problemId, codeStylesFile);
+      }
+      YamlMap codeStylesMap = loadYaml(codeStylesFile.readAsStringSync());
+      for (final entry in codeStylesMap.entries) {
+        String suffix = entry.key;
+        String styleFileName = entry.value;
+        final styleFile = io.File(problemPath('')+'/'+styleFileName);
+        List<int> styleFileData = styleFile.readAsBytesSync();
+        updateCourseLastModified(styleFile);
+        codeStyles.add(CodeStyle(
+          sourceFileSuffix: suffix,
+          styleFile: File(name: styleFileName, data: styleFileData),
+        ));
+      }
+    }
+    return codeStyles;
   }
 
   List<TestCase> _loadProblemTestCases(String problemId) {

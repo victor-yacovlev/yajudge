@@ -187,7 +187,8 @@ class GraderService {
       String linkOptions = opts.extraLinkOptions.join(' ');
       io.File(buildDir+'/.compile_options').writeAsStringSync(compileOptions);
       io.File(buildDir+'/.link_options').writeAsStringSync(linkOptions);
-      for (final codeStyle in opts.codeStyles) {
+      final codeStyles = opts.codeStyles;
+      for (final codeStyle in codeStyles) {
         String fileName = codeStyle.styleFile.name;
         String suffix = codeStyle.sourceFileSuffix;
         if (suffix.startsWith('.'))

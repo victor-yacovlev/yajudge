@@ -20,7 +20,7 @@ const StudentsMethods = [
   'GetProfile', 'ChangePassword',
   'GetCourses', 'GetCoursePublicContent',
   'CheckSubmissionsCountLimit', 'SubmitProblemSolution', 'GetSubmissions',
-  'CheckCourseStatus'
+  'CheckCourseStatus', 'GetSubmissionResult'
 ];
 
 const MaxErrorsPerMinute = 3;
