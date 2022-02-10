@@ -318,10 +318,10 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     else {
       List<Submission> submissionsToShow = List.from(_submissionsList);
       submissionsToShow.sort((a, b) {
-        if (a.timestamp < b.timestamp) {
+        if (a.id.toInt() < b.id.toInt()) {
           return -1;
         }
-        else if (a.timestamp > b.timestamp) {
+        else if (a.id.toInt() > b.id.toInt()) {
           return 1;
         }
         else {
