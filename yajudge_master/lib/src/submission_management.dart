@@ -322,7 +322,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     '''
     select users_id, problem_id, timestamp, status, style_error_log, compile_error_log
     from submissions
-    where id=@id 
+    where id=@id order by id asc
       ''';
     final submissionRows = await connection.query(query, substitutionValues: {'id': submissionId});
     if (submissionRows.isEmpty) {
