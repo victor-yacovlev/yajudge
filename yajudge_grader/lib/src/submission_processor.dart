@@ -536,19 +536,46 @@ class SubmissionProcessor {
         baseName = '0' + baseName;
 
       List<TestResult> targetResults = [];
+      final hasFailedTests = () {
+        for (final result in targetResults) {
+          if (result.status == SolutionStatus.RUNTIME_ERROR) {
+            return true;
+          }
+        }
+        return false;
+      };
 
-      if (runSanitizersTarget) {
+      bool hasFailed = false;
+
+      if (runPlainTarget) {
         TestResult result = await processTest(
-          i, sanitizersTargetPrefix,
-          [sanitizersBuildTarget],
-          'with sanitizers',
-          baseName,
-          plainLimits,
+          testNumber: i,
+          runsDirPrefix: plainTargetPrefix,
+          firstArgs: [plainBuildTarget],
+          description: 'no sanitizers, no valgrind',
+          testBaseName: baseName,
+          limits: plainLimits,
         );
         targetResults.add(result);
+        hasFailed = hasFailedTests();
       }
 
-      if (runValgrindTarget) {
+
+      if (runSanitizersTarget && !hasFailed) {
+        TestResult result = await processTest(
+          testNumber: i,
+          runsDirPrefix: sanitizersTargetPrefix,
+          firstArgs: [sanitizersBuildTarget],
+          description: 'with sanitizers',
+          testBaseName: baseName,
+          limits: plainLimits,
+          checkSanitizersErrors: true,
+        );
+        targetResults.add(result);
+        hasFailed = hasFailedTests();
+      }
+
+      if (runValgrindTarget && !hasFailed) {
         final valgrindCommandLine = [
           'valgrind', '--tool=memcheck', '--leak-check=full',
           '--show-leak-kinds=all', '--track-origins=yes',
@@ -556,57 +583,34 @@ class SubmissionProcessor {
           plainBuildTarget
         ];
         TestResult result = await processTest(
-          i, valgrindTargetPrefix,
-          valgrindCommandLine,
-          'with valgrind',
-          baseName,
-          valgrindLimits
+          testNumber: i,
+          runsDirPrefix: valgrindTargetPrefix,
+          firstArgs: valgrindCommandLine,
+          description: 'with valgrind',
+          testBaseName: baseName,
+          limits: valgrindLimits,
+          checkValgrindErrors: true,
         );
-        final valgrindOut = io.File('$runsPath/valgrind/$baseName.valgrind').readAsStringSync();
-        int valgrindErrors = 0;
-        final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
-        final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
-        if (matchEntries.isNotEmpty) {
-          RegExpMatch match = matchEntries.first;
-          String matchGroup = match.group(1)!;
-          valgrindErrors = int.parse(matchGroup);
-        }
-        if (valgrindErrors > 0) {
-          result = result.copyWith((r) {
-            r.status = SolutionStatus.VALGRIND_ERRORS;
-            r.valgrindErrors = valgrindErrors;
-            r.valgrindOutput = valgrindOut;
-          });
-        }
-        targetResults.add(result);
-      }
 
-      if (runPlainTarget) {
-        TestResult result = await processTest(
-          i, plainTargetPrefix,
-          [plainBuildTarget],
-          'no sanitizers, no valgrind',
-          baseName,
-          plainLimits,
-        );
         targetResults.add(result);
       }
 
       if (runTargetIsScript) {
         TestResult result = await processTest(
-          i, scriptTargetPrefix,
-          targetInterpreter.split(' ') + [plainBuildTarget],
-          'script run',
-          baseName,
-          plainLimits,
+          testNumber: i,
+          runsDirPrefix: scriptTargetPrefix,
+          firstArgs: targetInterpreter.split(' ') + [plainBuildTarget],
+          description: 'script run',
+          testBaseName: baseName,
+          limits: plainLimits,
         );
         targetResults.add(result);
       }
 
-      hasWrongAnswer = targetResults.any((element) => !element.standardMatch);
-      hasTimeLimit = targetResults.any((element) => element.killedByTimer);
-      hasRuntimeError = targetResults.any((element) => element.signalKilled>0 && !element.killedByTimer);
-      hasValgrindErrors = targetResults.any((element) => element.valgrindErrors>0);
+      hasWrongAnswer = hasWrongAnswer || targetResults.any((element) => element.status==SolutionStatus.WRONG_ANSWER);
+      hasTimeLimit = hasTimeLimit || targetResults.any((element) => element.status==SolutionStatus.TIME_LIMIT);
+      hasRuntimeError = hasRuntimeError || targetResults.any((element) => element.status==SolutionStatus.RUNTIME_ERROR);
+      hasValgrindErrors = hasValgrindErrors || targetResults.any((element) => element.status==SolutionStatus.VALGRIND_ERRORS);
       testResults.addAll(targetResults);
     }
 
@@ -683,7 +687,17 @@ class SubmissionProcessor {
     return result;
   }
 
-  Future<TestResult> processTest(int testNumber, String runsDirPrefix, List<String> firstArgs, String description, String testBaseName, GradingLimits limits) async {
+  Future<TestResult> processTest({
+    required int testNumber,
+    required String runsDirPrefix,
+    required List<String> firstArgs,
+    required String description,
+    required String testBaseName,
+    required GradingLimits limits,
+    bool checkValgrindErrors = false,
+    bool checkSanitizersErrors = false,
+
+  }) async {
     log.info('running test $testBaseName ($description) for submission ${submission.id}');
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
     final runsDir = io.Directory(runner.submissionWorkingDirectory(submission)+'/runs/$runsDirPrefix/');
@@ -769,7 +783,66 @@ class SubmissionProcessor {
     stderrFile.writeAsBytesSync(stderr);
     String resultCheckerMessage = '';
     int signalKilled = 0;
-    if (exitStatus >= 0) {
+    bool checkAnswer = exitStatus >= 0;
+    int valgrindErrors = 0;
+    String valgrindOutput = '';
+    SolutionStatus solutionStatus = SolutionStatus.OK;
+    if (exitStatus >= 0 && checkValgrindErrors) {
+      log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
+      String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
+      final valgrindOut = io.File('$runsPath/valgrind/$testBaseName.valgrind').readAsStringSync();
+      valgrindErrors = 0;
+      final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
+      final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
+      if (matchEntries.isNotEmpty) {
+        RegExpMatch match = matchEntries.first;
+        String matchGroup = match.group(1)!;
+        valgrindErrors = int.parse(matchGroup);
+      }
+      if (valgrindErrors > 0) {
+        log.fine('submission ${submission.id} has $valgrindErrors valgrind errors on test $testBaseName');
+        valgrindOutput = valgrindOut;
+        solutionStatus = SolutionStatus.VALGRIND_ERRORS;
+        checkAnswer = false;
+      }
+    }
+    if (exitStatus >=0 && checkSanitizersErrors) {
+      log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for sanitizer errors');
+      String errOut = utf8.decode(stderr, allowMalformed: true);
+      final errLines = errOut.split('\n');
+      List<String> patternParts = [];
+      for (final solutionFile in submission.solutionFiles.files) {
+        String part = solutionFile.name.replaceAll('.', r'\.');
+        patternParts.add(part);
+      }
+      final rxRuntimeError = RegExp('('+patternParts.join('|')+r'):\d+:\d+:\s+runtime\s+error:');
+      for (final line in errLines) {
+        final match = rxRuntimeError.matchAsPrefix(line);
+        if (match != null) {
+          checkAnswer = false;
+          solutionStatus = SolutionStatus.RUNTIME_ERROR;
+          log.fine('submission ${submission.id} got runtime error: $line');
+          break;
+        }
+      }
+    }
+    if (exitStatus < 0) {
+      signalKilled = -exitStatus;
+      log.fine('submission ${submission.id} ($description) killed by signal $signalKilled on test $testBaseName');
+      exitStatus = 0;
+      solutionStatus = SolutionStatus.RUNTIME_ERROR;
+      checkAnswer = false;
+    }
+    if (killedByTimeout) {
+      solutionStatus = SolutionStatus.TIME_LIMIT;
+      checkAnswer = false;
+    }
+    else if (signalKilled > 0) {
+      solutionStatus = SolutionStatus.RUNTIME_ERROR;
+      checkAnswer = false;
+    }
+
+    if (checkAnswer) {
       List<int> referenceStdout = [];
       final problemAnsFile = io.File('$testsPath/$testBaseName.ans');
       final targetAnsFile = io.File('${runsDir.path}/$testBaseName.ans');
@@ -811,19 +884,8 @@ class SubmissionProcessor {
       final checkerOutFile = io.File('${runsDir.path}/$testBaseName.checker');
       checkerOutFile.writeAsStringSync(resultCheckerMessage);
     }
-    else if (exitStatus < 0) {
-      signalKilled = -exitStatus;
-      log.fine('submission ${submission.id} ($description) killed by signal $signalKilled on test $testBaseName');
-      exitStatus = 0;
-    }
-    SolutionStatus solutionStatus = SolutionStatus.OK;
-    if (killedByTimeout) {
-      solutionStatus = SolutionStatus.TIME_LIMIT;
-    }
-    else if (signalKilled > 0) {
-      solutionStatus = SolutionStatus.RUNTIME_ERROR;
-    }
-    else if (resultCheckerMessage.isNotEmpty) {
+
+    if (resultCheckerMessage.isNotEmpty) {
       String waMessage = '=== Checker ouput:\n$resultCheckerMessage\n';
       String args = arguments.join(' ');
       waMessage += '=== Arguments: ${args}\n';
@@ -844,6 +906,7 @@ class SubmissionProcessor {
       resultCheckerMessage = waMessage;
       solutionStatus = SolutionStatus.WRONG_ANSWER;
     }
+
     return TestResult(
       testNumber: testNumber,
       target: runsDirPrefix,
@@ -855,6 +918,8 @@ class SubmissionProcessor {
       standardMatch: resultCheckerMessage.isEmpty,
       checkerOutput: resultCheckerMessage,
       signalKilled: signalKilled,
+      valgrindErrors: valgrindErrors,
+      valgrindOutput: valgrindOutput
     );
   }
 
