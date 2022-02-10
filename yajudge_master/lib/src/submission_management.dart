@@ -358,8 +358,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
     }
 
-    final solutionFiles = getSubmissionFiles(submissionId);
-    final testResults = getSubmissionTestResults(status, submissionId);
+    final solutionFiles = await getSubmissionFiles(submissionId);
+    final testResults = await getSubmissionTestResults(status, submissionId);
 
     return Submission(
       id: Int64(submissionId),
@@ -367,8 +367,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       timestamp: Int64(timestamp),
       status: status,
       problemId: problemId,
-      solutionFiles: FileSet(files: await solutionFiles),
-      testResults: await testResults,
+      solutionFiles: FileSet(files: solutionFiles),
+      testResults: testResults,
       styleErrorLog: styleErrorLog,
       buildErrorLog: compileErrorLog,
     );
@@ -405,49 +405,21 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       String valgrindOutput = row[6];
       bool killedByTimer = row[7];
       String checkerOutput = row[8];
-      // int status = row[9];
+      int status = row[9];
       int exitStatus = row[10];
-      if (signalKilled > 0 && !killedByTimer) {
-        results.add(TestResult(
-          testNumber: testNumber,
-          stdout: stdout,
-          stderr: stderr,
-          signalKilled: signalKilled,
-          status: SolutionStatus.RUNTIME_ERROR,
-        ));
-      }
-      else if (killedByTimer) {
-        results.add(TestResult(
-          testNumber: testNumber,
-          killedByTimer: killedByTimer,
-          status: SolutionStatus.TIME_LIMIT
-        ));
-      }
-      else if (valgrindErrors > 0) {
-        results.add(TestResult(
-          testNumber: testNumber,
-          valgrindErrors: valgrindErrors,
-          valgrindOutput: valgrindOutput,
-          status: SolutionStatus.VALGRIND_ERRORS,
-          exitStatus: exitStatus,
-        ));
-      }
-      else if (!standardMatch) {
-        results.add(TestResult(
-          testNumber: testNumber,
-          stdout: stdout,
-          checkerOutput: checkerOutput,
-          status: SolutionStatus.WRONG_ANSWER,
-          exitStatus: exitStatus,
-        ));
-      }
-      else {
-        results.add(TestResult(
-          testNumber: testNumber,
-          status: SolutionStatus.OK,
-          exitStatus: exitStatus,
-        ));
-      }
+      results.add(TestResult(
+        testNumber: testNumber,
+        stdout: stdout,
+        stderr: stderr,
+        signalKilled: signalKilled,
+        status: SolutionStatus.valueOf(status)!,
+        killedByTimer: killedByTimer,
+        valgrindErrors: valgrindErrors,
+        valgrindOutput: valgrindOutput,
+        exitStatus: exitStatus,
+        standardMatch: standardMatch,
+        checkerOutput: checkerOutput,
+      ));
     }
     return results;
   }
