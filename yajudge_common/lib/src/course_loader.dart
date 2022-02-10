@@ -277,6 +277,9 @@ class CourseLoader {
 
   ProblemData _loadProblemData(bool withGradingData, String problemId) {
     final problemYamlFile = io.File(problemPath(problemId)+'/problem.yaml');
+    if (!problemYamlFile.existsSync()) {
+      throw Exception('file not exists: ${problemYamlFile.path}');
+    }
     updateCourseLastModified(problemYamlFile);
     if (withGradingData)
       updateProblemLastModified(problemId, problemYamlFile);
