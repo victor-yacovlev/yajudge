@@ -318,7 +318,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     else {
       List<Submission> submissionsToShow = List.from(_submissionsList);
       submissionsToShow.sort((a, b) => b.id.compareTo(a.id));
-      for (Submission submission in _submissionsList) {
+      for (Submission submission in submissionsToShow) {
         String firstLine = 'ID = ' + submission.id.toString() + ', ' + formatDateTime(submission.timestamp.toInt());
         Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, submission.status);
         String secondLine = statusView.item1;
