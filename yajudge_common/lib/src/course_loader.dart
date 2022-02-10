@@ -216,6 +216,24 @@ class CourseLoader {
         readingsList.add(_textReading);
       }
     }
+    else if (_lessonMap['readings'] is String) {
+      List<String> readings = _lessonMap['readings'].toString().split(' ');
+      for (String entry in readings) {
+        if (entry.isNotEmpty) {
+          _textReading = TextReading(id: entry);
+          _loadTextReading();
+          readingsList.add(_textReading);
+        }
+      }
+    }
+    else {
+      final readmeMd = io.File(rootPath+'/${_section.id}/${_lesson.id}/README.md');
+      if (readmeMd.existsSync()) {
+        _textReading = TextReading(id: _lesson.id);
+        _loadTextReading(_lesson.id, readmeMd.path);
+        readingsList.add(_textReading);
+      }
+    }
     if (_lessonMap['problems'] is YamlList) {
       YamlList problems = _lessonMap['problems'];
       for (dynamic entry in problems) {
@@ -565,8 +583,14 @@ class CourseLoader {
     return arch;
   }
 
-  void _loadTextReading() {
-    final readingFile = io.File(rootPath+'/${_section.id}/${_lesson.id}/${_textReading.id}');
+  void _loadTextReading([String readingId = '', String readingFilePath = '']) {
+    if (readingId.isEmpty) {
+      readingId = _textReading.id;
+    }
+    if (readingFilePath.isEmpty) {
+      readingFilePath = rootPath+'/${_section.id}/${_lesson.id}/${_textReading.id}';
+    }
+    final readingFile = io.File(readingFilePath);
     updateCourseLastModified(readingFile);
     if (!readingFile.path.endsWith('.md')) {
       throw UnimplementedError('only markdown (.md) text readings supported yet');
@@ -595,7 +619,7 @@ class CourseLoader {
       }
     }
     _textReading = TextReading(
-      id: path.basenameWithoutExtension(_textReading.id),
+      id: readingId,
       contentType: 'text/markdown',
       title: title,
       resources: FileSet(files: resources),
