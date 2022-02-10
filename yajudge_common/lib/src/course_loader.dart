@@ -276,16 +276,48 @@ class CourseLoader {
     int maxSubmissionFileSize = data['max_submission_file_size'] is int
         ? data['max_submission_file_size'] : _maxSubmissionFileSize;
     List<File> solutionFiles = [];
+    String solutionTemplateFileName = '';
     if (data['solution_files'] is YamlList) {
       YamlList yamlList = data['solution_files'];
       for (String entry in yamlList) {
         solutionFiles.add(File(name: entry));
       }
     }
+    else {
+      final problemDir = io.Directory(problemPath(problemId));
+      List<String> candidates = [];
+      for (final entry in problemDir.listSync(recursive: false, followLinks: true)) {
+        final entryPath = entry.path;
+        final baseName = path.basenameWithoutExtension(entryPath);
+        final fileName = path.basename(entryPath);
+        if (baseName == problemId) {
+          candidates.add(fileName);
+        }
+      }
+      if (candidates.length > 1) {
+        throw Exception('ambiguous solution template file in $problemId. Set explicit solution_files entry in problem.yaml');
+      }
+      else if (candidates.isEmpty) {
+        throw Exception('no solution template file in $problemId. Set explicit solution_files entry in problem.yaml');
+      }
+      solutionTemplateFileName = candidates.single;
+      solutionFiles.add(File(name: solutionTemplateFileName));
+    }
     FileSet publicFiles = FileSet();
     if (data['public_files'] is YamlList) {
       YamlList yamlList = data['public_files'];
       publicFiles = _loadFileSet(problemId, yamlList, true, false);
+    }
+    else if (solutionTemplateFileName.isNotEmpty) {
+      final solutionTemplateFile = io.File(problemPath(problemId)+'/'+solutionTemplateFileName);
+      final templateData = solutionTemplateFile.readAsBytesSync();
+      final description = 'Шаблон решения'; // TODO i18n
+      updateCourseLastModified(solutionTemplateFile);
+      publicFiles = FileSet(files: [File(
+        name: solutionTemplateFileName,
+        data: templateData,
+        description: description,
+      )]);
     }
     GradingOptions gradingOptions;
     if (withGradingData) {
