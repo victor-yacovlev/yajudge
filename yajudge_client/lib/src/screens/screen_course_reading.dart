@@ -13,14 +13,16 @@ class CourseReadingScreen extends BaseScreen {
 
   @override
   State<StatefulWidget> createState() {
-    return CourseReadingScreenState();
+    return CourseReadingScreenState(this);
   }
 
 }
 
 class CourseReadingScreenState extends BaseScreenState {
 
-  CourseReadingScreenState() : super(title: '') ;
+  final CourseReadingScreen screen;
+
+  CourseReadingScreenState(this.screen) : super(title: screen.textReading.title) ;
 
   @override
   Widget buildCentralWidget(BuildContext context) {
