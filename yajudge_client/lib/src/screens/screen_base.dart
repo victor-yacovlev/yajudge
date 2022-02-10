@@ -1,7 +1,10 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../controllers/connection_controller.dart';
 import '../widgets/expandable_fab.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -370,18 +373,48 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
     if (userProfileItem!=null) {
       titleRowItems.addAll([Spacer(), userProfileItem]);
     }
+    Widget? submitBar = _buildSubmitBar(context);
+    Widget? bottomWidget = submitBar!=null? submitBar : _buildFooter(context);
     Scaffold scaffold = Scaffold(
       appBar: AppBar(
         title: Row(children: titleRowItems),
         bottom: tabBar,
       ),
       body: body,
-      bottomSheet: _buildSubmitBar(context),
+      bottomSheet: bottomWidget,
       floatingActionButton: _buildFAB(context),
       drawer: drawer,
       drawerEnableOpenDragGesture: false,
     );
     return scaffold;
+  }
+
+  Widget? _buildFooter(BuildContext context) {
+    if (!kIsWeb) {
+      return null;
+    }
+    TextStyle footerTextStyle = TextStyle(
+      fontSize: 10,
+      color: Colors.white,
+    );
+    return Container(
+      height: 20.0,
+      color: Colors.black54,
+      child: Center(
+        child: RichText(
+          text: TextSpan(
+            style: footerTextStyle,
+            text: 'Yet Another Judge (c) 2021-2022 Victor Yacovlev',
+            recognizer: TapGestureRecognizer()
+              ..onTap = () {
+                launch(
+                  'https://github.com/victor-yacovlev/yajudge',
+                );
+              }
+          ),
+        ),
+      ),
+    );
   }
 
   @protected

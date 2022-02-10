@@ -86,7 +86,7 @@ class DashboardScreenState extends BaseScreenState {
       ),
       constraints: BoxConstraints(
         minWidth: MediaQuery.of(context).size.width - 300,
-        minHeight: MediaQuery.of(context).size.height - 46,
+        minHeight: MediaQuery.of(context).size.height - 70,
       ),
       child: Column(
         children: items,
