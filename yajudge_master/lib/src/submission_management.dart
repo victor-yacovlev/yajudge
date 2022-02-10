@@ -81,13 +81,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       double sectionScoreMax = 0.0;
       bool sectionBlocked = !courseCompleted;
       bool sectionCompleted = true;
+      bool lessonCompleted = true;
 
       List<LessonStatus> lessonStatuses = [];
       for (final lesson in section.lessons) {
         double lessonScoreGot = 0.0;
         double lessonScoreMax = 0.0;
         bool lessonBlocked = !sectionCompleted;
-        bool lessonCompleted = true;
 
         List<ProblemStatus> problemStatuses = [];
         for (final problemMetadata in lesson.problemsMetadata) {
