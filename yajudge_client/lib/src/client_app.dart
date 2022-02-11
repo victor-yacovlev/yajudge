@@ -268,9 +268,12 @@ class AppState extends State<App> {
       );
     }
 
+    String problemOrReadingId = parts[0];
+    parts = parts.sublist(1);
+
+    ProblemData problemData = findProblemById(courseData, problemOrReadingId);
+    ProblemMetadata problemMetadata = findProblemMetadataById(courseData, problemOrReadingId);
     TextReading textReading = TextReading();
-    ProblemData problemData = ProblemData();
-    ProblemMetadata problemMetadata = ProblemMetadata();
 
     if (parts.first == 'problems') {
       // parse problem path and return problem screen

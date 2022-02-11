@@ -94,7 +94,8 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       course: _course,
       problemId: screen.problemId,
     );
-    _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
+    final callOptions = grpc.CallOptions(timeout: Duration(minutes: 30));
+    _statusStream = submissionsService.subscribeToProblemStatusNotifications(request, options: callOptions);
     _statusStream!.listen((ProblemStatus event) {
       setState(() {
         errorMessage = '';

@@ -96,6 +96,7 @@ TextReading findReadingByKey(CourseData courseData, String key) {
   return TextReading();
 }
 
+
 ProblemData findProblemByKey(CourseData courseData, String key) {
   List<String> parts = key.substring(1).split('/');
   assert (parts.length >= 3);
@@ -140,6 +141,7 @@ ProblemMetadata findProblemMetadataById(CourseData courseData, String problemId)
   }
   return ProblemMetadata();
 }
+
 
 bool submissionsCountLimitIsValid(SubmissionsCountLimit countLimit) {
   return countLimit.attemptsLeft!=0 || countLimit.nextTimeReset!=0;
