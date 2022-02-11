@@ -751,11 +751,20 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     controllers.add(controller);
     log.info('added problem notification controller for $key');
 
-    Future.delayed(Duration(milliseconds: 500), () {
-      _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
-    });
-
     return controller.stream;
+  }
+
+  @override
+  Future<ProblemStatus> checkProblemStatus(ServiceCall call, ProblemStatusRequest request) async {
+    final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
+    final problemMetadata = findProblemMetadataById(courseData, request.problemId);
+    final futureProblemStatus = _getProblemStatus(
+      user: request.user,
+      course: request.course,
+      problemMetadata: problemMetadata,
+      withSubmissions: true,
+    );
+    return futureProblemStatus;
   }
 
   void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) {

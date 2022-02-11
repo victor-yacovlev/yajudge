@@ -20,7 +20,7 @@ const StudentsMethods = [
   'GetProfile', 'ChangePassword',
   'GetCourses', 'GetCoursePublicContent',
   'CheckSubmissionsCountLimit', 'SubmitProblemSolution', 'GetSubmissions',
-  'CheckCourseStatus', 'GetSubmissionResult',
+  'CheckCourseStatus', 'CheckProblemStatus', 'GetSubmissionResult',
   'SubscribeToProblemStatusNotifications',
   'SubscribeToCourseStatusNotifications'
 ];

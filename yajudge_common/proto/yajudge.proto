@@ -472,6 +472,7 @@ service SubmissionManagement {
   rpc GetSubmissionResult(Submission) returns (Submission) {}
   rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus) {}
 
+  rpc CheckProblemStatus(ProblemStatusRequest) returns (ProblemStatus) {}
   rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus) {}
 
   // anounce grader alive and receive stream of submissions to be graded

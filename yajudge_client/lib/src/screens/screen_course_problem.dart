@@ -67,8 +67,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           _problemMetadata = findProblemMetadataById(courseData, screen.problemId);
           _submissionFiles = List.from(_problemData.solutionFiles.files);
           clearStatusMessage();
-          _subscribeToNotifications();
         });
+        _subscribeToNotifications();
+        _checkStatus();
       })
       .onError((error, _) {
         setState(() {
@@ -84,6 +85,28 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         errorMessage = error;
         Future.delayed(Duration(seconds: 5), _loadProblemData);
       });
+    });
+  }
+
+  void _checkStatus() {
+    final submissionsService = ConnectionController.instance!.submissionsService;
+    final request = ProblemStatusRequest(
+      user: screen.loggedUser,
+      course: _course,
+      problemId: screen.problemId,
+    );
+    submissionsService.checkProblemStatus(request)
+    .then((ProblemStatus status) {
+      setState(() {
+        _problemStatus = status;
+        errorMessage = '';
+      });
+    })
+    .onError((error, _) {
+      setState(() {
+        errorMessage = error;
+      });
+      Future.delayed(Duration(seconds: 5), _checkStatus);
     });
   }
 
