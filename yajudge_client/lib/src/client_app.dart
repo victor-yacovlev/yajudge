@@ -2,7 +2,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_client/src/screens/screen_submission.dart';
-import 'screens/screen_course_problem_onepage.dart';
+import 'screens/screen_course_problem.dart';
 import 'screens/screen_error.dart';
 import 'controllers/connection_controller.dart';
 import 'controllers/courses_controller.dart';
@@ -287,7 +287,7 @@ class AppState extends State<App> {
         return ErrorScreen('Ошибка 404', '');
       }
       if (parts.isEmpty) {
-        return CourseProblemScreenOnePage(
+        return CourseProblemScreen(
           user: loggedUser,
           course: courseEntry.course,
           courseData: courseData,

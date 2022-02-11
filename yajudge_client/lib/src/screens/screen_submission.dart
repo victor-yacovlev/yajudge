@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tuple/tuple.dart';
-import 'package:yajudge_client/src/screens/screen_course_problem_onepage.dart';
+import 'package:yajudge_client/src/screens/screen_course_problem.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../utils/utils.dart';

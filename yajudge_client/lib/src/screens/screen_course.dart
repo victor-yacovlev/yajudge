@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
-import 'screen_course_problem_onepage.dart';
+import 'screen_course_problem.dart';
 import '../controllers/connection_controller.dart';
 import '../widgets/course_lessons_tree.dart';
 import '../widgets/unified_widgets.dart';
