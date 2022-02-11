@@ -94,19 +94,34 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       course: _course,
       problemId: screen.problemId,
     );
-    final callOptions = grpc.CallOptions(timeout: Duration(minutes: 30));
-    _statusStream = submissionsService.subscribeToProblemStatusNotifications(request, options: callOptions);
-    _statusStream!.listen((ProblemStatus event) {
-      setState(() {
-        errorMessage = '';
-        _problemStatus = event;
-      });
-    }).onError((error) {
-      setState(() {
-        errorMessage = error;
-        _statusStream = null;
-      });
-      Future.delayed(Duration(seconds: 5), _subscribeToNotifications);
+    _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
+    _statusStream!.listen(
+      _updateProblemStatus,
+      onError: (error) {
+        log.info('problem status subscription error: $error');
+        setState(() {
+          errorMessage = error;
+          _statusStream = null;
+        });
+        Future.delayed(Duration(seconds: 5), _subscribeToNotifications);
+      },
+      onDone: () {
+        log.info('problem status subscription done');
+        setState(() {
+          errorMessage = '';
+          _statusStream = null;
+        });
+        _subscribeToNotifications();
+      },
+      cancelOnError: true,
+    );
+  }
+
+  void _updateProblemStatus(ProblemStatus event) {
+    log.info('got problem status event');
+    setState(() {
+      errorMessage = '';
+      _problemStatus = event;
     });
   }
 
