@@ -112,6 +112,12 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
   void _subscribeToNotifications() {
     log.info('subscribing to problem status notifications');
+    if (errorMessage.isNotEmpty) {
+      setState(() {
+        errorMessage = '';
+      });
+    }
+
     final submissionsService = ConnectionController.instance!.submissionsService;
     final request = ProblemStatusRequest(
       user: screen.loggedUser,
@@ -152,6 +158,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       },
       cancelOnError: true,
     );
+
   }
 
   @override

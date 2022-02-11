@@ -447,6 +447,8 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
     });
   }
 
+  String get errorMessage => _errorMessage;
+
   set errorMessage(dynamic error) {
     if (error is String) {
       _errorMessage = error;
