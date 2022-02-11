@@ -407,10 +407,6 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
       footerText = TextSpan(text: _errorMessage, style: footerTextStyle);
       footerBackground = Theme.of(context).errorColor;
     }
-    else if (statusMessage.isNotEmpty) {
-      footerText = TextSpan(text: statusMessage, style: footerTextStyle);
-      footerBackground = Colors.black54;
-    }
     else {
       footerText = TextSpan(
         text: 'Yet Another Judge (c) 2021-2022 Victor Yacovlev',
@@ -424,15 +420,31 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
       );
       footerBackground = Colors.black54;
     }
-    return Container(
+
+    Widget mainStatusBar = Container(
       height: 20.0,
-      color: footerBackground,
-      child: Center(
-        child: RichText(
-          text: footerText,
-        ),
-      ),
+      color: Colors.transparent,
+      child: Center(child: RichText(text: footerText)),
     );
+    Widget messageStatusBar = Container(
+      height: 20.0,
+      color: Colors.transparent,
+      child: Row(children: [SizedBox(width: 8), RichText(
+        text: TextSpan(text: statusMessage, style: footerTextStyle),
+      ), Spacer()])
+    );
+    return Container(
+      color: footerBackground,
+      child: Stack(children: [messageStatusBar, mainStatusBar]),
+    );
+  }
+
+  void clearStatusMessage() {
+    Future.delayed(Duration(milliseconds: 500), () {
+      setState(() {
+        statusMessage = '';
+      });
+    });
   }
 
   set errorMessage(dynamic error) {

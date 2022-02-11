@@ -98,9 +98,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     _statusStream!.listen((ProblemStatus event) {
       setState(() {
         errorMessage = '';
-        statusMessage = '';
         _problemStatus = event;
       });
+      clearStatusMessage();
     }).onError((error) {
       setState(() {
         errorMessage = error;
