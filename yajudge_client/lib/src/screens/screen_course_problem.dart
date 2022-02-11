@@ -115,6 +115,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       },
       cancelOnError: true,
     );
+    errorMessage = '';
   }
 
   void _updateProblemStatus(ProblemStatus event) {
