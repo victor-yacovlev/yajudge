@@ -267,8 +267,8 @@ class CourseScreenState extends BaseScreenState {
           disabledHint += '. Но администратор или преподаватель все равно может отправлять решения';
         }
       }
-      else if (status.lastSolutionStatus != SolutionStatus.ANY_STATUS_OR_NULL) {
-        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, status.lastSolutionStatus);
+      else if (status.finalSolutionStatus != SolutionStatus.ANY_STATUS_OR_NULL) {
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, status.finalSolutionStatus);
         String secondLine = statusView.item1;
         iconData = statusView.item2;
         iconColor = statusView.item3;

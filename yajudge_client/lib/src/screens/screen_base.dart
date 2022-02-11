@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:grpc/grpc.dart' as grpc;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -94,6 +95,8 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
   final double leftNavigationPadding = 320;
 
   TabController? _secondLevelTabController;
+
+  String _errorMessage = '';
 
   BaseScreenState({required this.title}) : super();
 
@@ -397,24 +400,49 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
       fontSize: 10,
       color: Colors.white,
     );
+    TextSpan footerText;
+    Color footerBackround;
+    if (_errorMessage.isNotEmpty) {
+      footerText = TextSpan(text: _errorMessage, style: footerTextStyle);
+      footerBackround = Theme.of(context).errorColor;
+    }
+    else {
+      footerText = TextSpan(
+        text: 'Yet Another Judge (c) 2021-2022 Victor Yacovlev',
+        style: footerTextStyle,
+        recognizer: TapGestureRecognizer()
+          ..onTap = () {
+            launch(
+              'https://github.com/victor-yacovlev/yajudge',
+            );
+          }
+      );
+      footerBackround = Colors.black54;
+    }
     return Container(
       height: 20.0,
-      color: Colors.black54,
+      color: footerBackround,
       child: Center(
         child: RichText(
-          text: TextSpan(
-            style: footerTextStyle,
-            text: 'Yet Another Judge (c) 2021-2022 Victor Yacovlev',
-            recognizer: TapGestureRecognizer()
-              ..onTap = () {
-                launch(
-                  'https://github.com/victor-yacovlev/yajudge',
-                );
-              }
-          ),
+          text: footerText,
         ),
       ),
     );
+  }
+
+  set errorMessage(dynamic error) {
+    if (error is String) {
+      _errorMessage = error;
+    }
+    else if (error is grpc.GrpcError && error.code==grpc.StatusCode.unavailable) {
+      _errorMessage = 'Нет соединения с сервером';
+    }
+    else if (error is grpc.GrpcError) {
+      _errorMessage = 'Ошибка подключения к серверу: ${error.codeName} (${error.code})';
+    }
+    else {
+      _errorMessage = error.toString();
+    }
   }
 
   @protected

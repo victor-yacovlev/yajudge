@@ -128,7 +128,7 @@ ProblemData findProblemById(CourseData courseData, String problemId) {
   return ProblemData();
 }
 
-ProblemMetadata findProblemMetadataByKey(CourseData courseData, String problemId) {
+ProblemMetadata findProblemMetadataById(CourseData courseData, String problemId) {
   for (Section section in courseData.sections) {
     for (Lesson lesson in section.lessons) {
       for (ProblemMetadata problem in lesson.problemsMetadata) {
@@ -139,6 +139,10 @@ ProblemMetadata findProblemMetadataByKey(CourseData courseData, String problemId
     }
   }
   return ProblemMetadata();
+}
+
+bool submissionsCountLimitIsValid(SubmissionsCountLimit countLimit) {
+  return countLimit.attemptsLeft!=0 || countLimit.nextTimeReset!=0;
 }
 
 GradingLimits parseDefaultLimits(YamlMap conf) {

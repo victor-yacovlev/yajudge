@@ -191,7 +191,10 @@ message ProblemStatus {
   int64               soft_deadline = 8;
   int64               hard_deadline = 9;
   double              deadline_penalty = 10;
-  SolutionStatus      last_solution_status = 11;
+  SolutionStatus      final_solution_status = 11;
+  SubmissionsCountLimit submission_count_limit = 12;
+  repeated Submission submissions = 13;
+
 }
 
 message LessonStatus {
@@ -456,12 +459,20 @@ message CheckCourseStatusRequest {
   Course  course    = 2;
 }
 
+message ProblemStatusRequest {
+  User    user      = 1;
+  Course  course    = 2;
+  string  problem_id = 3;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
   rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
   rpc GetSubmissionResult(Submission) returns (Submission) {}
   rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus) {}
+
+  rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus) {}
 
   // anounce grader alive and receive stream of submissions to be graded
 //  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}

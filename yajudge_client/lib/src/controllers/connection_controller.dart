@@ -15,14 +15,14 @@ class AuthGrpcInterceptor implements ClientInterceptor {
       Stream<Q> requests,
       CallOptions options,
       ClientStreamingInvoker<Q, R> invoker) {
-    return invoker(method, requests, options);
+    CallOptions newOptions = options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
+    return invoker(method, requests, newOptions);
   }
 
   @override
   ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
       CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
-    CallOptions newOptions =
-    options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
+    CallOptions newOptions = options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
     return invoker(method, request, newOptions);
   }
 }

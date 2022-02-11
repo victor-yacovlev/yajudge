@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart' as grpc;
 import 'package:tuple/tuple.dart';
 import 'screen_submission.dart';
 import '../controllers/connection_controller.dart';
@@ -35,12 +36,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
   final CourseProblemScreenOnePage screen;
 
-  String _errorString = '';
-  int _submissionsLimit = -1;
-  int _nextLimitReset = -1;
-  List<Submission> _submissionsList = [];
+  ProblemStatus _problemStatus = ProblemStatus();
   List<File> _submissionFiles = [];
-  late Timer _statusCheckTimer;
+  grpc.ResponseStream<ProblemStatus>? _statusStream;
 
   CourseProblemScreenOnePageState(this.screen) : super(title: screen.problemData.title);
 
@@ -48,63 +46,40 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   void initState() {
     super.initState();
     _submissionFiles = List.from(screen.problemData.solutionFiles.files);
-    _submissionsLimit = screen.courseData.maxSubmissionsPerHour;
-    _loadSubmissions();
-    _loadSubmissionLimitLeft();
-    // TODO replace to use of Notifications API when it will be implemented
-    _statusCheckTimer = Timer.periodic(Duration(seconds: 5), (_) {
-      if (mounted) {
-        _loadSubmissions();
-        _loadSubmissionLimitLeft();
-      }
+    _subscribeToNotifications();
+  }
+
+  void _subscribeToNotifications() {
+    final submissionsService = ConnectionController.instance!.submissionsService;
+    final request = ProblemStatusRequest(
+      user: screen.loggedUser,
+      course: screen.course,
+      problemId: screen.problemData.id,
+    );
+    _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
+    _statusStream!.listen((ProblemStatus event) {
+      setState(() {
+        errorMessage = '';
+        _problemStatus = event;
+      });
+    }).onError((error) {
+      setState(() {
+        errorMessage = error;
+        _statusStream = null;
+      });
+      Future.delayed(Duration(seconds: 5), (){
+        _subscribeToNotifications();
+      });
     });
   }
 
   @override
   void dispose() {
-    _statusCheckTimer.cancel();
+    if (_statusStream != null) {
+      _statusStream!.cancel();
+    }
     super.dispose();
   }
-
-  void _loadSubmissions() {
-    User user = widget.loggedUser;
-    String problemId = screen.problemData.id;
-    SubmissionFilter filter = SubmissionFilter(
-      course: screen.course,
-      problemId: problemId,
-      user: user,
-    );
-
-    ConnectionController.instance!.submissionsService.getSubmissions(filter).then((value) {
-      setState(() {
-        _submissionsList = value.submissions;
-      });
-    }).onError((error, _) {
-      setState(() {
-        _errorString = error.toString();
-      });
-    });
-  }
-
-  void _loadSubmissionLimitLeft() {
-    User user = widget.loggedUser;
-    CheckSubmissionsLimitRequest request = CheckSubmissionsLimitRequest(
-      course: screen.course,
-      user: user,
-      problemId: screen.problemData.id,
-    );
-    ConnectionController.instance!.submissionsService.checkSubmissionsCountLimit(request).then((value) {
-      setState((){
-        _submissionsLimit = value.attemptsLeft;
-        _nextLimitReset = value.nextTimeReset.toInt();
-      });
-    }).onError((error, _) {
-      setState(() {
-        _errorString = error.toString();
-      });
-    });
-  }
-
 
   void _saveStatementFile(File file) {
     PlatformsUtils.getInstance().saveLocalFile(file.name, file.data);
@@ -113,9 +88,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   List<Widget> buildStatementItems(BuildContext context) {
     List<Widget> contents = List.empty(growable: true);
     TextTheme theme = Theme.of(context).textTheme;
-    if (_errorString.isNotEmpty) {
-      contents.add(Text(_errorString, style: TextStyle(color: Theme.of(context).errorColor)));
-    }
 
     final course = screen.course;
     final courseData = screen.courseData;
@@ -247,9 +219,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
   List<Widget> buildNewSubmissionItems(BuildContext context) {
     List<Widget> contents = [];
-    if (_errorString.isNotEmpty) {
-      contents.add(Text(_errorString, style: TextStyle(color: Theme.of(context).errorColor)));
-    }
+
     TextTheme theme = Theme.of(context).textTheme;
 
     int maxSubmissionsPerHour = screen.courseData.maxSubmissionsPerHour;
@@ -257,14 +227,17 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       maxSubmissionsPerHour = screen.problemData.maxSubmissionsPerHour;
     }
 
-    if (_submissionsLimit >= 0) {
+    if (maxSubmissionsPerHour >= 0) {
       contents.add(Text('Ограничение на число посылок', style: theme.headline6!));
       contents.add(Text('Количество посылок ограничено, тестируйте решение локально перед отправкой. '));
       contents.add(Text('Вы можете отправлять не более $maxSubmissionsPerHour посылок в час. ' ));
-      contents.add(Text('Осталось попыток: ${_submissionsLimit}.'));
-      if (_submissionsLimit==0 && _nextLimitReset >= 0) {
-        String nextReset = formatDateTime(_nextLimitReset);
-        contents.add(Text('Вы сможете отправлять решения после ${nextReset}.'));
+
+      final countLimit = _problemStatus.submissionCountLimit;
+      int submissionsLeft = submissionsCountLimitIsValid(countLimit)? countLimit.attemptsLeft : maxSubmissionsPerHour;
+      contents.add(Text('Осталось попыток: $submissionsLeft.'));
+      if (submissionsLeft == 0) {
+        String nextReset = formatDateTime(countLimit.nextTimeReset.toInt());
+        contents.add(Text('Вы сможете отправлять решения после $nextReset.'));
       }
       contents.add(SizedBox(height: 20));
     }
@@ -307,16 +280,14 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
   List<Widget> buildSubmissionsItems(BuildContext context) {
     List<Widget> contents = [];
-    if (_errorString.isNotEmpty) {
-      contents.add(Text(_errorString, style: TextStyle(color: Theme.of(context).errorColor)));
-    }
-    TextTheme theme = Theme.of(context).textTheme;
 
-    if (_submissionsList.isEmpty) {
+    final submissionsList = _problemStatus.submissions;
+
+    if (submissionsList.isEmpty) {
       contents.add(Text('Посылок пока нет'));
     }
     else {
-      List<Submission> submissionsToShow = List.from(_submissionsList);
+      List<Submission> submissionsToShow = List.from(submissionsList);
       submissionsToShow.sort((a, b) => b.id.compareTo(a.id));
       for (Submission submission in submissionsToShow) {
         String firstLine = 'ID = ' + submission.id.toString() + ', ' + formatDateTime(submission.timestamp.toInt());
@@ -406,16 +377,15 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       user: widget.loggedUser,
     );
     ConnectionController.instance!.submissionsService.submitProblemSolution(request).then((_) {
-      _loadSubmissions();
-      _loadSubmissionLimitLeft();
       setState(() {
         for (File file in _submissionFiles) {
           file.data.clear();
         }
+        errorMessage = '';
       });
     }).onError((error, _) {
       setState(() {
-        _errorString = error.toString();
+        errorMessage = error;
       });
     });
   }
@@ -464,7 +434,10 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     if (_submissionFiles.isEmpty) {
       return 'Нечего отправлять';
     }
-    if (_submissionsLimit == 0) {
+
+    final countLimit = _problemStatus.submissionCountLimit;
+
+    if (submissionsCountLimitIsValid(countLimit) && 0==countLimit.attemptsLeft) {
       return 'Исчерпан лимит на количество посылок решения в час';
     }
     bool allFilesFilled = _submissionFiles.isNotEmpty;

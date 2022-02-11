@@ -8,12 +8,14 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import 'master_service.dart';
 
+
 class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   final Logger log = Logger('SubmissionManager');
   final PostgreSQLConnection connection;
   final MasterService parent;
 
+  Map<String,List<StreamController<ProblemStatus>>> _problemStatusStreamControllers = {};
 
   SubmissionManagementService({
     required this.parent,
@@ -26,46 +28,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     final course = request.course;
     final courseDataId = course.dataId;
 
-    final usersId = user.id.toInt();
-    final coursesId = course.id.toInt();
-
-    Map<String,SolutionStatus> statuses = {};
-    Map<String,Int64> timestamps = {};
-
-    List<dynamic> rows = [];
-
-    try {
-      rows = await connection.query(
-          '''
-      select problem_id,status,timestamp from submissions
-      where users_id=@users_id and courses_id=@courses_id
-      order by timestamp 
-      ''',
-          substitutionValues: {
-            'users_id': usersId,
-            'courses_id': coursesId,
-          }
-      );
-    } catch (error) {
-      log.severe('sql query at checkCourseStatus: $error');
-    }
-
-    final finalStatuses = [SolutionStatus.OK, SolutionStatus.DISQUALIFIED];
-    for (List<dynamic> fields in rows) {
-      String problemId = fields[0];
-      SolutionStatus status = SolutionStatus.valueOf(fields[1])!;
-      Int64 timestamp = Int64(fields[2]);
-      if (statuses.containsKey(problemId)) {
-        statuses[problemId] = status;
-        final previousStatus = statuses[problemId];
-        if (!finalStatuses.contains(previousStatus)) {
-          statuses[problemId] = status;
-          timestamps[problemId] = timestamp;
-        }
-      } else {
-        statuses[problemId] = status;
-      }
-    }
     final courseData = parent.courseManagementService.getCourseData(courseDataId);
     double courseScoreGot = 0.0;
     double courseScoreMax = 0.0;
@@ -79,15 +41,15 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     for (final section in courseData.sections) {
       double sectionScoreGot = 0.0;
       double sectionScoreMax = 0.0;
-      bool sectionBlocked = !courseCompleted;
       bool sectionCompleted = true;
       bool lessonCompleted = true;
+      bool lessonBlocked = false;
 
       List<LessonStatus> lessonStatuses = [];
       for (final lesson in section.lessons) {
         double lessonScoreGot = 0.0;
         double lessonScoreMax = 0.0;
-        bool lessonBlocked = !sectionCompleted;
+        lessonBlocked = !lessonCompleted;
 
         List<ProblemStatus> problemStatuses = [];
         for (final problemMetadata in lesson.problemsMetadata) {
@@ -95,55 +57,28 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           if (problemMetadata.blocksNextProblems) {
             problemsRequired ++;
           }
-          final problemId = problemMetadata.id;
-          bool problemCompleted;
-          bool problemBlocked = !lessonCompleted;
-          double problemScoreGot = 0.0;
-          double problemScoreMax = 100.0 * problemMetadata.fullScoreMultiplier;
-          Int64 problemSubmitted = Int64(0);
-          SolutionStatus lastSolutionStatus = SolutionStatus.ANY_STATUS_OR_NULL;
-          if (statuses.containsKey(problemMetadata.id)) {
-            final problemStatus = statuses[problemId];
-            if (timestamps.containsKey(problemId)) {
-              problemSubmitted = timestamps[problemId]!;
-            }
-            lastSolutionStatus = problemStatus!;
-            problemCompleted = problemStatus==SolutionStatus.OK;
-            if (problemCompleted) {
-              // TODO check for deadlines
-              problemScoreGot = problemScoreMax;
-              problemsSolved ++;
-              if (problemMetadata.blocksNextProblems) {
-                problemsRequiredSolved ++;
-              }
-            }
-          }
-          else {
-            problemCompleted = false;
-          }
 
-          lessonScoreGot += problemScoreGot;
-          lessonScoreMax += problemScoreMax;
-          sectionScoreGot += problemScoreGot;
-          sectionScoreMax += problemScoreMax;
-          courseScoreGot += problemScoreGot;
-          courseScoreMax += problemScoreMax;
-          if (problemMetadata.blocksNextProblems && !problemCompleted) {
+          final problemStatus = await _getProblemStatus(
+              user: user,
+              course: course,
+              problemMetadata: problemMetadata,
+              problemBlocked: !lessonCompleted,
+          );
+
+          lessonScoreGot += problemStatus.scoreGot;
+          lessonScoreMax += problemStatus.scoreMax;
+          sectionScoreGot += problemStatus.scoreGot;
+          sectionScoreMax += problemStatus.scoreMax;
+          courseScoreGot += problemStatus.scoreGot;
+          courseScoreMax += problemStatus.scoreMax;
+
+          if (problemMetadata.blocksNextProblems && !problemStatus.completed) {
             lessonCompleted = false;
             sectionCompleted = false;
             courseCompleted = false;
           }
 
-          problemStatuses.add(ProblemStatus(
-            problemId: problemId,
-            scoreGot: problemScoreGot,
-            scoreMax: problemScoreMax,
-            blockedByPrevious: problemBlocked,
-            blocksNext: problemMetadata.blocksNextProblems,
-            completed: problemCompleted,
-            submitted: problemSubmitted,
-            lastSolutionStatus: lastSolutionStatus,
-          ));
+          problemStatuses.add(problemStatus);
         }
 
         lessonStatuses.add(LessonStatus(
@@ -182,11 +117,90 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     );
   }
 
+  Future<ProblemStatus> _getProblemStatus({
+    required User user,
+    required Course course,
+    required ProblemMetadata problemMetadata,
+    bool problemBlocked = false,
+    bool withSubmissions = false,
+  }) async {
+
+    final usersId = user.id.toInt();
+    final coursesId = course.id.toInt();
+
+    List<dynamic> rows = [];
+
+    try {
+      rows = await connection.query(
+          '''
+      select id,status,timestamp from submissions
+      where users_id=@users_id and courses_id=@courses_id and problem_id=@problem_id
+      order by id asc 
+      ''',
+          substitutionValues: {
+            'users_id': usersId,
+            'courses_id': coursesId,
+            'problem_id': problemMetadata.id,
+          }
+      );
+    } catch (error) {
+      log.severe('sql query at checkCourseStatus: $error');
+    }
+
+    final finalStatuses = [SolutionStatus.OK, SolutionStatus.DISQUALIFIED];
+    List<Submission> submissions = [];
+    SolutionStatus problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
+    bool completed = false;
+    double scoreGot = 0.0;
+    Int64 submitted = Int64(0);
+    for (List<dynamic> fields in rows) {
+      int id = fields[0];
+      SolutionStatus status = SolutionStatus.valueOf(fields[1])!;
+      Int64 timestamp = Int64(fields[2]);
+      if (finalStatuses.contains(status)) {
+        problemStatus = status;
+        submitted = timestamp;
+      }
+      if (status == SolutionStatus.OK) {
+        scoreGot = problemMetadata.fullScoreMultiplier * 100;
+        completed = true;
+      }
+      if (withSubmissions) {
+        submissions.add(Submission(
+          id: Int64(id),
+          problemId: problemMetadata.id,
+          status: status,
+          user: user,
+          course: course,
+          timestamp: timestamp,
+        ));
+      }
+    }
+
+    final countLimit = await _submissionsCountLimit(user, course, problemMetadata.id);
+    return ProblemStatus(
+      problemId: problemMetadata.id,
+      blockedByPrevious: problemBlocked,
+      blocksNext: problemMetadata.blocksNextProblems,
+      completed: completed,
+      scoreMax: problemMetadata.fullScoreMultiplier * 100,
+      scoreGot: scoreGot,
+      finalSolutionStatus: problemStatus,
+      submitted: submitted,
+      submissionCountLimit: countLimit,
+      submissions: submissions,
+    );
+  }
+
   @override
   Future<SubmissionsCountLimit> checkSubmissionsCountLimit(ServiceCall call, CheckSubmissionsLimitRequest request) async {
-    int courseId = request.course.id.toInt();
-    int userId = request.user.id.toInt();
-    String problemId = request.problemId;
+    return _submissionsCountLimit(request.user, request.course, request.problemId);
+  }
+
+  Future<SubmissionsCountLimit> _submissionsCountLimit(User user, Course course, String problemId) async {
+    int courseId = course.id.toInt();
+    int userId = user.id.toInt();
+
     // min time = current time - one hour
     int minTime = DateTime.now().subtract(Duration(hours: 1)).toUtc().millisecondsSinceEpoch ~/ 1000;
     List<dynamic> rows = await connection.query(
@@ -212,7 +226,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         earliestSubmission = currentSubmission;
       }
     }
-    final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
+    final courseData = parent.courseManagementService.getCourseData(course.dataId);
     final problemData = findProblemById(courseData, problemId);
     int limit = problemData.maxSubmissionsPerHour>0 ? problemData.maxSubmissionsPerHour : courseData.maxSubmissionsPerHour;
     limit -= submissionsCount;
@@ -251,12 +265,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         throw GrpcError.permissionDenied('cant access not own submissions');
       }
     }
-    Course course;
-    if (courseEnroll != null) {
-      course = courseEnroll.course;
-    } else {
-      course = request.course;
-    }
+    return _getSubmissions(request.user, request.course, request.problemId, request.status);
+  }
+
+  Future<SubmissionList> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
     String query =
       '''
     select submissions.id, users_id, problem_id, timestamp, status,
@@ -268,18 +280,18 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     List<String> conditions = List.empty(growable: true);
     Map<String,dynamic> queryArguments = Map();
     conditions.add('courses_id=@courses_id');
-    queryArguments['courses_id'] = request.course.id.toInt();
-    if (request.user.id != 0) {
+    queryArguments['courses_id'] = course.id.toInt();
+    if (user.id != 0) {
       conditions.add('users_id=@users_id');
-      queryArguments['users_id'] = request.user.id.toInt();
+      queryArguments['users_id'] = user.id.toInt();
     }
-    if (request.problemId.isNotEmpty) {
+    if (problemId.isNotEmpty) {
       conditions.add('problem_id=@problem_id');
-      queryArguments['problem_id'] = request.problemId;
+      queryArguments['problem_id'] = problemId;
     }
-    if (request.status != SolutionStatus.ANY_STATUS_OR_NULL) {
+    if (status != SolutionStatus.ANY_STATUS_OR_NULL) {
       conditions.add('status=@status');
-      queryArguments['status'] = request.status.value;
+      queryArguments['status'] = status.value;
     }
     query += ' and ' + conditions.join(' and ');
     List<dynamic> rows = await connection.query(query, substitutionValues: queryArguments);
@@ -486,6 +498,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         }
       );
     }
+    _notifyProblemStatusChanged(currentUser, request.course, request.problemId, true);
     return Submission(id: Int64(submissionId));
   }
 
@@ -586,6 +599,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         );
       }
     });
+    _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
     return request;
   }
 
@@ -680,6 +694,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       ProblemData problemData = await getProblemDataForSubmission(submission);
       if (graderMatch(request, problemData.gradingOptions)) {
         assignGrader(submission.id.toInt(), request.name);
+        _notifyProblemStatusChanged(submission.user, submission.course, submission.problemId, true);
         log.info('submission ${submission.id} assigned and sent to grader ${request.name}');
         return submission;
       }
@@ -709,6 +724,62 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     );
     final response = await parent.courseManagementService.getProblemFullContent(null, request);
     return response.data;
+  }
+
+  @override
+  Stream<ProblemStatus> subscribeToProblemStatusNotifications(ServiceCall call, ProblemStatusRequest request) {
+    final key = '${request.user.id}/${request.course.id}/${request.problemId}';
+    StreamController<ProblemStatus> controller = StreamController<ProblemStatus>();
+    controller.onCancel = () {
+      log.info('removing controller from problem status listeners with key $key');
+      List<StreamController<ProblemStatus>> controllers;
+      controllers = _problemStatusStreamControllers[key]!;
+      controllers.remove(controller);
+      if (controllers.isEmpty) {
+        _problemStatusStreamControllers.remove(key);
+      }
+    };
+
+    List<StreamController<ProblemStatus>> controllers;
+    if (_problemStatusStreamControllers.containsKey(key)) {
+      controllers = _problemStatusStreamControllers[key]!;
+    }
+    else {
+      controllers = [];
+      _problemStatusStreamControllers[key] = controllers;
+    }
+    controllers.add(controller);
+    log.info('added problem notification controller for $key');
+
+    _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
+
+    return controller.stream;
+  }
+
+  void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) {
+    final key = '${user.id}/${course.id}/${problemId}';
+    List<StreamController<ProblemStatus>> controllers = [];
+    if (_problemStatusStreamControllers.containsKey(key)) {
+      controllers = _problemStatusStreamControllers[key]!;
+    }
+    if (controllers.isEmpty) {
+      return;
+    }
+    final courseData = parent.courseManagementService.getCourseData(course.dataId);
+    final problemMetadata = findProblemMetadataById(courseData, problemId);
+
+    final futureProblemStatus = _getProblemStatus(
+      user: user,
+      course: course,
+      problemMetadata: problemMetadata,
+      withSubmissions: withSubmissions,
+    );
+
+    futureProblemStatus.then((ProblemStatus status) {
+      for (final controller in controllers) {
+        controller.sink.add(status);
+      }
+    });
   }
 
 }

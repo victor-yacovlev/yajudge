@@ -282,7 +282,7 @@ class AppState extends State<App> {
       String problemId = parts[0];
       parts = parts.sublist(1);
       problemData = findProblemById(courseData, problemId);
-      problemMetadata = findProblemMetadataByKey(courseData, problemId);
+      problemMetadata = findProblemMetadataById(courseData, problemId);
       if (problemData.id.isEmpty) {
         return ErrorScreen('Ошибка 404', '');
       }
