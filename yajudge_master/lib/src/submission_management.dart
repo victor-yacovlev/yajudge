@@ -751,7 +751,9 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     controllers.add(controller);
     log.info('added problem notification controller for $key');
 
-    _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
+    Future.delayed(Duration(milliseconds: 500), () {
+      _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
+    });
 
     return controller.stream;
   }
