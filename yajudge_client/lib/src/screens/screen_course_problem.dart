@@ -66,7 +66,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           title = _problemData.title;
           _problemMetadata = findProblemMetadataById(courseData, screen.problemId);
           _submissionFiles = List.from(_problemData.solutionFiles.files);
-          statusMessage = 'Загрузка предыдущих посылок и статуса задачи';
+          clearStatusMessage();
           _subscribeToNotifications();
         });
       })
@@ -100,7 +100,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         errorMessage = '';
         _problemStatus = event;
       });
-      clearStatusMessage();
     }).onError((error) {
       setState(() {
         errorMessage = error;

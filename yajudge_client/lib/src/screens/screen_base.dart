@@ -440,13 +440,11 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
   }
 
   void clearStatusMessage() {
-    // TODO make it delayed
-    setState(() {
-      statusMessage = '';
+    Future.delayed(Duration(milliseconds: 500), () {
+      setState(() {
+        statusMessage = '';
+      });
     });
-    // Future.delayed(Duration(milliseconds: 500), () {
-    //
-    // });
   }
 
   set errorMessage(dynamic error) {
