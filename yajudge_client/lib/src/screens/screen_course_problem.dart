@@ -88,6 +88,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _subscribeToNotifications() {
+    log.info('subscribing to problem status notifications');
     final submissionsService = ConnectionController.instance!.submissionsService;
     final request = ProblemStatusRequest(
       user: screen.loggedUser,
@@ -98,7 +99,8 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     DateTime eventStatusGot = DateTime.fromMillisecondsSinceEpoch(0);
     _statusStream!.listen(
       (ProblemStatus event) {
-        log.info('got problem status event');
+        int submissionsCount = event.submissions.length;
+        log.info('got problem status event with $submissionsCount existing submissions');
         eventStatusGot = DateTime.now();
         setState(() {
           errorMessage = '';
