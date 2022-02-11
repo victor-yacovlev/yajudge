@@ -8,6 +8,7 @@ class CoursesController {
 
   static CoursesController? instance;
   Map<String,CourseDataCacheItem> _courseDataCache = {};
+  List<CoursesList_CourseListEntry> _coursesList = [];
 
   static void initialize() {
     assert(instance == null);
@@ -16,8 +17,11 @@ class CoursesController {
 
   Future<Tuple2<Course,Role>> loadCourseByPrefix(User currentUser, String courseUrlPrefix) async {
     final filter = CoursesFilter(user: currentUser);
-    final coursesList = await ConnectionController.instance!.coursesService.getCourses(filter);
-    for (final entry in coursesList.courses) {
+    if (_coursesList.isEmpty) {
+      _coursesList =
+      (await ConnectionController.instance!.coursesService.getCourses(filter)).courses;
+    }
+    for (final entry in _coursesList) {
       if (entry.course.urlPrefix == courseUrlPrefix) {
         return Tuple2(entry.course, entry.role);
       }
