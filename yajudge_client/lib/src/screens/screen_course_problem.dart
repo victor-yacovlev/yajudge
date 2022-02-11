@@ -95,12 +95,24 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       problemId: screen.problemId,
     );
     _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
+    DateTime eventStatusGot = DateTime.fromMillisecondsSinceEpoch(0);
     _statusStream!.listen(
-      _updateProblemStatus,
+      (ProblemStatus event) {
+        log.info('got problem status event');
+        eventStatusGot = DateTime.now();
+        setState(() {
+          errorMessage = '';
+          _problemStatus = event;
+        });
+      },
       onError: (error) {
         log.info('problem status subscription error: $error');
+        DateTime errorStatusGot = DateTime.now();
+        DateTime errorStatusAppeared = errorStatusGot.subtract(Duration(milliseconds: 500));
         setState(() {
-          errorMessage = error;
+          if (errorStatusAppeared.millisecondsSinceEpoch > eventStatusGot.millisecondsSinceEpoch) {
+            errorMessage = error;
+          }
           _statusStream = null;
         });
         Future.delayed(Duration(seconds: 5), _subscribeToNotifications);
@@ -115,15 +127,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       },
       cancelOnError: true,
     );
-    errorMessage = '';
-  }
-
-  void _updateProblemStatus(ProblemStatus event) {
-    log.info('got problem status event');
-    setState(() {
-      errorMessage = '';
-      _problemStatus = event;
-    });
   }
 
   @override
