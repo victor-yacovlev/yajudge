@@ -274,26 +274,20 @@ class AppState extends State<App> {
     ProblemData problemData = findProblemById(courseData, problemOrReadingId);
     ProblemMetadata problemMetadata = findProblemMetadataById(courseData, problemOrReadingId);
     TextReading textReading = TextReading();
+    for (final entry in lesson.readings) {
+      if (entry.id == problemOrReadingId) {
+        textReading = entry;
+        break;
+      }
+    }
 
-    if (parts.first == 'problems') {
-      // parse problem path and return problem screen
-      parts = parts.sublist(1);
-      if (parts.isEmpty) {
-        // no problem id provided => error 404
-        return ErrorScreen('Ошибка 404', '');
-      }
-      String problemId = parts[0];
-      parts = parts.sublist(1);
-      problemData = findProblemById(courseData, problemId);
-      problemMetadata = findProblemMetadataById(courseData, problemId);
-      if (problemData.id.isEmpty) {
-        return ErrorScreen('Ошибка 404', '');
-      }
+    if (problemData.id.isNotEmpty) {
+      // return problem screen
       if (parts.isEmpty) {
         return CourseProblemScreen(
           user: loggedUser,
           courseUrlPrefix: courseEntry.course.urlPrefix,
-          problemId: problemId,
+          problemId: problemOrReadingId,
         );
       }
       int? submissionId = int.tryParse(parts[0]);
@@ -331,24 +325,9 @@ class AppState extends State<App> {
         },
       );
     }
-    else if (parts.first == 'readings') {
-      // parse text reading path and return reading screen
-      parts = parts.sublist(1);
-      if (parts.isEmpty) {
-        // no reading id provided => error 404
-        return ErrorScreen('Ошибка 404', '');
-      }
-      String readingId = parts[0];
-      parts = parts.sublist(1);
-      for (final entry in lesson.readings) {
-        if (entry.id == readingId) {
-          textReading = entry;
-          break;
-        }
-      }
-      if (textReading.id.isEmpty) {
-        return ErrorScreen('Ошибка 404', '');
-      }
+
+    if (textReading.id.isNotEmpty) {
+      // return reading screen
       return CourseReadingScreen(user: loggedUser, textReading: textReading);
     }
 

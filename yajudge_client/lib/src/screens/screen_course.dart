@@ -197,7 +197,7 @@ class CourseScreenState extends BaseScreenState {
     String courseUrl = screen.course.urlPrefix;
     String lessonPrefix = screen.selectedKey;
     String readingId = reading.id;
-    String location = path.normalize('/$courseUrl/$lessonPrefix/readings/$readingId');
+    String location = path.normalize('/$courseUrl/$lessonPrefix/$readingId');
     Navigator.pushNamed(context, location);
   }
 
@@ -205,7 +205,7 @@ class CourseScreenState extends BaseScreenState {
     String courseUrl = screen.course.urlPrefix;
     String lessonPrefix = screen.selectedKey;
     String problemId = problem.id;
-    String location = path.normalize('/$courseUrl/$lessonPrefix/problems/$problemId');
+    String location = path.normalize('/$courseUrl/$lessonPrefix/$problemId');
     Navigator.pushNamed(context, location);
   }
 
