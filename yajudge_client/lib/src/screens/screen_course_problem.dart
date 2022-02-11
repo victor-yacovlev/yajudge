@@ -101,6 +101,8 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         _problemStatus = status;
         errorMessage = '';
       });
+      // TODO remove when notifications will work stable
+      Future.delayed(Duration(seconds: 5), _checkStatus);
     })
     .onError((error, _) {
       setState(() {
@@ -108,9 +110,11 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       });
       Future.delayed(Duration(seconds: 5), _checkStatus);
     });
+
   }
 
   void _subscribeToNotifications() {
+    return;  // TODO make work within nginx?
     log.info('subscribing to problem status notifications');
     if (errorMessage.isNotEmpty) {
       setState(() {
