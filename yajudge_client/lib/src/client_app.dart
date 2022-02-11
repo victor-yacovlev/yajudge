@@ -289,10 +289,8 @@ class AppState extends State<App> {
       if (parts.isEmpty) {
         return CourseProblemScreen(
           user: loggedUser,
-          course: courseEntry.course,
-          courseData: courseData,
-          problemData: problemData,
-          problemMetadata: problemMetadata,
+          courseUrlPrefix: courseEntry.course.urlPrefix,
+          problemId: problemId,
         );
       }
       int? submissionId = int.tryParse(parts[0]);

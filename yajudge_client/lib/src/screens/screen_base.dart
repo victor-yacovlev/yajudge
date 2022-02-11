@@ -97,6 +97,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
   TabController? _secondLevelTabController;
 
   String _errorMessage = '';
+  String statusMessage = '';
 
   BaseScreenState({required this.title}) : super();
 
@@ -401,10 +402,14 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
       color: Colors.white,
     );
     TextSpan footerText;
-    Color footerBackround;
+    Color footerBackground;
     if (_errorMessage.isNotEmpty) {
       footerText = TextSpan(text: _errorMessage, style: footerTextStyle);
-      footerBackround = Theme.of(context).errorColor;
+      footerBackground = Theme.of(context).errorColor;
+    }
+    else if (statusMessage.isNotEmpty) {
+      footerText = TextSpan(text: statusMessage, style: footerTextStyle);
+      footerBackground = Colors.black54;
     }
     else {
       footerText = TextSpan(
@@ -417,11 +422,11 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
             );
           }
       );
-      footerBackround = Colors.black54;
+      footerBackground = Colors.black54;
     }
     return Container(
       height: 20.0,
-      color: footerBackround,
+      color: footerBackground,
       child: Center(
         child: RichText(
           text: footerText,

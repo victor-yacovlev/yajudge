@@ -1,4 +1,5 @@
 import 'package:fixnum/fixnum.dart';
+import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
 import 'connection_controller.dart';
@@ -11,6 +12,17 @@ class CoursesController {
   static void initialize() {
     assert(instance == null);
     instance = CoursesController();
+  }
+
+  Future<Tuple2<Course,Role>> loadCourseByPrefix(User currentUser, String courseUrlPrefix) async {
+    final filter = CoursesFilter(user: currentUser);
+    final coursesList = await ConnectionController.instance!.coursesService.getCourses(filter);
+    for (final entry in coursesList.courses) {
+      if (entry.course.urlPrefix == courseUrlPrefix) {
+        return Tuple2(entry.course, entry.role);
+      }
+    }
+    return Tuple2(Course(), Role.ROLE_ANY);
   }
 
   Future<CourseData> loadCourseData(String courseDataId) async {

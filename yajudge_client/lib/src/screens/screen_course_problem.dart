@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart' as grpc;
 import 'package:tuple/tuple.dart';
+import '../controllers/courses_controller.dart';
 import 'screen_submission.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
@@ -13,17 +14,13 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 
 class CourseProblemScreen extends BaseScreen {
-  final Course course;
-  final CourseData courseData;
-  final ProblemData problemData;
-  final ProblemMetadata problemMetadata;
+  final String courseUrlPrefix;
+  final String problemId;
 
   CourseProblemScreen({
     required User user,
-    required this.course,
-    required this.courseData,
-    required this.problemData,
-    required this.problemMetadata,
+    required this.courseUrlPrefix,
+    required this.problemId,
     Key? key
   }) : super(loggedUser: user, key: key);
 
@@ -36,30 +33,72 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
   final CourseProblemScreen screen;
 
+  Course _course = Course();
+  CourseData _courseData = CourseData();
+  ProblemData _problemData = ProblemData();
+  ProblemMetadata _problemMetadata = ProblemMetadata();
+
   ProblemStatus _problemStatus = ProblemStatus();
   List<File> _submissionFiles = [];
   grpc.ResponseStream<ProblemStatus>? _statusStream;
 
-  CourseProblemScreenOnePageState(this.screen) : super(title: screen.problemData.title);
+  CourseProblemScreenOnePageState(this.screen) : super(title: '');
 
   @override
   void initState() {
     super.initState();
-    _submissionFiles = List.from(screen.problemData.solutionFiles.files);
-    _subscribeToNotifications();
+    statusMessage = 'Загрузка задачи';
+    _loadProblemData();
+  }
+
+  void _loadProblemData() {
+    final coursesController = CoursesController.instance!;
+    coursesController.loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
+    .then((Tuple2<Course,Role> courseEntry) {
+      setState(() {
+        _course = courseEntry.item1;
+      });
+      coursesController.loadCourseData(courseEntry.item1.dataId)
+      .then((CourseData courseData) {
+        setState(() {
+          _courseData = courseData;
+          _problemData = findProblemById(courseData, screen.problemId);
+          title = _problemData.title;
+          _problemMetadata = findProblemMetadataById(courseData, screen.problemId);
+          _submissionFiles = List.from(_problemData.solutionFiles.files);
+          statusMessage = 'Загрузка предыдущих посылок и статуса задачи';
+          _subscribeToNotifications();
+        });
+      })
+      .onError((error, _) {
+        setState(() {
+          statusMessage = '';
+          errorMessage = error;
+          Future.delayed(Duration(seconds: 5), _loadProblemData);
+        });
+      });
+    })
+    .onError((error, _) {
+      setState(() {
+        statusMessage = '';
+        errorMessage = error;
+        Future.delayed(Duration(seconds: 5), _loadProblemData);
+      });
+    });
   }
 
   void _subscribeToNotifications() {
     final submissionsService = ConnectionController.instance!.submissionsService;
     final request = ProblemStatusRequest(
       user: screen.loggedUser,
-      course: screen.course,
-      problemId: screen.problemData.id,
+      course: _course,
+      problemId: screen.problemId,
     );
     _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
     _statusStream!.listen((ProblemStatus event) {
       setState(() {
         errorMessage = '';
+        statusMessage = '';
         _problemStatus = event;
       });
     }).onError((error) {
@@ -67,9 +106,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         errorMessage = error;
         _statusStream = null;
       });
-      Future.delayed(Duration(seconds: 5), (){
-        _subscribeToNotifications();
-      });
+      Future.delayed(Duration(seconds: 5), _subscribeToNotifications);
     });
   }
 
@@ -89,39 +126,34 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     List<Widget> contents = List.empty(growable: true);
     TextTheme theme = Theme.of(context).textTheme;
 
-    final course = screen.course;
-    final courseData = screen.courseData;
-    final meta = screen.problemMetadata;
-    final problemData = screen.problemData;
-
     // TODO add common problem information
     contents.add(Text('Общая информация', style: theme.headline6));
     String hardeness = '';
-    int score = (meta.fullScoreMultiplier * 100).toInt();
-    if (meta.fullScoreMultiplier == 1.0) {
+    int score = (_problemMetadata.fullScoreMultiplier * 100).toInt();
+    if (_problemMetadata.fullScoreMultiplier == 1.0) {
       hardeness = 'обычная, за решение $score баллов';
     }
-    else if (meta.fullScoreMultiplier == 0.0) {
+    else if (_problemMetadata.fullScoreMultiplier == 0.0) {
       hardeness = 'тривиальная, за решение баллы не начисляются';
     }
-    else if (meta.fullScoreMultiplier < 1.0) {
+    else if (_problemMetadata.fullScoreMultiplier < 1.0) {
       hardeness = 'легкая, за решение $score баллов';
     }
-    else if (meta.fullScoreMultiplier > 1.0) {
+    else if (_problemMetadata.fullScoreMultiplier > 1.0) {
       hardeness = 'трудная, за решение $score баллов';
     }
     String problemStatus = '';
-    if (meta.blocksNextProblems) {
+    if (_problemMetadata.blocksNextProblems) {
       problemStatus = 'обязательная задача, требуется для прохождения курса дальше';
     } else {
       problemStatus = 'не обязательная задача';
     }
     String actionsOnPassed = '';
-    if (course.noTeacherMode || meta.skipCodeReview && meta.skipSolutionDefence) {
+    if (_course.noTeacherMode || _problemMetadata.skipCodeReview && _problemMetadata.skipSolutionDefence) {
       actionsOnPassed = 'задача считается решенной, код ревью и защита не требуются';
-    } else if (screen.problemMetadata.skipCodeReview) {
+    } else if (_problemMetadata.skipCodeReview) {
       actionsOnPassed = 'необходимо защитить решение';
-    } else if (screen.problemMetadata.skipSolutionDefence) {
+    } else if (_problemMetadata.skipSolutionDefence) {
       actionsOnPassed = 'необходимо пройди код ревью';
     } else {
       actionsOnPassed = 'необходимо пройди код ревью и защитить решение';
@@ -140,16 +172,16 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         ),
         margin: EdgeInsets.fromLTRB(5, 10, 5, 10),
         padding: EdgeInsets.fromLTRB(10, 10, 10, 10),
-        child: RichTextViewer(problemData.statementText, problemData.statementContentType, theme: theme)
+        child: RichTextViewer(_problemData.statementText, _problemData.statementContentType, theme: theme)
       )
     );
     contents.add(SizedBox(height: 20));
-    bool hasStatementFiles = problemData.statementFiles.files.isNotEmpty;
-    bool hasStyleFiles = courseData.codeStyles.isNotEmpty;
+    bool hasStatementFiles = _problemData.statementFiles.files.isNotEmpty;
+    bool hasStyleFiles = _courseData.codeStyles.isNotEmpty;
     List<File> problemStyleFiles = List.empty(growable: true);
     if (hasStyleFiles) {
-      for (File solutionFile in problemData.solutionFiles.files) {
-        for (CodeStyle codeStyle in courseData.codeStyles) {
+      for (File solutionFile in _problemData.solutionFiles.files) {
+        for (CodeStyle codeStyle in _courseData.codeStyles) {
           if (solutionFile.name.endsWith(codeStyle.sourceFileSuffix)) {
             if (!problemStyleFiles.contains(codeStyle.styleFile)) {
               String desc = 'Конфиг для проверки стиля кода, общий для всего курса';
@@ -164,7 +196,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     hasStyleFiles = problemStyleFiles.isNotEmpty;
     if (hasStatementFiles || hasStyleFiles) {
       contents.add(Text('Файлы задания', style: theme.headline6));
-      for (File file in problemData.statementFiles.files + problemStyleFiles) {
+      for (File file in _problemData.statementFiles.files + problemStyleFiles) {
         YCardLikeButton button = YCardLikeButton(file.name, () {
           _saveStatementFile(file);
         }, subtitle: file.description);
@@ -205,10 +237,10 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           pageBuilder: (context, animation, secondaryAnimation) {
             return SubmissionScreen(
               user: screen.loggedUser,
-              course: screen.course,
-              courseData: screen.courseData,
-              problemData: screen.problemData,
-              problemMetadata: screen.problemMetadata,
+              course: _course,
+              courseData: _courseData,
+              problemData: _problemData,
+              problemMetadata: _problemMetadata,
               submission: submissionWithData,
             );
           }
@@ -222,9 +254,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
     TextTheme theme = Theme.of(context).textTheme;
 
-    int maxSubmissionsPerHour = screen.courseData.maxSubmissionsPerHour;
-    if (screen.problemData.maxSubmissionsPerHour > 0) {
-      maxSubmissionsPerHour = screen.problemData.maxSubmissionsPerHour;
+    int maxSubmissionsPerHour = _courseData.maxSubmissionsPerHour;
+    if (_problemData.maxSubmissionsPerHour > 0) {
+      maxSubmissionsPerHour = _problemData.maxSubmissionsPerHour;
     }
 
     if (maxSubmissionsPerHour >= 0) {
@@ -371,8 +403,8 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
   void _submitSolution() {
     Submission request = Submission(
-      course: screen.course,
-      problemId: screen.problemData.id,
+      course: _course,
+      problemId: _problemData.id,
       solutionFiles: FileSet(files: _submissionFiles),
       user: widget.loggedUser,
     );
