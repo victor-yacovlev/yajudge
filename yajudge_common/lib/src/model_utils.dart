@@ -32,7 +32,10 @@ class ProblemDataCacheItem {
 }
 
 Lesson findLessonByKey(CourseData courseData, String key) {
-  List<String> parts = key.substring(1).split('/');
+  if (key.startsWith('/')) {
+    key = key.substring(1);
+  }
+  List<String> parts = key.split('/');
   parts.removeWhere((element) => element.isEmpty);
   Section section = Section();
   String lessonId;

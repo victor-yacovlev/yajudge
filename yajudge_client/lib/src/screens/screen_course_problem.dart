@@ -131,12 +131,10 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       problemId: screen.problemId,
     );
     _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
-    DateTime eventStatusGot = DateTime.fromMillisecondsSinceEpoch(0);
     _statusStream!.listen(
       (ProblemStatus event) {
         int submissionsCount = event.submissions.length;
         log.info('got problem status event with $submissionsCount existing submissions');
-        eventStatusGot = DateTime.now();
         setState(() {
           errorMessage = '';
         });

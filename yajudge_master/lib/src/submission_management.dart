@@ -16,6 +16,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   final MasterService parent;
 
   Map<String,List<StreamController<ProblemStatus>>> _problemStatusStreamControllers = {};
+  Map<String,List<StreamController<CourseStatus>>> _courseStatusStreamControllers = {};
 
   SubmissionManagementService({
     required this.parent,
@@ -26,8 +27,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future<CourseStatus> checkCourseStatus(ServiceCall call, CheckCourseStatusRequest request) async {
     final user = request.user;
     final course = request.course;
-    final courseDataId = course.dataId;
+    return _getCourseStatus(user, course);
+  }
 
+  Future<CourseStatus> _getCourseStatus(User user, Course course) async {
+    final courseDataId = course.dataId;
     final courseData = parent.courseManagementService.getCourseData(courseDataId);
     double courseScoreGot = 0.0;
     double courseScoreMax = 0.0;
@@ -64,6 +68,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
               problemMetadata: problemMetadata,
               problemBlocked: !lessonCompleted,
           );
+
+          if (problemStatus.completed) {
+            problemsSolved ++;
+            if (problemMetadata.blocksNextProblems) {
+              problemsRequiredSolved ++;
+            }
+          }
 
           lessonScoreGot += problemStatus.scoreGot;
           lessonScoreMax += problemStatus.scoreMax;
@@ -768,6 +779,49 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     return controller.stream;
   }
 
+
+  @override
+  Stream<CourseStatus> subscribeToCourseStatusNotifications(ServiceCall call, CheckCourseStatusRequest request) {
+    final key = '${request.user.id}/${request.course.id}';
+    StreamController<CourseStatus> controller = StreamController<CourseStatus>();
+    controller.onCancel = () {
+      log.info('removing controller from course status listeners with key $key');
+      List<StreamController<CourseStatus>> controllers;
+      controllers = _courseStatusStreamControllers[key]!;
+      controllers.remove(controller);
+      if (controllers.isEmpty) {
+        _courseStatusStreamControllers.remove(key);
+      }
+    };
+
+    List<StreamController<CourseStatus>> controllers;
+    if (_courseStatusStreamControllers.containsKey(key)) {
+      controllers = _courseStatusStreamControllers[key]!;
+    }
+    else {
+      controllers = [];
+      _courseStatusStreamControllers[key] = controllers;
+    }
+    controllers.add(controller);
+    log.info('added course notification controller for $key');
+
+    // send empty message now and periodically to prevent NGINX to close
+    // connection by timeout
+    controller.add(CourseStatus());
+    Timer.periodic(Duration(seconds: 30), (timer) {
+      bool active =
+          _courseStatusStreamControllers.containsKey(key) &&
+              _courseStatusStreamControllers[key]!.contains(controller);
+      if (!active) {
+        timer.cancel();
+        return;
+      }
+      controller.add(CourseStatus());
+    });
+
+    return controller.stream;
+  }
+
   @override
   Future<ProblemStatus> checkProblemStatus(ServiceCall call, ProblemStatusRequest request) async {
     final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
@@ -782,14 +836,35 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   }
 
   void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) {
-    final key = '${user.id}/${course.id}/${problemId}';
-    List<StreamController<ProblemStatus>> controllers = [];
-    if (_problemStatusStreamControllers.containsKey(key)) {
-      controllers = _problemStatusStreamControllers[key]!;
+    final courseKey = '${user.id}/${course.id}';
+    final problemKey = '${user.id}/${course.id}/${problemId}';
+
+    List<StreamController<CourseStatus>> courseControllers = [];
+    List<StreamController<ProblemStatus>> problemControllers = [];
+
+    if (_courseStatusStreamControllers.containsKey(courseKey)) {
+      courseControllers = _courseStatusStreamControllers[courseKey]!;
     }
-    if (controllers.isEmpty) {
+    if (_problemStatusStreamControllers.containsKey(problemKey)) {
+      problemControllers = _problemStatusStreamControllers[problemKey]!;
+    }
+
+    if (problemControllers.isEmpty && courseControllers.isEmpty) {
       return;
     }
+
+    final futureCourseStatus = _getCourseStatus(user, course);
+
+    futureCourseStatus.then((CourseStatus status) {
+      for (final controller in courseControllers) {
+        controller.add(status);
+      }
+    });
+
+    if (problemControllers.isEmpty) {
+      return;
+    }
+
     final courseData = parent.courseManagementService.getCourseData(course.dataId);
     final problemMetadata = findProblemMetadataById(courseData, problemId);
 
@@ -801,7 +876,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     );
 
     futureProblemStatus.then((ProblemStatus status) {
-      for (final controller in controllers) {
+      for (final controller in problemControllers) {
         controller.sink.add(status);
       }
     });

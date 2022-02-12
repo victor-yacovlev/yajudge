@@ -470,7 +470,9 @@ service SubmissionManagement {
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
   rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
   rpc GetSubmissionResult(Submission) returns (Submission) {}
+
   rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus) {}
+  rpc SubscribeToCourseStatusNotifications(CheckCourseStatusRequest) returns (stream CourseStatus) {}
 
   rpc CheckProblemStatus(ProblemStatusRequest) returns (ProblemStatus) {}
   rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus) {}

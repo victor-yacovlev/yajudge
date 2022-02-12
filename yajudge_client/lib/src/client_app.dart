@@ -163,27 +163,18 @@ class AppState extends State<App> {
     }
     final courseTitle = courseEntry.course.name;
     String pathTail = pathParts.join('/');
-    final courseContentGenerator = () async {
-      final futureData = CoursesController.instance!.loadCourseData(courseEntry.course.dataId);
-      final statusRequest = CheckCourseStatusRequest(
-        user: loggedUser,
-        course: courseEntry.course,
-      );
-      final futureStatus = ConnectionController.instance!.submissionsService.checkCourseStatus(statusRequest);
-      return Tuple2(await futureData, await futureStatus);
-    };
-    final futureCourseContent = courseContentGenerator();
+    final futureData = CoursesController.instance!.loadCourseData(courseEntry.course.dataId);
+
     return FutureBuilder(
-      future: futureCourseContent,
+      future: futureData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
-          final content = snapshot.requireData as Tuple2<CourseData,CourseStatus>;
+          final content = snapshot.requireData as CourseData;
           return generateWidgetForCourse(
               context,
               loggedUser,
               courseEntry,
-              content.item1,
-              content.item2,
+              content,
               pathTail,
           );
         }
@@ -194,7 +185,7 @@ class AppState extends State<App> {
     );
   }
 
-  Widget generateWidgetForCourse(BuildContext context, User loggedUser, CoursesList_CourseListEntry courseEntry, CourseData courseData, CourseStatus courseStatus, String sourcePath) {
+  Widget generateWidgetForCourse(BuildContext context, User loggedUser, CoursesList_CourseListEntry courseEntry, CourseData courseData, String sourcePath) {
 
     log.info('generate widget for $sourcePath, user ${loggedUser.id} and course prefix ${courseEntry.course.urlPrefix}');
 
@@ -263,7 +254,6 @@ class AppState extends State<App> {
         course: courseEntry.course,
         courseData: courseData,
         userRoleForCourse: userRoleForCourse,
-        courseStatus: courseStatus,
         selectedKey: selectedKey.isEmpty? '#' : selectedKey,
       );
     }
