@@ -751,8 +751,19 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     controllers.add(controller);
     log.info('added problem notification controller for $key');
 
-    // send empty message to check if streaming supported
+    // send empty message now and periodically to prevent NGINX to close
+    // connection by timeout
     controller.add(ProblemStatus());
+    Timer.periodic(Duration(seconds: 30), (timer) {
+      bool active =
+        _problemStatusStreamControllers.containsKey(key) &&
+        _problemStatusStreamControllers[key]!.contains(controller);
+      if (!active) {
+        timer.cancel();
+        return;
+      }
+      controller.add(ProblemStatus());
+    });
 
     return controller.stream;
   }
