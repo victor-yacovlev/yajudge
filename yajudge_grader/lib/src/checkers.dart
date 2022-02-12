@@ -84,8 +84,8 @@ class DoubleSequenceChecker extends AbstractChecker {
     String stdoutString = utf8.decode(stdout, allowMalformed: true).trim();
     String referenceString = utf8.decode(reference, allowMalformed: true).trim();
     final rxDelim = RegExp(r'\s+');
-    final stdoutList = stdoutString.split(rxDelim);
-    final referenceList = referenceString.split(rxDelim);
+    final stdoutList = stdoutString.isEmpty? [] : stdoutString.split(rxDelim);
+    final referenceList = referenceString.isEmpty? [] : referenceString.split(rxDelim);
     double epsilon = 0.000001;
     final opts = options.split(' ');
     for (final opt in opts) {
@@ -126,8 +126,8 @@ class IntSequenceChecker extends AbstractChecker {
     String stdoutString = utf8.decode(stdout, allowMalformed: true).trim();
     String referenceString = utf8.decode(reference, allowMalformed: true).trim();
     final rxDelim = RegExp(r'\s+');
-    final stdoutList = stdoutString.split(rxDelim);
-    final referenceList = referenceString.split(rxDelim);
+    final stdoutList = stdoutString.isEmpty? [] : stdoutString.split(rxDelim);
+    final referenceList = referenceString.isEmpty? [] : referenceString.split(rxDelim);
     if (stdoutList.length != referenceList.length) {
       return 'Count of numbers mismatch.\nExpected:\n$referenceList\nGot:\n$stdoutList';
     }
