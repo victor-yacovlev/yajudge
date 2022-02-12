@@ -57,7 +57,14 @@ class WebPlatformUtils extends PlatformsUtils {
     }
   }
 
-  Uri getWebApiUri(List<String>? arguements) {
+  Uri getWebApiUri(List<String>? arguments) {
+    String? savedLocation = loadSettingsValue('api_url');
+    if (savedLocation == null) {
+      saveSettingsValue('api_url', '');
+    }
+    if (savedLocation != null && savedLocation.isNotEmpty) {
+      return Uri.parse(savedLocation);
+    }
     String scheme = Uri.base.scheme;
     String host = Uri.base.host;
     int port = Uri.base.port;

@@ -98,11 +98,14 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     submissionsService.checkProblemStatus(request)
     .then((ProblemStatus status) {
       setState(() {
-        _problemStatus = status;
         errorMessage = '';
       });
-      // TODO remove when notifications will work stable
-      Future.delayed(Duration(seconds: 5), _checkStatus);
+      _updateProblemStatus(status);
+      if (_statusStream == null) {
+        // do timer-based polling in case of streaming not supported
+        // by server or some reverse-proxy in http chain
+        Future.delayed(Duration(seconds: 5), _checkStatus);
+      }
     })
     .onError((error, _) {
       setState(() {
@@ -114,7 +117,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _subscribeToNotifications() {
-    return;  // TODO make work within nginx?
     log.info('subscribing to problem status notifications');
     if (errorMessage.isNotEmpty) {
       setState(() {
@@ -137,20 +139,15 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         eventStatusGot = DateTime.now();
         setState(() {
           errorMessage = '';
-          _problemStatus = event;
         });
+        _updateProblemStatus(event);
       },
       onError: (error) {
         log.info('problem status subscription error: $error');
-        DateTime errorStatusGot = DateTime.now();
-        DateTime errorStatusAppeared = errorStatusGot.subtract(Duration(milliseconds: 500));
         setState(() {
-          if (errorStatusAppeared.millisecondsSinceEpoch > eventStatusGot.millisecondsSinceEpoch) {
-            errorMessage = error;
-          }
           _statusStream = null;
         });
-        Future.delayed(Duration(seconds: 5), _subscribeToNotifications);
+        _checkStatus();  // switch to polling mode
       },
       onDone: () {
         log.info('problem status subscription done');
@@ -162,7 +159,19 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       },
       cancelOnError: true,
     );
+  }
 
+  void _updateProblemStatus(ProblemStatus status) {
+    final countLimit = submissionsCountLimitIsValid(status.submissionCountLimit)
+      ? status.submissionCountLimit : _problemStatus.submissionCountLimit;
+    final newSubmissions = status.submissions.isNotEmpty
+      ? status.submissions : _problemStatus.submissions;
+    setState(() {
+      _problemStatus = ProblemStatus(
+        submissionCountLimit: countLimit,
+        submissions: newSubmissions,
+      );
+    });
   }
 
   @override

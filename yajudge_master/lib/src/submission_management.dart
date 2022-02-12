@@ -751,6 +751,9 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     controllers.add(controller);
     log.info('added problem notification controller for $key');
 
+    // send empty message to check if streaming supported
+    controller.add(ProblemStatus());
+
     return controller.stream;
   }
 
