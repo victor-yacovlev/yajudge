@@ -399,9 +399,23 @@ class SubmissionProcessor {
         objectFiles.add(objectFileName);
       }
     }
+    List<String> wrapOptionsPre = [];
+    List<String> wrapOptionsPost = [];
+    if (!linkOptions().contains('-nostdlib')) {
+      String binDir = path.dirname(io.Platform.script.path);
+      String syscallWrappers = path.normalize(path.absolute(binDir, '../src/', 'syscall-wrappers.c'));
+      final wrappersContent = io.File(syscallWrappers).readAsBytesSync();
+      String wrapperLocalFileName = buildDir.path + '/.syscall-wrappers.c';
+      io.File(wrapperLocalFileName).writeAsBytesSync(wrappersContent);
+      wrapOptionsPost = ['.syscall-wrappers.c'];
+      final wrappedSyscalls = ['fork'];
+      for (final syscall in wrappedSyscalls) {
+        wrapOptionsPre.add('-Wl,--wrap=$syscall');
+      }
+    }
     final linkerArguments = ['-o', targetName] +
         sanitizerOptions +
-        linkOptions() +
+        wrapOptionsPre + linkOptions() + wrapOptionsPost +
         objectFiles;
     final linkerCommand = [compiler] + linkerArguments;
     io.Process linkerProcess = await runner.start(
