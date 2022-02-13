@@ -276,6 +276,7 @@ class AppState extends State<App> {
       if (parts.isEmpty) {
         return CourseProblemScreen(
           user: loggedUser,
+          role: courseEntry.role,
           courseUrlPrefix: courseEntry.course.urlPrefix,
           problemId: problemOrReadingId,
         );
@@ -303,6 +304,7 @@ class AppState extends State<App> {
             return SubmissionScreen(
               user: loggedUser,
               course: courseEntry.course,
+              role: courseEntry.role,
               courseData: courseData,
               problemData: problemData,
               problemMetadata: problemMetadata,

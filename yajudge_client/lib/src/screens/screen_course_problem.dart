@@ -16,9 +16,11 @@ import 'dart:async';
 class CourseProblemScreen extends BaseScreen {
   final String courseUrlPrefix;
   final String problemId;
+  final Role role;
 
   CourseProblemScreen({
     required User user,
+    required this.role,
     required this.courseUrlPrefix,
     required this.problemId,
     Key? key
@@ -300,6 +302,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
             return SubmissionScreen(
               user: screen.loggedUser,
               course: _course,
+              role: screen.role,
               courseData: _courseData,
               problemData: _problemData,
               problemMetadata: _problemMetadata,

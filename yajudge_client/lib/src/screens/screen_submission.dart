@@ -17,6 +17,7 @@ import 'dart:async';
 
 class SubmissionScreen extends BaseScreen {
   final Course course;
+  final Role role;
   final CourseData courseData;
   final ProblemData problemData;
   final ProblemMetadata problemMetadata;
@@ -25,6 +26,7 @@ class SubmissionScreen extends BaseScreen {
   SubmissionScreen({
     required User user,
     required this.course,
+    required this.role,
     required this.courseData,
     required this.problemData,
     required this.problemMetadata,
@@ -107,19 +109,65 @@ class SubmissionScreenState extends BaseScreenState {
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
     final maxFileSizeToShow = 50 * 1024;
+    final wrapIntoPadding = (Widget w) {
+      return Padding(
+          child: w,
+          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
+      );
+    };
+    final makeText = (String text) {
+      return Text(text, style: theme.textTheme.bodyText1!.merge(TextStyle(fontSize: 16)));
+    };
     final addText = (String text) {
       contents.add(
-        Padding(
-          child: Text(text, style: theme.textTheme.bodyText1!.merge(TextStyle(fontSize: 16))),
-          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
-          )
+        wrapIntoPadding(makeText(text))
       );
     };
     String statusName = submission.status.name;
     String dateSent = formatDateTime(submission.timestamp.toInt());
-    addText('Статус: $statusName');
+    final whoCanRejudge = [
+      Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
+    ];
+    if (screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanRejudge.contains(screen.role)) {
+      contents.add(wrapIntoPadding(Row(
+        children: [
+          makeText('Статус: $statusName'),
+          Spacer(),
+          ElevatedButton(
+            onPressed: _doRejudge,
+            child: Text('Перетестировать'),
+          )
+        ],
+      )));
+    }
+    else {
+      addText('Статус: $statusName');
+    }
     addText('Отправлена: $dateSent');
     return contents;
+  }
+
+  void _doRejudge() {
+    final service = ConnectionController.instance!.submissionsService;
+    final request = RejudgeRequest(
+      user: screen.loggedUser,
+      course: screen.course,
+      problemId: screen.problemData.id,
+      submission: _submission,
+    );
+    final futureResponse = service.rejudge(request);
+    futureResponse.then(
+      (response) {
+        if (response.submission.id == _submission.id) {
+          _updateSubmission(response.submission);
+        }
+      },
+      onError: (error) {
+        setState(() {
+          errorMessage = error;
+        });
+      }
+    );
   }
 
   List<Widget> buildSubmissionFileItems(BuildContext context) {

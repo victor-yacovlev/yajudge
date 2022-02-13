@@ -910,10 +910,58 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
   @override
   Future<RejudgeRequest> rejudge(ServiceCall call, RejudgeRequest request) async {
-    await _checkAccessToCourse(call, request.user, request.course);
-    // TODO: implement rejudge
+    User currentUser = await parent.userManagementService.getUserFromContext(call);
+    List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
+    Enrollment? courseEnroll;
+    for (Enrollment e in enrollments) {
+      if (e.course.id == request.course.id) {
+        courseEnroll = e;
+        break;
+      }
+    }
+    if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
+      if (courseEnroll == null) {
+        throw GrpcError.permissionDenied(
+            'user ${request.user.id} not enrolled to ${request.course.id}');
+      }
+      if (courseEnroll.role == Role.ROLE_STUDENT) {
+        throw GrpcError.permissionDenied('only teachers can initiate rejudge');
+      }
+    }
 
-    throw UnimplementedError();
+    if (request.submission.id != 0) {
+      // rejudge only just one submission
+      await connection.query(
+        'update submissions set status=@new_status where id=@id',
+        substitutionValues: {
+          'new_status': SolutionStatus.SUBMITTED.value,
+          'id': request.submission.id.toInt(),
+        }
+      );
+      final changedSubmission = request.submission.copyWith((s) {
+        s.status = SolutionStatus.SUBMITTED;
+        s.styleErrorLog = '';
+        s.buildErrorLog = '';
+        s.testResults.clear();
+        s.graderScore = 0.0;
+      });
+      _notifySubmissionResultChanged(changedSubmission);
+      return request.copyWith((r) {
+        r.submission = changedSubmission;
+      });
+    }
+    else if (request.course.id>0 && request.problemId.isNotEmpty) {
+      // rejudge all problem submissions within course
+      await connection.query(
+        'update submissions set status=@new_status where courses_id=@courses_id and problem_id=@problem_id',
+        substitutionValues: {
+          'new_status': SolutionStatus.SUBMITTED.value,
+          'courses_id': request.course.id.toInt(),
+          'problem_id': request.problemId,
+        }
+      );
+    }
+    return request;
   }
 
   @override
