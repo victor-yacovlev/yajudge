@@ -53,15 +53,25 @@ class UserEditScreenState extends BaseScreenState {
     return Int64(id);
   }
 
-  User _user = User();
+  late User _user;
 
   void _loadUserProfile() {
-    if (_user.id == 0) {
+    final screen = widget as UsersEditScreen;
+    if (screen.userIdOrNewOrMyself == 'new') {
+      _user = User();
       return;
+    }
+    else if (screen.userIdOrNewOrMyself == 'myself') {
+      _user = screen.loggedUser;
+      return;
+    }
+    int? userId = int.tryParse(screen.userIdOrNewOrMyself);
+    if (userId == null) {
+      Navigator.pushReplacementNamed(context, '/users/myself');
     }
     UserManagementClient service = ConnectionController.instance!.usersService;
     UsersFilter usersFilter = UsersFilter();
-    usersFilter.user = User()..id=_user.id;
+    usersFilter.user = User()..id=Int64(userId!);
     service.getUsers(usersFilter).then((UsersList usersList) {
       if (usersList.users.length == 0) {
         setState(() {

@@ -53,7 +53,7 @@ class UserManagementService extends UserManagementServiceBase {
       passwordMatch = user.password == userPassword.substring(1);
     } else {
       String hexDigest = makePasswordHash(user.password, Int64(userId));
-      passwordMatch = user.password.toLowerCase() == hexDigest;
+      passwordMatch = userPassword == hexDigest;
     }
     if (!passwordMatch) {
       log.warning('user ${user.id} / ${user.email} tried to authorize with wrong password');
