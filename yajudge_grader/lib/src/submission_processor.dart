@@ -409,6 +409,7 @@ class SubmissionProcessor {
       io.File(wrapperLocalFileName).writeAsBytesSync(wrappersContent);
       wrapOptionsPost = ['.syscall-wrappers.c'];
       final wrappedSyscalls = ['fork'];
+      wrapOptionsPre.add('-pthread');
       for (final syscall in wrappedSyscalls) {
         wrapOptionsPre.add('-Wl,--wrap=$syscall');
       }
@@ -496,7 +497,6 @@ class SubmissionProcessor {
   }
 
   Future<void> runTests() async {
-    String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
     bool hasRuntimeError = false;
     bool hasTimeLimit = false;
     bool hasWrongAnswer = false;

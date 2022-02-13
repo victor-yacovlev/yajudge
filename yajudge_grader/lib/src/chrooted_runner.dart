@@ -202,14 +202,6 @@ class ChrootedRunner extends AbstractRunner {
   }
 
   void setupCgroupLimits(String cgroupPath, GradingLimits limits) {
-    final pidsMax = io.File('$cgroupPath/pids.max');
-    if (!pidsMax.existsSync()) {
-      log.severe('no pids cgroup controller enabled. Ensure you a running on system with systemd.unified_cgroup_hierarchy=1');
-    }
-    else if (limits.procCountLimit.toInt() > 0) {
-      String maxProcsValue = '${limits.procCountLimit}\n';
-      pidsMax.writeAsStringSync(maxProcsValue, flush: true);
-    }
     final memoryMax = io.File('$cgroupPath/memory.max');
     if (!memoryMax.existsSync()) {
       log.severe('no memory cgroup controller enabled. Ensure you a running on system with systemd.unified_cgroup_hierarchy=1');
