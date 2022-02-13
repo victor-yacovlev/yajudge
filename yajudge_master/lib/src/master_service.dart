@@ -22,7 +22,8 @@ const StudentsMethods = [
   'CheckSubmissionsCountLimit', 'SubmitProblemSolution', 'GetSubmissions',
   'CheckCourseStatus', 'CheckProblemStatus', 'GetSubmissionResult',
   'SubscribeToProblemStatusNotifications',
-  'SubscribeToCourseStatusNotifications'
+  'SubscribeToCourseStatusNotifications',
+  'SubscribeToSubmissionResultNotifications'
 ];
 
 const MaxErrorsPerMinute = 3;

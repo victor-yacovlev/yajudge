@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:math' as math;
+import 'package:grpc/grpc.dart' as grpc;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tuple/tuple.dart';
-import 'package:yajudge_client/src/screens/screen_course_problem.dart';
+import 'screen_course_problem.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../utils/utils.dart';
@@ -41,8 +42,8 @@ class SubmissionScreen extends BaseScreen {
 class SubmissionScreenState extends BaseScreenState {
 
   final SubmissionScreen screen;
-
-  late Timer _statusCheckTimer;
+  late Submission _submission;
+  grpc.ResponseStream<Submission>? _statusStream;
 
   SubmissionScreenState(this.screen)
       : super(title: 'Посылка ${screen.submission.id}: ${screen.problemData.title}');
@@ -50,20 +51,50 @@ class SubmissionScreenState extends BaseScreenState {
   @override
   void initState() {
     super.initState();
-
-    // TODO replace to use of Notifications API when it will be implemented
-    _statusCheckTimer = Timer.periodic(Duration(seconds: 5), (_) {
-      if (mounted) {
-      }
-    });
+    _submission = screen.submission;
+    _subscribeToNotifications();
   }
 
   @override
   void dispose() {
-    _statusCheckTimer.cancel();
+    if (_statusStream != null) {
+      _statusStream!.cancel();
+    }
     super.dispose();
   }
 
+  void _subscribeToNotifications() {
+    log.info('subscribing to submission notifications');
+    final submissionsService = ConnectionController.instance!.submissionsService;
+    final request = Submission(
+      id: _submission.id,
+      course: _submission.course,
+      user: _submission.user,
+    );
+    _statusStream = submissionsService.subscribeToSubmissionResultNotifications(request);
+    _statusStream!.listen(
+      (event) {
+        log.info('got submission update with submission id=${event.id}');
+        _updateSubmission(event);
+      },
+      onError: (error) {
+        log.info('submission status subscription error: $error');
+        setState(() {
+          _statusStream = null;
+        });
+      },
+      cancelOnError: true,
+    );
+  }
+
+  void _updateSubmission(Submission event) {
+    if (event.id != _submission.id) {
+      return;
+    }
+    setState(() {
+      _submission = event;
+    });
+  }
 
   void _saveStatementFile(File file) {
     PlatformsUtils.getInstance().saveLocalFile(file.name, file.data);
@@ -71,7 +102,7 @@ class SubmissionScreenState extends BaseScreenState {
 
   List<Widget> buildSubmissionCommonItems(BuildContext context) {
     List<Widget> contents = [];
-    final submission = screen.submission;
+    final submission = _submission;
     final theme = Theme.of(context);
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
@@ -93,7 +124,7 @@ class SubmissionScreenState extends BaseScreenState {
 
   List<Widget> buildSubmissionFileItems(BuildContext context) {
     List<Widget> contents = [];
-    final submission = screen.submission;
+    final submission = _submission;
     final theme = Theme.of(context);
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
@@ -132,7 +163,7 @@ class SubmissionScreenState extends BaseScreenState {
 
   List<Widget> buildSubmissionErrors(BuildContext context) {
     List<Widget> contents = [];
-    final submission = screen.submission;
+    final submission = _submission;
     final theme = Theme.of(context);
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
@@ -198,7 +229,7 @@ class SubmissionScreenState extends BaseScreenState {
       SolutionStatus.VALGRIND_ERRORS,
       SolutionStatus.TIME_LIMIT,
     ];
-    for (final test in screen.submission.testResults) {
+    for (final test in _submission.testResults) {
       final status = test.status;
       if (brokenStatuses.contains(status)) {
         return test;

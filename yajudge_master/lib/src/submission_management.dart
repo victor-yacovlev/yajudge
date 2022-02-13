@@ -17,6 +17,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   Map<String,List<StreamController<ProblemStatus>>> _problemStatusStreamControllers = {};
   Map<String,List<StreamController<CourseStatus>>> _courseStatusStreamControllers = {};
+  Map<String,List<StreamController<Submission>>> _submissionResultStreamControllers = {};
 
   SubmissionManagementService({
     required this.parent,
@@ -257,26 +258,29 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<SubmissionList> getSubmissions(ServiceCall call, SubmissionFilter request) async {
+    await _checkAccessToCourse(call, request.user, request.course);
+    return _getSubmissions(request.user, request.course, request.problemId, request.status);
+  }
+
+  Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
     User currentUser = await parent.userManagementService.getUserFromContext(call);
     List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
-      if (e.course.id == request.course.id) {
+      if (e.course.id == course.id) {
         courseEnroll = e;
         break;
       }
     }
-    if (request.user.defaultRole != Role.ROLE_ADMINISTRATOR) {
+    if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
       if (courseEnroll == null) {
         throw GrpcError.permissionDenied(
-            'user ${request.user.id} not enrolled to ${request.course.id}');
+            'user ${user.id} not enrolled to ${course.id}');
       }
-      if (courseEnroll.role == Role.ROLE_STUDENT &&
-          request.user.id != currentUser.id) {
+      if (courseEnroll.role == Role.ROLE_STUDENT && user.id != currentUser.id) {
         throw GrpcError.permissionDenied('cant access not own submissions');
       }
     }
-    return _getSubmissions(request.user, request.course, request.problemId, request.status);
   }
 
   Future<SubmissionList> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
@@ -525,6 +529,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         'grader_name': graderName,
       }
     );
+    _notifySubmissionResultChanged(
+      Submission(
+        id: Int64(submissionId),
+        graderName: graderName,
+        status: SolutionStatus.GRADER_ASSIGNED,
+      )
+    );
   }
 
   void unassignGrader(String graderName) {
@@ -611,6 +622,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       }
     });
     _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
+    _notifySubmissionResultChanged(request);
     return request;
   }
 
@@ -835,6 +847,19 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     return futureProblemStatus;
   }
 
+  void _notifySubmissionResultChanged(Submission submission) {
+    final key = '${submission.id}';
+    List<StreamController<Submission>> controllers = [];
+
+    if (_submissionResultStreamControllers.containsKey(key)) {
+      controllers = _submissionResultStreamControllers[key]!;
+    }
+
+    for (final controller in controllers) {
+      controller.add(submission);
+    }
+  }
+
   void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) {
     final courseKey = '${user.id}/${course.id}';
     final problemKey = '${user.id}/${course.id}/${problemId}';
@@ -880,6 +905,57 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         controller.sink.add(status);
       }
     });
+  }
+
+
+  @override
+  Future<RejudgeRequest> rejudge(ServiceCall call, RejudgeRequest request) async {
+    await _checkAccessToCourse(call, request.user, request.course);
+    // TODO: implement rejudge
+
+    throw UnimplementedError();
+  }
+
+  @override
+  Stream<Submission> subscribeToSubmissionResultNotifications(ServiceCall call, Submission submission) {
+    final key = '${submission.id}';
+    StreamController<Submission> controller = StreamController<Submission>();
+    controller.onCancel = () {
+      log.info('removing controller from submission status listeners with key $key');
+      List<StreamController<Submission>> controllers;
+      controllers = _submissionResultStreamControllers[key]!;
+      controllers.remove(controller);
+      if (controllers.isEmpty) {
+        _submissionResultStreamControllers.remove(key);
+      }
+    };
+
+    List<StreamController<Submission>> controllers;
+    if (_submissionResultStreamControllers.containsKey(key)) {
+      controllers = _submissionResultStreamControllers[key]!;
+    }
+    else {
+      controllers = [];
+      _submissionResultStreamControllers[key] = controllers;
+    }
+    controllers.add(controller);
+    log.info('added submission notification controller for $key');
+
+    // send empty message now and periodically to prevent NGINX to close
+    // connection by timeout
+    controller.add(Submission());
+    Timer.periodic(Duration(seconds: 30), (timer) {
+      bool active =
+          _submissionResultStreamControllers.containsKey(key) &&
+              _submissionResultStreamControllers[key]!.contains(controller);
+      if (!active) {
+        timer.cancel();
+        return;
+      }
+      controller.add(Submission());
+    });
+
+    return controller.stream;
   }
 
 }

@@ -465,11 +465,22 @@ message ProblemStatusRequest {
   string  problem_id = 3;
 }
 
+message RejudgeRequest {
+  User        user = 1;
+  Course      course = 2;
+  string      problem_id = 3;
+  Submission  submission = 4;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
   rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
   rpc GetSubmissionResult(Submission) returns (Submission) {}
+
+  rpc Rejudge(RejudgeRequest) returns (RejudgeRequest) {}
+
+  rpc SubscribeToSubmissionResultNotifications(Submission) returns (stream Submission) {}
 
   rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus) {}
   rpc SubscribeToCourseStatusNotifications(CheckCourseStatusRequest) returns (stream CourseStatus) {}
