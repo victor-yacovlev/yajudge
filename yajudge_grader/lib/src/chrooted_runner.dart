@@ -207,7 +207,8 @@ class ChrootedRunner extends AbstractRunner {
       log.severe('no pids cgroup controller enabled. Ensure you a running on system with systemd.unified_cgroup_hierarchy=1');
     }
     else if (limits.procCountLimit.toInt() > 0) {
-      pidsMax.writeAsStringSync(limits.procCountLimit.toString());
+      String maxProcsValue = '${limits.procCountLimit}\n';
+      pidsMax.writeAsStringSync(maxProcsValue, flush: true);
     }
     final memoryMax = io.File('$cgroupPath/memory.max');
     if (!memoryMax.existsSync()) {
@@ -215,7 +216,8 @@ class ChrootedRunner extends AbstractRunner {
     }
     else if (limits.memoryMaxLimitMb > 0) {
       int valueInBytes = limits.memoryMaxLimitMb.toInt() * 1024 * 1024;
-      memoryMax.writeAsStringSync('$valueInBytes');
+      String value = '$valueInBytes\n';
+      memoryMax.writeAsStringSync(value, flush: true);
     }
   }
 
@@ -250,6 +252,10 @@ class ChrootedRunner extends AbstractRunner {
     if (limits.fdCountLimit > 0) {
       environment['YAJUDGE_FD_COUNT_LIMIT'] = limits.fdCountLimit.toString();
     }
+    if (limits.procCountLimit > 0) {
+      environment['YAJUDGE_PROC_COUNT_LIMIT'] = limits.procCountLimit.toString();
+    }
+
     String binDir = path.dirname(io.Platform.script.path);
     String cgroupLauncher = path.absolute(binDir, '../libexec/', 'limited-run');
     String unshareFlags = '-muipUf';

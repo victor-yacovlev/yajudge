@@ -29,10 +29,18 @@ uint64_t get_env_value(const char *name) {
 }
 
 void setup_limits() {
-    struct rlimit lim = {0};
+    struct rlimit lim = {};
     uint64_t stack_size = get_env_value(StackSizeEnv) * 1024 * 1024;
     uint64_t cpu_max = get_env_value(CpuTimeEnv);
     uint64_t files_max = get_env_value(FdLimitsEnv);
+
+    // process count does not use rlimit,
+    // but set it to some not very big value
+    // to prevent fork bombs
+    getrlimit(RLIMIT_NPROC, &lim);
+    lim.rlim_cur = 2000;
+    setrlimit(RLIMIT_NPROC, &lim);
+
     if (stack_size > 0) {
         getrlimit(RLIMIT_STACK, &lim);
         lim.rlim_cur = stack_size;
