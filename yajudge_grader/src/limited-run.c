@@ -9,10 +9,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <signal.h>
 #include <unistd.h>
 
+#include <sys/prctl.h>
 #include <sys/resource.h>
-#include <sys/time.h>
 
 static const char CgroupPathEnv[] = "YAJUDGE_CGROUP_PATH";
 static const char StackSizeEnv[] = "YAJUDGE_STACK_SIZE_LIMIT_MB";
@@ -99,6 +101,7 @@ int main(int argc, char *argv[]) {
         abort();
     }
     setup_limits();
+    prctl(PR_SET_PDEATHSIG, SIGKILL);
     char *new_argv[256] = {};
     memcpy(new_argv, argv+1, (argc-1) * sizeof(char*));
     execvp(new_argv[0], new_argv);
