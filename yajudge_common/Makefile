@@ -1,10 +1,13 @@
 DART=dart
 RM=rm -rf
+MAKEDIRS=mkdir -p
+PROTOC=protoc
 
 first: generated_code
 
 generated_code: deps
-	$(DART) run build_runner build
+	$(MAKEDIRS) lib/src/generated
+	PATH=${HOME}/.pub-cache/bin/:${PATH} $(PROTOC) -I proto proto/yajudge.proto --dart_out=grpc:lib/src/generated
 
 deps:
 	$(DART) pub get
