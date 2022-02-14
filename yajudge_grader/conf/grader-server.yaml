@@ -3,10 +3,12 @@ rpc:
   port: 9095
   public_token: abrakadabra
   private_token: zxcvbnmsdfsd
+
 locations:
   system_environment: '$HOME/yajudge/debian'
   working_directory: '$HOME/yajudge/work'
   cache_directory: '$HOME/yajudge/cache'
+
 compilers:
   enable_sanitizers: undefined address
   enable_valgrind: true
@@ -16,6 +18,7 @@ compilers:
   cxx_compiler: clang
   c_base_options: -O2 -g -Werror
   cxx_base_options: -O2 -g -Werror
+
 default_limits:
   stack_size_limit_mb: 4
   memory_max_limit_mb: 64
@@ -27,3 +30,5 @@ default_limits:
   stderr_size_limit_mb: 1
   allow_network: false
 
+default_security_context:
+  forbidden_functions: fork clone kill unlink chroot execvp execlp execv execl execve execle

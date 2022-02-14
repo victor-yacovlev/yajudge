@@ -137,7 +137,7 @@ class CourseLoader {
     if (defaultLimitsFile.existsSync()) {
       updateCourseLastModified(defaultLimitsFile);
       YamlMap limitsMap = loadYaml(defaultLimitsFile.readAsStringSync());
-      _defaultLimits = parseDefaultLimits(limitsMap);
+      _defaultLimits = limitsFromYaml(limitsMap);
     }
     final submissionPropertiesFile = io.File(problemPath('')+'/submission-properties.yaml');
     if (submissionPropertiesFile.existsSync()) {
@@ -441,7 +441,7 @@ class CourseLoader {
     GradingLimits limits = GradingLimits();
     if (data['limits'] is YamlMap) {
       YamlMap yamlMap = data['limits'];
-      limits = parseDefaultLimits(yamlMap);
+      limits = limitsFromYaml(yamlMap);
     }
     List<TestCase> testCases = _loadProblemTestCases(problemId);
     final codeStyles = _loadCourseCodeStyles(problemId);

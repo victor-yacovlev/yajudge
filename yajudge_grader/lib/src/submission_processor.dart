@@ -17,6 +17,7 @@ class SubmissionProcessor {
   final Logger log = Logger('SubmissionProcessor');
   final GraderLocationProperties locationProperties;
   final GradingLimits defaultLimits;
+  final SecurityContext defaultSecurityContext;
   final CompilersConfig compilersConfig;
   String plainBuildTarget = '';
   String sanitizersBuildTarget = '';
@@ -29,6 +30,7 @@ class SubmissionProcessor {
     required this.runner,
     required this.locationProperties,
     required this.defaultLimits,
+    required this.defaultSecurityContext,
     required this.compilersConfig,
   });
 
@@ -93,6 +95,19 @@ class SubmissionProcessor {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     final confFile = io.File(solutionPath+'/.disable_sanitizers');
     return confFile.existsSync()? confFile.readAsStringSync().trim().split(' ') : [];
+  }
+
+  SecurityContext securityContext() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    final confFile = io.File(solutionPath+'/.security_context');
+    if (confFile.existsSync()) {
+      YamlMap conf = loadYaml(confFile.path);
+      final problemSecurityContext = securityContextFromYaml(conf);
+      return mergeSecurityContext(defaultSecurityContext, problemSecurityContext);
+    }
+    else {
+      return defaultSecurityContext;
+    }
   }
 
   String styleFileName(String suffix) {
@@ -402,16 +417,17 @@ class SubmissionProcessor {
     List<String> wrapOptionsPre = [];
     List<String> wrapOptionsPost = [];
     if (!linkOptions().contains('-nostdlib') && io.Platform.isLinux) {
-      String binDir = path.dirname(io.Platform.script.path);
-      String syscallWrappers = path.normalize(path.absolute(binDir, '../src/', 'syscall-wrappers.c'));
-      final wrappersContent = io.File(syscallWrappers).readAsBytesSync();
-      String wrapperLocalFileName = buildDir.path + '/.syscall-wrappers.c';
-      io.File(wrapperLocalFileName).writeAsBytesSync(wrappersContent);
-      wrapOptionsPost = ['.syscall-wrappers.c'];
-      final wrappedSyscalls = ['fork'];
-      wrapOptionsPre.add('-pthread');
-      for (final syscall in wrappedSyscalls) {
-        wrapOptionsPre.add('-Wl,--wrap=$syscall');
+      final security = securityContext();
+      bool allowFork = !security.forbiddenFunctions.contains('fork');
+      if (allowFork) {
+        wrapOptionsPre.add('-Wl,--wrap=fork');
+        wrapOptionsPost.add('.proc-limiter.o');
+      }
+      if (security.forbiddenFunctions.isNotEmpty) {
+        for (final name in security.forbiddenFunctions) {
+          wrapOptionsPre.add('-Wl,--wrap=$name');
+        }
+        wrapOptionsPost.add('.forbidden-functions-wrapper.o');
       }
     }
     final linkerArguments = ['-o', targetName] +
@@ -838,6 +854,14 @@ class SubmissionProcessor {
           log.fine('submission ${submission.id} got runtime error: $line');
           break;
         }
+      }
+    }
+    if (exitStatus == 127) {
+      String errOut = utf8.decode(stderr, allowMalformed: true);
+      if (errOut.contains('yajudge_error:')) {
+        checkAnswer = false;
+        solutionStatus = SolutionStatus.RUNTIME_ERROR;
+        log.fine('submission ${submission.id} got yajudge error');
       }
     }
     if (exitStatus < 0) {

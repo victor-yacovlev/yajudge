@@ -27,13 +27,25 @@ Future<void> main([List<String>? arguments]) async {
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
   final locationProperties = GraderLocationProperties.fromYamlConfig(config['locations']);
   final identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
+
   GradingLimits defaultLimits;
   if (config['default_limits'] is YamlMap) {
     YamlMap limitsConf = config['default_limits'];
-    defaultLimits = parseDefaultLimits(limitsConf);
-  } else {
+    defaultLimits = limitsFromYaml(limitsConf);
+  }
+  else {
     defaultLimits = GradingLimits();
   }
+
+  SecurityContext defaultSecurityContext;
+  if (config['default_security_context'] is YamlMap) {
+    YamlMap securityContextConf = config['default_security_context'];
+    defaultSecurityContext = securityContextFromYaml(securityContextConf);
+  }
+  else {
+    defaultSecurityContext = SecurityContext();
+  }
+
   CompilersConfig compilersConfig;
   if (config['compilers'] is YamlMap) {
     YamlMap compilersConf = config['compilers'];
@@ -41,11 +53,13 @@ Future<void> main([List<String>? arguments]) async {
   } else {
     compilersConfig = CompilersConfig.createDefault();
   }
+
   final graderService = GraderService(
     rpcProperties: rpcProperties,
     locationProperties: locationProperties,
     identityProperties: identityProperties,
     defaultLimits: defaultLimits,
+    defaultSecurityContext: defaultSecurityContext,
     compilersConfig: compilersConfig,
   );
   ChrootedRunner.initialCgroupSetup();

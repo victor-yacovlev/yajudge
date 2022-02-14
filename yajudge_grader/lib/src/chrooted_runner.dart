@@ -11,18 +11,20 @@ import 'abstract_runner.dart';
 class ChrootedRunner extends AbstractRunner {
   final GraderLocationProperties locationProperties;
   final Logger log = Logger('ChrootedRunner');
+  final String courseId;
+  final String problemId;
 
   late final io.Directory problemDir;
-  late final io.Directory submissionUpperDir;
-  late final io.Directory submissionMergeDir;
-  late final io.Directory submissionWorkDir;
+  late final io.Directory overlayUpperDir;
+  late final io.Directory overlayMergeDir;
+  late final io.Directory overlayWorkDir;
 
   static final String cgroupRoot = detectRootCgroupLocation();
 
   ChrootedRunner({
     required this.locationProperties,
-    required String courseId,
-    required String problemId,
+    required this.courseId,
+    required this.problemId,
   }) {
     log.info('using work dir root ${locationProperties.workDir}');
     io.Directory(locationProperties.workDir).createSync(recursive: true);
@@ -91,17 +93,26 @@ class ChrootedRunner extends AbstractRunner {
     }
   }
 
+  void createProblemTemporaryDirs() {
+    // to build helpers
+    overlayUpperDir = io.Directory(problemDir.path);
+    String base = path.absolute(locationProperties.workDir, '$courseId', '$problemId');
+    overlayWorkDir = io.Directory(base + '/workdir');
+    overlayMergeDir = io.Directory(base + '/mergedir');
+    overlayWorkDir.createSync(recursive: true);
+    overlayMergeDir.createSync(recursive: true);
+  }
   
   void createSubmissionDir(Submission submission) {
     String submissionPath = path.normalize(path.absolute(locationProperties.workDir, '${submission.id}'));
-    submissionUpperDir = io.Directory(submissionPath + '/upperdir');
-    submissionWorkDir = io.Directory(submissionPath + '/workdir');
-    submissionMergeDir = io.Directory(submissionPath + '/mergedir');
-    submissionUpperDir.createSync(recursive: true);
-    submissionWorkDir.createSync(recursive: true);
-    submissionMergeDir.createSync(recursive: true);
-    io.Directory submissionBuildDir = io.Directory(submissionUpperDir.path + '/build');
-    io.Directory submissionTestsDir = io.Directory(submissionUpperDir.path + '/tests');
+    overlayUpperDir = io.Directory(submissionPath + '/upperdir');
+    overlayWorkDir = io.Directory(submissionPath + '/workdir');
+    overlayMergeDir = io.Directory(submissionPath + '/mergedir');
+    overlayUpperDir.createSync(recursive: true);
+    overlayWorkDir.createSync(recursive: true);
+    overlayMergeDir.createSync(recursive: true);
+    io.Directory submissionBuildDir = io.Directory(overlayUpperDir.path + '/build');
+    io.Directory submissionTestsDir = io.Directory(overlayUpperDir.path + '/tests');
     submissionBuildDir.createSync(recursive: true);
     submissionTestsDir.createSync(recursive: true);
     final fileNames = submission.solutionFiles.files.map((e) => e.name);
@@ -133,11 +144,15 @@ class ChrootedRunner extends AbstractRunner {
   }
 
   void mountOverlay() {
+    String lowerDir = locationProperties.osImageDir;
+    if (problemDir.path != overlayUpperDir.path) {
+      lowerDir += ':' + problemDir.path;
+    }
     final env = {
-      'YAJUDGE_OVERLAY_LOWERDIR': locationProperties.osImageDir + ':' + problemDir.path,
-      'YAJUDGE_OVERLAY_UPPERDIR': submissionUpperDir.path,
-      'YAJUDGE_OVERLAY_WORKDIR': submissionWorkDir.path,
-      'YAJUDGE_OVERLAY_MERGEDIR': submissionMergeDir.path,
+      'YAJUDGE_OVERLAY_LOWERDIR': lowerDir,
+      'YAJUDGE_OVERLAY_UPPERDIR': overlayUpperDir.path,
+      'YAJUDGE_OVERLAY_WORKDIR': overlayWorkDir.path,
+      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir.path,
     };
     final status = io.Process.runSync(
       mounterToolPath, [],
@@ -149,12 +164,12 @@ class ChrootedRunner extends AbstractRunner {
     if (status.exitCode != 0) {
       throw AssertionError('cant mount overlay filesystem: ${status.stderr}');
     }
-    log.fine('mounted overlay at ${submissionMergeDir.path}');
+    log.fine('mounted overlay at ${overlayMergeDir.path}');
   }
 
   void unMountOverlay() {
     final env = {
-      'YAJUDGE_OVERLAY_MERGEDIR': submissionMergeDir.path,
+      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir.path,
     };
     final status = io.Process.runSync(
       mounterToolPath, ['-u'],
@@ -164,7 +179,7 @@ class ChrootedRunner extends AbstractRunner {
       log.severe('umount overlay: ${status.stderr}');
     }
     else {
-      log.fine('unmounted overlay at ${submissionMergeDir.path}');
+      log.fine('unmounted overlay at ${overlayMergeDir.path}');
     }
   }
 
@@ -232,9 +247,11 @@ class ChrootedRunner extends AbstractRunner {
     if (environment == null) {
       environment = Map<String,String>.from(io.Platform.environment);
     }
-    String cgroupPath = submissionCgroupPath(submissionId);
-    environment['YAJUDGE_CGROUP_PATH'] = cgroupPath;
-    setupCgroupLimits(cgroupPath, limits);
+    if (submissionId != 0) {
+      String cgroupPath = submissionCgroupPath(submissionId);
+      environment['YAJUDGE_CGROUP_PATH'] = cgroupPath;
+      setupCgroupLimits(cgroupPath, limits);
+    }
     if (limits.stackSizeLimitMb > 0) {
       environment['YAJUDGE_STACK_SIZE_LIMIT_MB'] = limits.stackSizeLimitMb.toString();
     }
@@ -249,13 +266,15 @@ class ChrootedRunner extends AbstractRunner {
     }
 
     String binDir = path.dirname(io.Platform.script.path);
-    String cgroupLauncher = path.absolute(binDir, '../libexec/', 'limited-run');
+    String limitedLauncher = path.absolute(binDir, '../libexec/', 'limited-run');
     String unshareFlags = '-muipUf';
     if (!limits.allowNetwork) {
       unshareFlags += 'n';
     }
-    String rootDirArg = '--root=${submissionMergeDir.path}';
+
+    String rootDirArg = '--root=${overlayMergeDir.path}';
     String workDirArg = '--wd=$workingDirectory';
+
     List<String> launcherArguments = [
       'unshare',
       unshareFlags,
@@ -264,7 +283,7 @@ class ChrootedRunner extends AbstractRunner {
       executable
     ] + arguments;
     Future<io.Process> result = io.Process.start(
-      cgroupLauncher,
+      limitedLauncher,
       launcherArguments,
       environment: environment,
     );
@@ -273,25 +292,33 @@ class ChrootedRunner extends AbstractRunner {
 
   @override
   void createDirectoryForSubmission(Submission submission) {
-    createSubmissionDir(submission);
-    mountOverlay();
-    createSubmissionCgroup(submission.id.toInt());
+    if (submission.id > 0) {
+      createSubmissionDir(submission);
+      mountOverlay();
+      createSubmissionCgroup(submission.id.toInt());
+    }
+    else {
+      createProblemTemporaryDirs();
+      mountOverlay();
+    }
   }
 
   @override
   void releaseDirectoryForSubmission(Submission submission) {
     unMountOverlay();
-    removeSubmissionCgroup(submission.id.toInt());
+    if (submission.id > 0) {
+      removeSubmissionCgroup(submission.id.toInt());
+    }
   }
 
   @override
   String submissionPrivateDirectory(Submission submission) {
-    return submissionUpperDir.path;
+    return overlayUpperDir.path;
   }
 
   @override
   String submissionWorkingDirectory(Submission submission) {
-    return submissionMergeDir.path;
+    return overlayMergeDir.path;
   }
 
   @override

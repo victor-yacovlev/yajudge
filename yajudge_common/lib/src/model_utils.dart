@@ -150,16 +150,18 @@ bool submissionsCountLimitIsValid(SubmissionsCountLimit countLimit) {
   return countLimit.attemptsLeft!=0 || countLimit.nextTimeReset!=0;
 }
 
-GradingLimits parseDefaultLimits(YamlMap conf) {
+GradingLimits limitsFromYaml(YamlMap conf) {
   int stackSize = 0;
   int memoryMax = 0;
   int cpuTime = 0;
   int realTime = 0;
   int procs = 0;
+  int procStartDelay = 0;
   int files = 0;
   int stdoutMax = 0;
   int stderrMax = 0;
   bool allowNetwork = false;
+
   if (conf['stack_size_limit_mb'] is int)
     stackSize = conf['stack_size_limit_mb'];
   if (conf['memory_max_limit_mb'] is int)
@@ -170,6 +172,8 @@ GradingLimits parseDefaultLimits(YamlMap conf) {
     realTime = conf['real_time_limit_sec'];
   if (conf['proc_count_limit'] is int)
     procs = conf['proc_count_limit'];
+  if (conf['new_proc_delay_msec'] is int)
+    procStartDelay = conf['new_proc_delay_msec'];
   if (conf['fd_count_limit'] is int)
     files = conf['fd_count_limit'];
   if (conf['stdout_size_limit_mb'] is int)
@@ -184,6 +188,7 @@ GradingLimits parseDefaultLimits(YamlMap conf) {
     cpuTimeLimitSec: Int64(cpuTime),
     realTimeLimitSec: Int64(realTime),
     procCountLimit: Int64(procs),
+    newProcDelayMsec: Int64(procStartDelay),
     fdCountLimit: Int64(files),
     stdoutSizeLimitMb: Int64(stdoutMax),
     stderrSizeLimitMb: Int64(stderrMax),
@@ -203,6 +208,8 @@ GradingLimits mergeLimitsFromYaml(GradingLimits source, YamlMap conf) {
       s.realTimeLimitSec = Int64(conf['real_time_limit_sec']);
     if (conf['proc_count_limit'] is int)
       s.procCountLimit = Int64(conf['proc_count_limit']);
+    if (conf['new_proc_delay_msec'] is int)
+      s.newProcDelayMsec = Int64(conf['new_proc_delay_msec']);
     if (conf['fd_count_limit'] is int)
       s.fdCountLimit = Int64(conf['fd_count_limit']);
     if (conf['stdout_size_limit_mb'] is int)
@@ -227,6 +234,8 @@ String limitsToYamlString(GradingLimits limits, [int level = 0]) {
     result += '${indent}real_time_limit_sec: ${limits.realTimeLimitSec}\n';
   if (limits.procCountLimit > 0)
     result += '${indent}proc_count_limit: ${limits.procCountLimit}\n';
+  if (limits.newProcDelayMsec > 0)
+    result += '${indent}new_proc_delay_msec: ${limits.newProcDelayMsec}\n';
   if (limits.fdCountLimit > 0)
     result += '${indent}fd_count_limit: ${limits.fdCountLimit}\n';
   if (limits.stdoutSizeLimitMb > 0)
@@ -235,5 +244,115 @@ String limitsToYamlString(GradingLimits limits, [int level = 0]) {
     result += '${indent}stderr_size_limit_mb: ${limits.stderrSizeLimitMb}\n';
   if (limits.allowNetwork)
     result += '${indent}allow_network: ${limits.allowNetwork}\n';
+  return result;
+}
+
+SecurityContext securityContextFromYaml(YamlMap conf) {
+  List<String> forbiddenFunctions = [];
+  List<String> allowedFunctions = [];
+
+  if (conf['forbidden_functions'] is YamlList) {
+    YamlList list = conf['forbidden_functions'];
+    for (final entry in list) {
+      String name = entry;
+      if (!forbiddenFunctions.contains(name)) {
+        forbiddenFunctions.add(name);
+      }
+    }
+  }
+  else if (conf['forbidden_functions'] is String) {
+    final parts = (conf['forbidden_functions'] as String).split(' ');
+    for (final name in parts) {
+      if (name.isNotEmpty && !forbiddenFunctions.contains(name)) {
+        forbiddenFunctions.add(name);
+      }
+    }
+  }
+  if (conf['allowed_functions'] is YamlList) {
+    YamlList list = conf['allowed_functions'];
+    for (final entry in list) {
+      String name = entry;
+      if (!allowedFunctions.contains(name)) {
+        allowedFunctions.add(name);
+      }
+    }
+  }
+  else if (conf['allowed_functions'] is String) {
+    final parts = (conf['allowed_functions'] as String).split(' ');
+    for (final name in parts) {
+      if (name.isNotEmpty && !allowedFunctions.contains(name)) {
+        allowedFunctions.add(name);
+      }
+    }
+  }
+  return SecurityContext(
+    forbiddenFunctions: forbiddenFunctions,
+    allowedFunctions: allowedFunctions,
+  );
+}
+
+SecurityContext mergeSecurityContext(SecurityContext source, SecurityContext update) {
+  List<String> forbiddenFunctions = source.forbiddenFunctions;
+  for (final name in update.forbiddenFunctions) {
+    if (!forbiddenFunctions.contains(name)) {
+      forbiddenFunctions.add(name);
+    }
+  }
+  for (final name in update.allowedFunctions) {
+    if (forbiddenFunctions.contains(name)) {
+      forbiddenFunctions.remove(name);
+    }
+  }
+  return SecurityContext(forbiddenFunctions: forbiddenFunctions);
+}
+
+SecurityContext mergeSecurityContextFromYaml(SecurityContext source, YamlMap conf) {
+  List<String> forbiddenFunctions = source.forbiddenFunctions;
+  if (conf['forbidden_functions'] is YamlList) {
+    YamlList list = conf['forbidden_functions'];
+    for (final entry in list) {
+      String name = entry;
+      if (!forbiddenFunctions.contains(name)) {
+        forbiddenFunctions.add(name);
+      }
+    }
+  }
+  else if (conf['forbidden_functions'] is String) {
+    final parts = (conf['forbidden_functions'] as String).split(' ');
+    for (final name in parts) {
+      if (name.isNotEmpty && !forbiddenFunctions.contains(name)) {
+        forbiddenFunctions.add(name);
+      }
+    }
+  }
+  if (conf['allowed_functions'] is YamlList) {
+    YamlList list = conf['allowed_functions'];
+    for (final entry in list) {
+      String name = entry;
+      if (forbiddenFunctions.contains(name)) {
+        forbiddenFunctions.remove(name);
+      }
+    }
+  }
+  else if (conf['allowed_functions'] is String) {
+    final parts = (conf['allowed_functions'] as String).split(' ');
+    for (final name in parts) {
+      if (name.isNotEmpty && forbiddenFunctions.contains(name)) {
+        forbiddenFunctions.remove(name);
+      }
+    }
+  }
+  return SecurityContext(
+    forbiddenFunctions: forbiddenFunctions
+  );
+}
+
+String securityContextToYamlString(SecurityContext securityContext, [int level = 0]) {
+  String indent = level > 0 ? '  ' * level : '';
+  String result = '';
+  if (securityContext.allowedFunctions.isNotEmpty)
+    result += '${indent}allowed_functions: ${securityContext.allowedFunctions.join(' ')}\n';
+  if (securityContext.forbiddenFunctions.isNotEmpty)
+    result += '${indent}forbidden_functions: ${securityContext.forbiddenFunctions.join(' ')}\n';
   return result;
 }
