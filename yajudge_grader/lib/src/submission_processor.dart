@@ -101,7 +101,7 @@ class SubmissionProcessor {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     final confFile = io.File(solutionPath+'/.security_context');
     if (confFile.existsSync()) {
-      YamlMap conf = loadYaml(confFile.path);
+      YamlMap conf = loadYaml(confFile.readAsStringSync());
       final problemSecurityContext = securityContextFromYaml(conf);
       return mergeSecurityContext(defaultSecurityContext, problemSecurityContext);
     }
@@ -421,6 +421,7 @@ class SubmissionProcessor {
       bool allowFork = !security.forbiddenFunctions.contains('fork');
       if (allowFork) {
         wrapOptionsPre.add('-Wl,--wrap=fork');
+        wrapOptionsPre.add('-pthread');
         wrapOptionsPost.add('.proc-limiter.o');
       }
       if (security.forbiddenFunctions.isNotEmpty) {
