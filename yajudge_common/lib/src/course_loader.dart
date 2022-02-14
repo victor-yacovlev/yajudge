@@ -18,6 +18,7 @@ class CourseLoader {
   Map<String, ProblemDataCacheItem> problemsCache = {};
 
   GradingLimits _defaultLimits = GradingLimits();
+  SecurityContext _defaultSecurityContext = SecurityContext();
   List<CodeStyle> _codeStyles = [];
   int _maxSubmissionsPerHour = 10;
   int _maxSubmissionFileSize = 1 * 1024 * 1024;
@@ -147,6 +148,12 @@ class CourseLoader {
         _maxSubmissionsPerHour = propsMap['max_submissions_per_hour'];
       if (propsMap['max_submission_file_size'] is int)
         _maxSubmissionFileSize = propsMap['max_submission_file_size'];
+    }
+    final securityContextFile = io.File(problemPath('')+'/security-context.yaml');
+    if (securityContextFile.existsSync()) {
+      updateCourseLastModified(securityContextFile);
+      YamlMap propsMap = loadYaml(securityContextFile.readAsStringSync());
+      _defaultSecurityContext = securityContextFromYaml(propsMap);
     }
     bool hasSections = false;
     if (courseMap['sections'] != null)
@@ -443,6 +450,11 @@ class CourseLoader {
       YamlMap yamlMap = data['limits'];
       limits = limitsFromYaml(yamlMap);
     }
+    SecurityContext securityContext = SecurityContext();
+    if (data['security_context'] is YamlMap) {
+      YamlMap yamlMap = data['security_context'];
+      securityContext = securityContextFromYaml(yamlMap);
+    }
     List<TestCase> testCases = _loadProblemTestCases(problemId);
     final codeStyles = _loadCourseCodeStyles(problemId);
     return GradingOptions(
@@ -457,6 +469,7 @@ class CourseLoader {
       extraCompileOptions: compileOptions.split(' '),
       extraLinkOptions: linkOptions.split(' '),
       limits: limits,
+      securityContext: securityContext,
       disableSanitizers: disableSanitizers,
       disableValgrind: disableValgrind,
       testsGenerator: testsGenerator,
