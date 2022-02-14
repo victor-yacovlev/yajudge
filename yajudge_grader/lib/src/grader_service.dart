@@ -130,8 +130,8 @@ class GraderService {
         await submissionsService.updateGraderOutput(submission);
       }
       else {
-        // no new submissions -- wait for 10 seconds and retry
-        io.sleep(Duration(seconds: 10));
+        // no new submissions -- wait and retry
+        io.sleep(Duration(seconds: 2));
       }
     }
   }
