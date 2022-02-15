@@ -15,9 +15,9 @@ class ChrootedRunner extends AbstractRunner {
   final String problemId;
 
   late final io.Directory problemDir;
-  late final io.Directory overlayUpperDir;
-  late final io.Directory overlayMergeDir;
-  late final io.Directory overlayWorkDir;
+  io.Directory? overlayUpperDir;
+  io.Directory? overlayMergeDir;
+  io.Directory? overlayWorkDir;
 
   static final String cgroupRoot = detectRootCgroupLocation();
 
@@ -99,8 +99,8 @@ class ChrootedRunner extends AbstractRunner {
     String base = path.absolute(locationProperties.workDir, '$courseId', '$problemId');
     overlayWorkDir = io.Directory(base + '/workdir');
     overlayMergeDir = io.Directory(base + '/mergedir');
-    overlayWorkDir.createSync(recursive: true);
-    overlayMergeDir.createSync(recursive: true);
+    overlayWorkDir!.createSync(recursive: true);
+    overlayMergeDir!.createSync(recursive: true);
   }
   
   void createSubmissionDir(Submission submission) {
@@ -108,11 +108,11 @@ class ChrootedRunner extends AbstractRunner {
     overlayUpperDir = io.Directory(submissionPath + '/upperdir');
     overlayWorkDir = io.Directory(submissionPath + '/workdir');
     overlayMergeDir = io.Directory(submissionPath + '/mergedir');
-    overlayUpperDir.createSync(recursive: true);
-    overlayWorkDir.createSync(recursive: true);
-    overlayMergeDir.createSync(recursive: true);
-    io.Directory submissionBuildDir = io.Directory(overlayUpperDir.path + '/build');
-    io.Directory submissionTestsDir = io.Directory(overlayUpperDir.path + '/tests');
+    overlayUpperDir!.createSync(recursive: true);
+    overlayWorkDir!.createSync(recursive: true);
+    overlayMergeDir!.createSync(recursive: true);
+    io.Directory submissionBuildDir = io.Directory(overlayUpperDir!.path + '/build');
+    io.Directory submissionTestsDir = io.Directory(overlayUpperDir!.path + '/tests');
     submissionBuildDir.createSync(recursive: true);
     submissionTestsDir.createSync(recursive: true);
     final fileNames = submission.solutionFiles.files.map((e) => e.name);
@@ -145,14 +145,14 @@ class ChrootedRunner extends AbstractRunner {
 
   void mountOverlay() {
     String lowerDir = locationProperties.osImageDir;
-    if (problemDir.path != overlayUpperDir.path) {
+    if (problemDir.path != overlayUpperDir!.path) {
       lowerDir += ':' + problemDir.path;
     }
     final env = {
       'YAJUDGE_OVERLAY_LOWERDIR': lowerDir,
-      'YAJUDGE_OVERLAY_UPPERDIR': overlayUpperDir.path,
-      'YAJUDGE_OVERLAY_WORKDIR': overlayWorkDir.path,
-      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir.path,
+      'YAJUDGE_OVERLAY_UPPERDIR': overlayUpperDir!.path,
+      'YAJUDGE_OVERLAY_WORKDIR': overlayWorkDir!.path,
+      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir!.path,
     };
     final status = io.Process.runSync(
       mounterToolPath, [],
@@ -164,12 +164,12 @@ class ChrootedRunner extends AbstractRunner {
     if (status.exitCode != 0) {
       throw AssertionError('cant mount overlay filesystem: ${status.stderr}');
     }
-    log.fine('mounted overlay at ${overlayMergeDir.path}');
+    log.fine('mounted overlay at ${overlayMergeDir!.path}');
   }
 
   void unMountOverlay() {
     final env = {
-      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir.path,
+      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir!.path,
     };
     final status = io.Process.runSync(
       mounterToolPath, ['-u'],
@@ -179,7 +179,7 @@ class ChrootedRunner extends AbstractRunner {
       log.severe('umount overlay: ${status.stderr}');
     }
     else {
-      log.fine('unmounted overlay at ${overlayMergeDir.path}');
+      log.fine('unmounted overlay at ${overlayMergeDir!.path}');
     }
   }
 
@@ -272,7 +272,7 @@ class ChrootedRunner extends AbstractRunner {
       unshareFlags += 'n';
     }
 
-    String rootDirArg = '--root=${overlayMergeDir.path}';
+    String rootDirArg = '--root=${overlayMergeDir!.path}';
     String workDirArg = '--wd=$workingDirectory';
 
     List<String> launcherArguments = [
@@ -313,12 +313,12 @@ class ChrootedRunner extends AbstractRunner {
 
   @override
   String submissionPrivateDirectory(Submission submission) {
-    return overlayUpperDir.path;
+    return overlayUpperDir!.path;
   }
 
   @override
   String submissionWorkingDirectory(Submission submission) {
-    return overlayMergeDir.path;
+    return overlayMergeDir!.path;
   }
 
   @override

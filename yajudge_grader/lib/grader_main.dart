@@ -85,6 +85,7 @@ void initializeLogger(io.IOSink? target) {
 Future<void> serverMain(List<String> arguments) async {
   final parser = ArgParser();
   parser.addOption('config', abbr: 'C', help: 'config file name');
+  parser.addOption('limits', abbr: 'l', help: 'custom problem limits');
   final parsedArguments = parser.parse(arguments);
 
   GraderService service = await initializeGrader(parsedArguments);
