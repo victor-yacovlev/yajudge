@@ -1,3 +1,6 @@
+log_file: '$HOME/yajudge/grader.log'
+pid_file: '$HOME/yajudge/grader.pid'
+
 rpc:
   host: localhost
   port: 9095

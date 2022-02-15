@@ -9,7 +9,7 @@ import 'src/grader_extra_configs.dart';
 import 'package:yaml/yaml.dart';
 import 'package:path/path.dart' as path;
 
-Future<GraderService> initializeGrader(ArgResults parsedArguments) async {
+Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFile, bool usePidFile) async {
   String? configFileName = parsedArguments['config'];
   if (configFileName == null) {
     configFileName = findConfigFile('grader-server');
@@ -21,7 +21,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments) async {
 
   GradingLimits? overrideLimits;
   if (parsedArguments['limits'] != null) {
-    final limitsFileName = parsedArguments['limits']!;
+    final limitsFileName = expandPathEnvVariables(parsedArguments['limits']!);
     final limitsConf = loadYaml(io.File(limitsFileName).readAsStringSync());
     overrideLimits = limitsFromYaml(limitsConf);
   }
@@ -30,6 +30,25 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments) async {
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
   final locationProperties = GraderLocationProperties.fromYamlConfig(config['locations']);
   final identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
+
+  if (useLogFile) {
+    final String? logFilePath = expandPathEnvVariables(config['log_file']);
+    if (logFilePath != null) {
+      final logFile = io.File(logFilePath);
+      initializeLogger(logFile.openWrite(mode: io.FileMode.append));
+    }
+    else {
+      initializeLogger(io.stdout);
+    }
+  }
+
+  if (usePidFile) {
+    String? pidFilePath = expandPathEnvVariables(config['pid_file']);
+    if (pidFilePath == null) {
+      pidFilePath = 'grader.pid'; // in current directory
+    }
+    io.File(pidFilePath).writeAsStringSync('${io.pid}');
+  }
 
   GradingLimits defaultLimits;
   if (config['default_limits'] is YamlMap) {
@@ -66,6 +85,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments) async {
     compilersConfig: compilersConfig,
     overrideLimits: overrideLimits,
   );
+
   ChrootedRunner.initialCgroupSetup();
 
   return graderService;
@@ -88,9 +108,7 @@ Future<void> serverMain(List<String> arguments) async {
   parser.addOption('limits', abbr: 'l', help: 'custom problem limits');
   final parsedArguments = parser.parse(arguments);
 
-  GraderService service = await initializeGrader(parsedArguments);
-
-  initializeLogger(io.stdout);
+  GraderService service = await initializeGrader(parsedArguments, true, true);
 
   String name = service.identityProperties.name;
   Logger.root.info('started grader server "$name" at PID = ${io.pid}');
@@ -145,14 +163,7 @@ Future<void> toolMain(List<String> arguments) async {
     solutionFiles: FileSet(files: solutionFiles),
   );
 
-  final service = await initializeGrader(parsedArguments);
-
-  if (parsedArguments['verbose'] != null && parsedArguments['verbose']) {
-    initializeLogger(io.stdout);
-  }
-  else {
-    initializeLogger(null);
-  }
+  final service = await initializeGrader(parsedArguments, false, false);
 
   final processed = await service.processSubmission(fakeSubmission);
   print(processed.status.name + '\n');
