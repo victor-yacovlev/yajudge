@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:io' as io;
 
 import 'package:args/args.dart';
 import 'package:logging/logging.dart';
@@ -7,22 +7,25 @@ import 'src/chrooted_runner.dart';
 import 'src/grader_service.dart';
 import 'src/grader_extra_configs.dart';
 import 'package:yaml/yaml.dart';
+import 'package:path/path.dart' as path;
 
-Future<void> main([List<String>? arguments]) async {
-  ArgParser parser = ArgParser();
-  parser.addOption('config');
-  String? configFileName;
-  if (arguments != null) {
-    ArgResults options = parser.parse(arguments);
-    configFileName = options['config'];
-  }
-  if (configFileName==null || configFileName.isEmpty) {
+Future<GraderService> initializeGrader(ArgResults parsedArguments) async {
+  String? configFileName = parsedArguments['config'];
+  if (configFileName == null) {
     configFileName = findConfigFile('grader-server');
   }
-  if (configFileName==null) {
+  if (configFileName == null) {
     print('No config file specified\n');
-    exit(1);
+    io.exit(1);
   }
+
+  GradingLimits? overrideLimits;
+  if (parsedArguments['limits'] != null) {
+    final limitsFileName = parsedArguments['limits']!;
+    final limitsConf = loadYaml(io.File(limitsFileName).readAsStringSync());
+    overrideLimits = limitsFromYaml(limitsConf);
+  }
+
   final config = parseYamlConfig(configFileName);
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
   final locationProperties = GraderLocationProperties.fromYamlConfig(config['locations']);
@@ -61,17 +64,124 @@ Future<void> main([List<String>? arguments]) async {
     defaultLimits: defaultLimits,
     defaultSecurityContext: defaultSecurityContext,
     compilersConfig: compilersConfig,
+    overrideLimits: overrideLimits,
   );
   ChrootedRunner.initialCgroupSetup();
-  String name = identityProperties.name;
-  graderService.serveSupervised();
+
+  return graderService;
+}
+
+void initializeLogger(io.IOSink? target) {
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
-    print('${record.time}: ${record.level.name} - ${record.message}');
+    if (target != null) {
+      target.writeln(
+          '${record.time}: ${record.level.name} - ${record.message}');
+    }
   });
-  Logger.root.info('started grader server "$name" at PID = $pid');
-  if (!Platform.isLinux) {
+}
+
+
+Future<void> serverMain(List<String> arguments) async {
+  final parser = ArgParser();
+  parser.addOption('config', abbr: 'C', help: 'config file name');
+  final parsedArguments = parser.parse(arguments);
+
+  GraderService service = await initializeGrader(parsedArguments);
+
+  initializeLogger(io.stdout);
+
+  String name = service.identityProperties.name;
+  Logger.root.info('started grader server "$name" at PID = ${io.pid}');
+  if (!io.Platform.isLinux) {
     Logger.root.warning('running grader on systems other than Linux is completely unsecure!');
   }
+
+  service.serveSupervised();
+}
+
+Future<void> toolMain(List<String> arguments) async {
+  final parser = ArgParser();
+  parser.addOption('config', abbr: 'C', help: 'config file name');
+  parser.addOption('limits', abbr: 'l', help: 'custom problem limits');
+  parser.addOption('course', abbr: 'c', help: 'course data id');
+  parser.addOption('problem', abbr: 'p', help: 'problem id');
+  parser.addFlag('verbose', abbr: 'v', help: 'verbose log to stdout');
+  final parsedArguments = parser.parse(arguments);
+
+  if (parsedArguments['course'] == null) {
+    print('No course data id specified\n');
+    io.exit(1);
+  }
+
+  if (parsedArguments['problem'] == null) {
+    print('No problem id specified\n');
+    io.exit(1);
+  }
+
+  if (parsedArguments.rest.isEmpty) {
+    print('Requires at least one solution file name\n');
+    io.exit(1);
+  }
+
+  String courseDataId = parsedArguments['course'];
+  String problemId = parsedArguments['problem'];
+
+  List<File> solutionFiles = [];
+  for (final fileName in parsedArguments.rest) {
+    final file = io.File(fileName);
+    if (!file.existsSync()) {
+      print('File $fileName not found\n');
+      io.exit(1);
+    }
+    final content = file.readAsBytesSync();
+    solutionFiles.add(File(name: path.basename(fileName), data: content));
+  }
+
+  final fakeSubmission = Submission(
+    course: Course(dataId: courseDataId),
+    problemId: problemId,
+    solutionFiles: FileSet(files: solutionFiles),
+  );
+
+  final service = await initializeGrader(parsedArguments);
+
+  if (parsedArguments['verbose'] != null && parsedArguments['verbose']) {
+    initializeLogger(io.stdout);
+  }
+  else {
+    initializeLogger(null);
+  }
+
+  final processed = await service.processSubmission(fakeSubmission);
+  print(processed.status.name + '\n');
+  final findFirstTest = () {
+    for (final test in processed.testResults) {
+      if (test.status == processed.status) {
+        return test;
+      }
+    }
+    return TestResult();
+  };
+
+  if (processed.status == SolutionStatus.STYLE_CHECK_ERROR) {
+    print(processed.styleErrorLog);
+  }
+  else if (processed.status == SolutionStatus.COMPILATION_ERROR) {
+    print(processed.buildErrorLog);
+  }
+  else if (processed.status == SolutionStatus.RUNTIME_ERROR) {
+    final broken = findFirstTest();
+    print(broken.stdout + '\n' + broken.stderr);
+  }
+  else if (processed.status == SolutionStatus.VALGRIND_ERRORS) {
+    final broken = findFirstTest();
+    print(broken.valgrindOutput);
+  }
+  else if (processed.status == SolutionStatus.WRONG_ANSWER) {
+    final broken = findFirstTest();
+    print(broken.checkerOutput);
+  }
+  io.exit(0);
 }
 

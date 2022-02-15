@@ -196,28 +196,27 @@ GradingLimits limitsFromYaml(YamlMap conf) {
   );
 }
 
-GradingLimits mergeLimitsFromYaml(GradingLimits source, YamlMap conf) {
+GradingLimits mergeLimits(GradingLimits source, GradingLimits update) {
   return source.copyWith((s) {
-    if (conf['stack_size_limit_mb'] is int)
-      s.stackSizeLimitMb = Int64(conf['stack_size_limit_mb']);
-    if (conf['memory_max_limit_mb'] is int)
-      s.memoryMaxLimitMb = Int64(conf['memory_max_limit_mb']);
-    if (conf['cpu_time_limit_sec'] is int)
-      s.cpuTimeLimitSec = Int64(conf['cpu_time_limit_sec']);
-    if (conf['real_time_limit_sec'] is int)
-      s.realTimeLimitSec = Int64(conf['real_time_limit_sec']);
-    if (conf['proc_count_limit'] is int)
-      s.procCountLimit = Int64(conf['proc_count_limit']);
-    if (conf['new_proc_delay_msec'] is int)
-      s.newProcDelayMsec = Int64(conf['new_proc_delay_msec']);
-    if (conf['fd_count_limit'] is int)
-      s.fdCountLimit = Int64(conf['fd_count_limit']);
-    if (conf['stdout_size_limit_mb'] is int)
-      s.stdoutSizeLimitMb = Int64(conf['stdout_size_limit_mb']);
-    if (conf['stderr_size_limit_mb'] is int)
-      s.stderrSizeLimitMb = Int64(conf['stderr_size_limit_mb']);
-    if (conf['allow_network'] is bool)
-      s.allowNetwork = conf['allow_network'].toString().toLowerCase()=='true';
+    final u = update;
+    if (u.stackSizeLimitMb != 0)
+      s.stackSizeLimitMb = u.stackSizeLimitMb;
+    if (u.memoryMaxLimitMb != 0)
+      s.memoryMaxLimitMb = u.memoryMaxLimitMb;
+    if (u.cpuTimeLimitSec != 0)
+      s.cpuTimeLimitSec = u.cpuTimeLimitSec;
+    if (u.realTimeLimitSec != 0)
+      s.realTimeLimitSec = u.realTimeLimitSec;
+    if (u.procCountLimit != 0)
+      s.procCountLimit = u.procCountLimit;
+    if (u.fdCountLimit != 0)
+      s.fdCountLimit = u.fdCountLimit;
+    if (u.stdoutSizeLimitMb != 0)
+      s.stdoutSizeLimitMb = u.stdoutSizeLimitMb;
+    if (u.stderrSizeLimitMb != 0)
+      s.stderrSizeLimitMb = u.stderrSizeLimitMb;
+    if (u.allowNetwork)
+      s.allowNetwork = u.allowNetwork;
   });
 }
 

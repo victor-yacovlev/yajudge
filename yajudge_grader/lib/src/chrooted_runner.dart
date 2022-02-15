@@ -292,12 +292,12 @@ class ChrootedRunner extends AbstractRunner {
 
   @override
   void createDirectoryForSubmission(Submission submission) {
-    if (submission.id > 0) {
+    if (submission.id >= 0) {
       createSubmissionDir(submission);
       mountOverlay();
       createSubmissionCgroup(submission.id.toInt());
     }
-    else {
+    else if (submission.id == -1) {
       createProblemTemporaryDirs();
       mountOverlay();
     }
@@ -306,7 +306,7 @@ class ChrootedRunner extends AbstractRunner {
   @override
   void releaseDirectoryForSubmission(Submission submission) {
     unMountOverlay();
-    if (submission.id > 0) {
+    if (submission.id >= 0) {
       removeSubmissionCgroup(submission.id.toInt());
     }
   }

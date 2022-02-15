@@ -6,7 +6,8 @@ first: all
 all: grader helpers
 
 grader: deps
-	$(DART) compile exe bin/*.dart
+	$(DART) compile exe bin/yajudge-grader-server.dart
+	$(DART) compile exe bin/yajudge-grader-tool.dart
 
 helpers:
 

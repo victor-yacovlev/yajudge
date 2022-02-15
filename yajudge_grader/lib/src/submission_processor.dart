@@ -17,8 +17,10 @@ class SubmissionProcessor {
   final Logger log = Logger('SubmissionProcessor');
   final GraderLocationProperties locationProperties;
   final GradingLimits defaultLimits;
+  final GradingLimits? overrideLimits;
   final SecurityContext defaultSecurityContext;
   final CompilersConfig compilersConfig;
+  final CourseManagementClient coursesService;
   String plainBuildTarget = '';
   String sanitizersBuildTarget = '';
   bool runTargetIsScript = false;
@@ -28,11 +30,229 @@ class SubmissionProcessor {
   SubmissionProcessor({
     required this.submission,
     required this.runner,
+    required this.coursesService,
     required this.locationProperties,
     required this.defaultLimits,
+    this.overrideLimits,
     required this.defaultSecurityContext,
     required this.compilersConfig,
   });
+
+  Future<void> loadProblemData() async {
+    final courseId = submission.course.dataId;
+    final problemId = submission.problemId;
+    String root = locationProperties.coursesCacheDir;
+    final problemDir = io.Directory(path.absolute(root, courseId, problemId));
+    final problemTimeStampFile = io.File(problemDir.path + '/.timestamp');
+    int timeStamp = 0;
+    if (problemTimeStampFile.existsSync()) {
+      String timeStampData = problemTimeStampFile.readAsStringSync().trim();
+      timeStamp = int.parse(timeStampData);
+    }
+    final request = ProblemContentRequest(
+      courseDataId: courseId,
+      problemId: problemId,
+      cachedTimestamp: Int64(timeStamp),
+    );
+    final response = await coursesService.getProblemFullContent(request);
+    if (response.status == ContentStatus.HAS_DATA) {
+      problemDir.createSync(recursive: true);
+      String buildDir = problemDir.path + '/build';
+      String testsDir = problemDir.path + '/tests';
+      io.Directory(buildDir).createSync(recursive: true);
+      io.Directory(testsDir).createSync(recursive: true);
+      final problemData = response.data;
+      final opts = problemData.gradingOptions;
+      String compileOptions = opts.extraCompileOptions.join(' ');
+      String linkOptions = opts.extraLinkOptions.join(' ');
+      io.File(buildDir + '/.compile_options').writeAsStringSync(compileOptions);
+      io.File(buildDir + '/.link_options').writeAsStringSync(linkOptions);
+      final codeStyles = opts.codeStyles;
+      for (final codeStyle in codeStyles) {
+        String fileName = codeStyle.styleFile.name;
+        String suffix = codeStyle.sourceFileSuffix;
+        if (suffix.startsWith('.'))
+          suffix = suffix.substring(1);
+        io.File(buildDir + '/' + fileName).writeAsBytesSync(
+            codeStyle.styleFile.data);
+        io.File(buildDir + '/.style_$suffix').writeAsStringSync(
+            codeStyle.styleFile.name);
+      }
+      for (final file in opts.extraBuildFiles.files) {
+        io.File(buildDir + '/' + file.name).writeAsBytesSync(file.data);
+      }
+      final customChecker = opts.customChecker;
+      if (customChecker.name.isNotEmpty) {
+        io.File(buildDir + '/' + customChecker.name).writeAsBytesSync(
+            customChecker.data);
+        io.File(buildDir + '/.checker').writeAsStringSync(customChecker.name);
+      } else {
+        String checkerName = opts.standardChecker;
+        String checkerOpts = opts.standardCheckerOpts;
+        io.File(buildDir + '/.checker').writeAsStringSync(
+            '=$checkerName\n$checkerOpts\n');
+      }
+      final testsGenerator = opts.testsGenerator;
+      if (testsGenerator.name.isNotEmpty) {
+        io.File(buildDir + '/' + testsGenerator.name).writeAsBytesSync(
+            testsGenerator.data);
+        io.File(buildDir + '/.tests_generator').writeAsStringSync(
+            testsGenerator.name);
+      }
+
+      if (opts.disableValgrind)
+        io.File(buildDir + '/.disable_valgrind').createSync(recursive: true);
+
+      final List<String> disabledSanitizers = opts.disableSanitizers;
+      if (disabledSanitizers.isNotEmpty) {
+        io.File(buildDir + '/.disable_sanitizers').writeAsStringSync(
+            disabledSanitizers.join(' '));
+      }
+
+      GradingLimits limits = opts.limits;
+      String limitsYaml = limitsToYamlString(limits);
+      if (limitsYaml
+          .trim()
+          .isNotEmpty) {
+        io.File(buildDir + '/.limits').writeAsStringSync(limitsYaml);
+      }
+
+      SecurityContext problemSecurityContext = opts.securityContext;
+      String securityContextYaml = securityContextToYamlString(
+          problemSecurityContext);
+      if (securityContextYaml
+          .trim()
+          .isNotEmpty) {
+        io.File(buildDir + '/.security_context').writeAsStringSync(
+            securityContextYaml);
+      }
+      SecurityContext securityContext = mergeSecurityContext(
+          defaultSecurityContext, problemSecurityContext);
+      if (io.Platform.isLinux) {
+        await buildSecurityContextObjects(
+            securityContext, buildDir, courseId, problemId);
+      }
+
+      final gzip = io.gzip;
+      int testNumber = 1;
+      int testsCount = 0;
+      for (final testCase in opts.testCases) {
+        final stdin = testCase.stdinData;
+        final stdout = testCase.stdoutReference;
+        final stderr = testCase.stderrReference;
+        final bundle = testCase.directoryBundle;
+        final args = testCase.commandLineArguments;
+        if (stdin.name.isNotEmpty) {
+          io.File(testsDir + '/' + stdin.name).writeAsBytesSync(
+              gzip.decode(stdin.data));
+        }
+        if (stdout.name.isNotEmpty) {
+          io.File(testsDir + '/' + stdout.name).writeAsBytesSync(
+              gzip.decode(stdout.data));
+        }
+        if (stderr.name.isNotEmpty) {
+          io.File(testsDir + '/' + stderr.name).writeAsBytesSync(
+              gzip.decode(stderr.data));
+        }
+        if (bundle.name.isNotEmpty) {
+          io.File(testsDir + '/' + bundle.name).writeAsBytesSync(bundle.data);
+        }
+        if (args.isNotEmpty) {
+          String testBaseName = '$testNumber';
+          if (testNumber < 10)
+            testBaseName = '0' + testBaseName;
+          if (testNumber < 100)
+            testBaseName = '0' + testBaseName;
+          io.File(testsDir + '/' + testBaseName + '.args').writeAsStringSync(
+              args);
+        }
+        testNumber ++;
+        testsCount ++;
+      }
+      io.File(testsDir + "/.tests_count").writeAsStringSync('$testsCount\n');
+      problemTimeStampFile.writeAsStringSync(
+          '${response.lastModified.toInt()}\n');
+    }
+  }
+
+  Future<void> buildSecurityContextObjects(SecurityContext securityContext,
+      String buildDir, String courseId, String problemId) async {
+    String binDir = path.dirname(io.Platform.script.path);
+    String procLimiterSourcePath = path.normalize(
+        path.absolute(binDir, '../src/', 'proc-limiter.c'));
+    String tempSourcePath = buildDir + '/.forbidden-functions-wrapper.c';
+
+
+    final compiler = compilersConfig.cCompiler;
+    final options = ['-c', '-fPIC'];
+
+    runner.createDirectoryForSubmission(Submission(id: Int64(-1)));
+
+    bool allowFork = !securityContext.forbiddenFunctions.contains('fork');
+    if (allowFork) {
+      io.File(procLimiterSourcePath).copySync(buildDir + '/.proc-limiter.c');
+      final arguments = compilersConfig.cBaseOptions + options + [
+        '-o', '.proc-limiter.o',
+        '.proc-limiter.c'
+      ];
+      final process = await runner.start(
+        0,
+        [compiler] + arguments,
+        workingDirectory: '/build',
+      );
+      List<int> stdout = [];
+      List<int> stderr = [];
+      await process.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
+      await process.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
+      int status = await process.exitCode;
+      if (status != 0) {
+        String errorMessage = utf8.decode(stdout) + '\n' + utf8.decode(stderr);
+        log.severe(
+            'cant build proc limiter object: $compiler ${arguments.join(
+                ' ')}:\n$errorMessage\n');
+      }
+    }
+    if (securityContext.forbiddenFunctions.isNotEmpty) {
+      String sourceHeader = r'''
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+
+static void forbid(const char *name) {
+    fprintf(stderr, "yajudge_error: Function '%s' is forbidden\n", name);
+    _exit(127);
+}
+    '''.trimLeft();
+      String forbidSource = sourceHeader + '\n';
+      for (final name in securityContext.forbiddenFunctions) {
+        final line = 'void __wrap_$name() { forbid("$name"); }\n';
+        forbidSource += line;
+      }
+      io.File(tempSourcePath).writeAsStringSync(forbidSource);
+      final arguments = compilersConfig.cBaseOptions + options + [
+        '-o', '.forbidden-functions-wrapper.o',
+        '.forbidden-functions-wrapper.c'
+      ];
+      final process = await runner.start(
+        0,
+        [compiler] + arguments,
+        workingDirectory: '/build',
+      );
+      List<int> stdout = [];
+      List<int> stderr = [];
+      await process.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
+      await process.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
+      int status = await process.exitCode;
+      if (status != 0) {
+        String errorMessage = utf8.decode(stdout) + '\n' + utf8.decode(stderr);
+        log.severe(
+            'cant build security context object: $compiler ${arguments.join(
+                ' ')}:\n$errorMessage\n');
+      }
+    }
+
+    runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)));
+  }
 
   Future<void> processSubmission() async {
     try {
@@ -292,8 +512,9 @@ class SubmissionProcessor {
     GradingLimits limits = defaultLimits;
     final limitsFile = io.File(runner.submissionProblemDirectory(submission)+'/build/.limits');
     if (limitsFile.existsSync()) {
-      YamlMap conf = loadYaml(limitsFile.readAsStringSync());
-      limits = mergeLimitsFromYaml(limits, conf);
+      final conf = loadYaml(limitsFile.readAsStringSync());
+      final problemLimits = limitsFromYaml(conf);
+      limits = mergeLimits(limits, conf);
     }
     if (withValgrindAjustment) {
       return compilersConfig.applyValgrindToGradingLimits(limits);
@@ -678,13 +899,12 @@ class SubmissionProcessor {
     GradingLimits limits = defaultLimits;
     final limitsFile = io.File(limitsPath);
     if (limitsFile.existsSync()) {
-      YamlMap config = parseYamlConfig(limitsPath);
-      limits = limits.copyWith((l) {
-        if (config['real_time_limit_sec'] is int)
-          l.cpuTimeLimitSec = Int64(config['real_time_limit_sec'] as int);
-        if (config['proc_count_limit'] is int)
-          l.procCountLimit = Int64(config['proc_count_limit'] as int);
-      });
+      final conf = parseYamlConfig(limitsPath);
+      final problemLimits = limitsFromYaml(conf);
+      limits = mergeLimits(limits, problemLimits);
+    }
+    if (overrideLimits != null) {
+      limits = mergeLimits(limits, overrideLimits!);
     }
     return limits;
   }
