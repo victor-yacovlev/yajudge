@@ -508,14 +508,8 @@ static void forbid(const char *name) {
     throw UnimplementedError('golang project not implemented yet');
   }
 
-  GradingLimits getProblemLimits(bool withValgrindAjustment) {
-    GradingLimits limits = defaultLimits;
-    final limitsFile = io.File(runner.submissionProblemDirectory(submission)+'/build/.limits');
-    if (limitsFile.existsSync()) {
-      final conf = loadYaml(limitsFile.readAsStringSync());
-      final problemLimits = limitsFromYaml(conf);
-      limits = mergeLimits(limits, conf);
-    }
+  GradingLimits getLimits(bool withValgrindAjustment) {
+    GradingLimits limits = getLimitsForProblem();
     if (withValgrindAjustment) {
       return compilersConfig.applyValgrindToGradingLimits(limits);
     }
@@ -740,8 +734,8 @@ static void forbid(const char *name) {
     bool hasWrongAnswer = false;
     bool hasValgrindErrors = false;
     List<TestResult> testResults = [];
-    GradingLimits plainLimits = getProblemLimits(false);
-    GradingLimits valgrindLimits = getProblemLimits(true);
+    GradingLimits plainLimits = getLimits(false);
+    GradingLimits valgrindLimits = getLimits(true);
 
     int testsCount = 0;
 
