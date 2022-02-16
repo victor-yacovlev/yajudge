@@ -53,6 +53,8 @@ class GraderService {
   final GradingLimits? overrideLimits;
   final SecurityContext defaultSecurityContext;
   final CompilersConfig compilersConfig;
+  final ServiceProperties serviceProperties;
+  final bool usePidFile;
 
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
@@ -63,6 +65,8 @@ class GraderService {
     required this.rpcProperties,
     required this.locationProperties,
     required this.identityProperties,
+    required this.serviceProperties,
+    required this.usePidFile,
     required this.defaultLimits,
     this.overrideLimits,
     required this.defaultSecurityContext,
@@ -174,6 +178,9 @@ class GraderService {
   void shutdown(String reason, [bool error = false]) async {
     masterServer.shutdown().timeout(Duration(seconds: 2), onTimeout: () {
       log.info('grader shutdown due to $reason');
+      if (usePidFile && serviceProperties.pidFilePath!='disabled') {
+        io.File(serviceProperties.pidFilePath).deleteSync();
+      }
       io.exit(error ? 1 : 0);
     });
   }

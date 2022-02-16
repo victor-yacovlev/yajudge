@@ -1,5 +1,7 @@
-log_file: '$HOME/yajudge/grader.log'
-pid_file: '$HOME/yajudge/grader.pid'
+service:
+  log_file: '$HOME/yajudge/grader.log'
+  pid_file: '$HOME/yajudge/grader.pid'
+  systemd_slice: 'yajudge'
 
 rpc:
   host: localhost

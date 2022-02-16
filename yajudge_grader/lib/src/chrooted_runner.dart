@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:core';
 
 import 'package:fixnum/fixnum.dart';
@@ -19,7 +20,7 @@ class ChrootedRunner extends AbstractRunner {
   io.Directory? overlayMergeDir;
   io.Directory? overlayWorkDir;
 
-  static final String cgroupRoot = detectRootCgroupLocation();
+  static String cgroupRoot = '';
 
   ChrootedRunner({
     required this.locationProperties,
@@ -41,7 +42,7 @@ class ChrootedRunner extends AbstractRunner {
     problemDir = io.Directory(problemCachePath);
   }
 
-  static String detectRootCgroupLocation() {
+  static String systemRootCgroupLocation() {
     if (!io.Platform.isLinux) {
       return '';
     }
@@ -60,36 +61,50 @@ class ChrootedRunner extends AbstractRunner {
         }
       }
     }
-    assert(cgroupSystemPath != null);
-    int uid = posix.getuid();
-    return path.normalize('$cgroupSystemPath/user.slice/user-$uid.slice/user@$uid.service/yajudge-grader.service');
+    if (cgroupSystemPath == null) {
+      Logger.root.severe('cant find cgroup2 filesystem mounted. Check your systemd boot settings');
+    }
+    return cgroupSystemPath!;
   }
 
-  static void initialCgroupSetup() {
+  static void checkLinuxCgroupCapabilities() {
     if (!io.Platform.isLinux) {
       return;
     }
-    String cgroupRootPath = detectRootCgroupLocation();
-    final cgroupRootDir = io.Directory(cgroupRootPath);
-    if (cgroupRootDir.existsSync()) {
-      io.Process.runSync('rmdir', [cgroupRootPath]);
-    }
-    cgroupRootDir.createSync(recursive: true);
-    String binDir = path.dirname(io.Platform.script.path);
-    String helper = path.normalize(path.absolute(binDir, '../libexec', 'initial-cgroup-setup'));
+    String cgroupFsRoot = systemRootCgroupLocation();
     String myPid = '${io.pid}';
-    if (io.File(helper).existsSync()) {
-      final result = io.Process.runSync(
-        helper,
-        [cgroupRootPath, myPid]
-      );
-      if (result.stdout.toString().isNotEmpty) {
-        print(result.stdout.toString());
+    final procPidCgroupFile = io.File('/proc/$myPid/cgroup');
+    if (!procPidCgroupFile.existsSync()) {
+      Logger.root.shout('cant open ${procPidCgroupFile.path}');
+      io.exit(1);
+    }
+    String cgroupLocationSuffix = procPidCgroupFile.readAsStringSync()
+      .trim().split(':')[2];
+    List<String> parts = cgroupLocationSuffix.split('/');
+    bool foundWritableSlice = false;
+    while (parts.isNotEmpty) {
+      String lastPart = parts.last;
+      if (lastPart.endsWith('.slice')) {
+        cgroupRoot = cgroupFsRoot + '/' + parts.join('/');
+        final cgroupProcsFilePath = cgroupRoot + '/cgroup.procs';
+        if (0 == posix.access(cgroupProcsFilePath, posix.R_OK | posix.W_OK)) {
+          foundWritableSlice = true;
+          break;
+        }
       }
-      if (result.stderr.toString().isNotEmpty) {
-        print(result.stderr.toString());
-      }
-      assert (result.exitCode==0);
+      parts = parts.sublist(0, parts.length-1);
+    }
+    if (!foundWritableSlice) {
+      Logger.root.shout('no writable parent cgroup slice found. Launch me using systemd-run --slice=NAME');
+      io.exit(1);
+    }
+    List<String> controllersAvailable = io.File(cgroupRoot+'/cgroup.controllers')
+        .readAsStringSync().trim().split(' ');
+    if (!controllersAvailable.contains('memory')) {
+      Logger.root.severe('memory cgroup controller not available');
+    }
+    if (!controllersAvailable.contains('pids')) {
+      Logger.root.severe('pids cgroup controller not available');
     }
   }
 

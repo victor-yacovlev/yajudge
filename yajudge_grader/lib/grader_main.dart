@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:logging/logging.dart';
@@ -8,20 +11,14 @@ import 'src/grader_service.dart';
 import 'src/grader_extra_configs.dart';
 import 'package:yaml/yaml.dart';
 import 'package:path/path.dart' as path;
+import 'package:posix/posix.dart' as posix;
 
 Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFile, bool usePidFile) async {
-  String? configFileName = parsedArguments['config'];
-  if (configFileName == null) {
-    configFileName = findConfigFile('grader-server');
-  }
-  if (configFileName == null) {
-    print('No config file specified\n');
-    io.exit(1);
-  }
+  String configFileName = getConfigFileName(parsedArguments);
 
   GradingLimits? overrideLimits;
-  if (parsedArguments['limits'] != null) {
-    final limitsFileName = expandPathEnvVariables(parsedArguments['limits']!);
+  if (parsedArguments.command!.name=='run' && parsedArguments.command!['limits'] != null) {
+    final limitsFileName = expandPathEnvVariables(parsedArguments.command!['limits']!);
     final limitsConf = loadYaml(io.File(limitsFileName).readAsStringSync());
     overrideLimits = limitsFromYaml(limitsConf);
   }
@@ -30,10 +27,11 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
   final locationProperties = GraderLocationProperties.fromYamlConfig(config['locations']);
   final identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
+  final serviceProperties = ServiceProperties.fromYamlConfig(config['service']);
 
   if (useLogFile) {
-    final String? logFilePath = expandPathEnvVariables(config['log_file']);
-    if (logFilePath != null) {
+    final logFilePath = serviceProperties.logFilePath;
+    if (logFilePath.isNotEmpty && logFilePath!='stdout') {
       final logFile = io.File(logFilePath);
       initializeLogger(logFile.openWrite(mode: io.FileMode.append));
     }
@@ -42,12 +40,12 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     }
   }
 
+  String pidFilePath = '';
   if (usePidFile) {
-    String? pidFilePath = expandPathEnvVariables(config['pid_file']);
-    if (pidFilePath == null) {
-      pidFilePath = 'grader.pid'; // in current directory
+    pidFilePath = serviceProperties.pidFilePath;
+    if (pidFilePath != 'disabled') {
+      io.File(pidFilePath).writeAsStringSync('${io.pid}');
     }
-    io.File(pidFilePath).writeAsStringSync('${io.pid}');
   }
 
   GradingLimits defaultLimits;
@@ -84,30 +82,177 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     defaultSecurityContext: defaultSecurityContext,
     compilersConfig: compilersConfig,
     overrideLimits: overrideLimits,
+    serviceProperties: serviceProperties,
+    usePidFile: usePidFile,
   );
 
-  ChrootedRunner.initialCgroupSetup();
+  ChrootedRunner.checkLinuxCgroupCapabilities();
 
   return graderService;
 }
 
+String getConfigFileName(ArgResults parsedArguments) {
+  String? configFileName = parsedArguments['config'];
+  if (configFileName == null) {
+    configFileName = findConfigFile('grader');
+  }
+  if (configFileName == null) {
+    print('No config file specified\n');
+    io.exit(1);
+  }
+  return configFileName;
+}
+
 void initializeLogger(io.IOSink? target) {
   Logger.root.level = Level.ALL;
-  Logger.root.onRecord.listen((record) {
+  Logger.root.onRecord.listen((record) async {
+    String messageLine = '${record.time}: ${record.level.name} - ${record.message}\n';
+    List<int> bytes = utf8.encode(messageLine);
     if (target != null) {
-      target.writeln(
-          '${record.time}: ${record.level.name} - ${record.message}');
+      target.add(bytes);
     }
+  });
+  if (target != null) {
+    Timer.periodic(Duration(seconds: 1), (timer) {
+      target.flush();
+    });
+  }
+}
+
+Future<void> startServerOnLinux(ArgResults parsedArguments, List<String> sourceArguments) async {
+  final executableArgs = realGraderExecutablePath().split(' ');
+  int startIndex = sourceArguments.indexOf('start');
+  List<String> newArguments = List.from(sourceArguments);
+  newArguments[startIndex] = 'daemon';
+  String configFileName = getConfigFileName(parsedArguments);
+  final conf = loadYaml(io.File(configFileName).readAsStringSync());
+  String sliceName = 'yajudge';
+  if (conf['service'] is YamlMap) {
+    final serviceProperties = ServiceProperties.fromYamlConfig(conf);
+    sliceName = serviceProperties.systemdSlice;
+  }
+  final systemdArguments = ['--user', '--slice=$sliceName'];
+  final futureProcess = io.Process.start(
+    'systemd-run',
+    systemdArguments + executableArgs + newArguments,
+    mode: io.ProcessStartMode.detached,
+  );
+  futureProcess.then((final process) {
+    print('Started yajude grader daemon via systemd-run in slice $sliceName');
+    io.exit(0);
   });
 }
 
+Future<void> startServerOnNotLinux(ArgResults parsedArguments, List<String> sourceArguments) async {
+  String executablePath = realGraderExecutablePath();
+  int startIndex = sourceArguments.indexOf('start');
+  List<String> newArguments = List.from(sourceArguments);
+  newArguments[startIndex] = 'daemon';
+  String command;
+  if (executablePath.endsWith('.dart')) {
+    final parts = executablePath.split(' ');
+    command = parts[0];
+    newArguments = parts.sublist(1) + newArguments;
+  }
+  else {
+    command = executablePath;
+  }
+  final futureProcess = io.Process.start(
+    command,
+    newArguments,
+    mode: io.ProcessStartMode.detached,
+  );
+  futureProcess.then((final process) {
+    print('Started yajude grader daemon');
+    io.exit(0);
+  });
+}
 
-Future<void> serverMain(List<String> arguments) async {
-  final parser = ArgParser();
-  parser.addOption('config', abbr: 'C', help: 'config file name');
-  parser.addOption('limits', abbr: 'l', help: 'custom problem limits');
-  final parsedArguments = parser.parse(arguments);
+Future<void> stopServer(ArgResults parsedArguments) async {
+  String configFileName = getConfigFileName(parsedArguments);
+  final conf = loadYaml(io.File(configFileName).readAsStringSync());
+  int pid = 0;
+  String pidFilePath = '';
+  if (conf['service'] is YamlMap) {
+    final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+    pidFilePath = serviceProperties.pidFilePath;
+  }
+  if (pidFilePath.isEmpty || pidFilePath=='disabled') {
+    print('No pid file name specified in configuration. Cant stop');
+    io.exit(1);
+  }
+  final pidFile = io.File(pidFilePath);
+  if (!pidFile.existsSync()) {
+    print('PID file not exists. Might be not running');
+    io.exit(0);
+  }
+  String pidValue = pidFile.readAsStringSync().trim();
+  if (pidValue.isEmpty) {
+    print('PID file is empty. Might be not running');
+    io.exit(0);
+  }
+  pid = int.parse(pidValue);
+  int attemptsLeft = 10;
+  final retryTimeout = Duration(seconds: 1);
+  final waitTimeout = Duration(milliseconds: 100);
+  bool processRunning = true;
+  final statusFile = io.File('/proc/${pid}/status');
+  io.stdout.write('Stopping grader process');
+  while (attemptsLeft > 0) {
+    io.stdout.write('.');
+    io.Process.killPid(pid, io.ProcessSignal.sigterm);
+    io.sleep(waitTimeout);
+    processRunning = statusFile.existsSync();
+    if (!processRunning) {
+      print(' Process ended with SIGTERM signal');
+      break;
+    }
+    io.sleep(retryTimeout);
+    attemptsLeft--;
+  }
+  if (processRunning) {
+    io.Process.killPid(pid, io.ProcessSignal.sigkill);
+    print(' Process ended with SIGKILL signal');
+  }
+  if (pidFile.existsSync()) {
+    pidFile.deleteSync();
+  }
+  io.exit(0);
+}
 
+String realGraderExecutablePath() {
+  String procPidExePath = '/proc/${io.pid}/exe';
+  final exeLink = io.Link(procPidExePath);
+  String targetExecutablePath = exeLink.targetSync();
+  if (targetExecutablePath.endsWith('/dart')) {
+    final binaryCmdLine = io.File('/proc/${io.pid}/cmdline').readAsBytesSync();
+    int start = 0;
+    int end = -1;
+    String dartFileName = '';
+    Uint8List binaryArgument = Uint8List(0);
+    String argument = '';
+    while (dartFileName.isEmpty && start < binaryCmdLine.length) {
+      end = binaryCmdLine.indexOf(0, start);
+      if (-1 == end) {
+        end = binaryCmdLine.length;
+      }
+      binaryArgument = binaryCmdLine.sublist(start, end);
+      argument = utf8.decode(binaryArgument);
+      if (!argument.startsWith('-') && argument.endsWith('.dart')) {
+        dartFileName = argument;
+      }
+      start = end+1;
+    }
+    return targetExecutablePath + ' ' + dartFileName;
+  }
+  else {
+    return targetExecutablePath;
+  }
+}
+
+
+
+Future<void> serverMain(ArgResults parsedArguments) async {
   GraderService service = await initializeGrader(parsedArguments, true, true);
 
   String name = service.identityProperties.name;
@@ -119,35 +264,29 @@ Future<void> serverMain(List<String> arguments) async {
   service.serveSupervised();
 }
 
-Future<void> toolMain(List<String> arguments) async {
-  final parser = ArgParser();
-  parser.addOption('config', abbr: 'C', help: 'config file name');
-  parser.addOption('limits', abbr: 'l', help: 'custom problem limits');
-  parser.addOption('course', abbr: 'c', help: 'course data id');
-  parser.addOption('problem', abbr: 'p', help: 'problem id');
-  parser.addFlag('verbose', abbr: 'v', help: 'verbose log to stdout');
-  final parsedArguments = parser.parse(arguments);
-
-  if (parsedArguments['course'] == null) {
+Future<void> toolMain(ArgResults mainArguments) async {
+  final subcommandArguments = mainArguments.command!;
+  
+  if (subcommandArguments['course'] == null) {
     print('No course data id specified\n');
     io.exit(1);
   }
 
-  if (parsedArguments['problem'] == null) {
+  if (subcommandArguments['problem'] == null) {
     print('No problem id specified\n');
     io.exit(1);
   }
 
-  if (parsedArguments.rest.isEmpty) {
+  if (subcommandArguments.rest.isEmpty) {
     print('Requires at least one solution file name\n');
     io.exit(1);
   }
 
-  String courseDataId = parsedArguments['course'];
-  String problemId = parsedArguments['problem'];
+  String courseDataId = subcommandArguments['course'];
+  String problemId = subcommandArguments['problem'];
 
   List<File> solutionFiles = [];
-  for (final fileName in parsedArguments.rest) {
+  for (final fileName in subcommandArguments.rest) {
     final file = io.File(fileName);
     if (!file.existsSync()) {
       print('File $fileName not found\n');
@@ -163,7 +302,10 @@ Future<void> toolMain(List<String> arguments) async {
     solutionFiles: FileSet(files: solutionFiles),
   );
 
-  final service = await initializeGrader(parsedArguments, false, false);
+  final service = await initializeGrader(mainArguments, false, false);
+  if (subcommandArguments['verbose'] != null && subcommandArguments['verbose']) {
+    initializeLogger(io.stdout);
+  }
 
   final processed = await service.processSubmission(fakeSubmission);
   print(processed.status.name + '\n');
@@ -195,5 +337,51 @@ Future<void> toolMain(List<String> arguments) async {
     print(broken.checkerOutput);
   }
   io.exit(0);
+}
+
+
+
+ArgResults parseArguments(List<String> arguments) {
+  final mainParser = ArgParser();
+  mainParser.addOption('config', abbr: 'C', help: 'config file name');
+
+  final runParser = ArgParser();
+  runParser.addOption('limits', abbr: 'l', help: 'custom problem limits');
+  runParser.addOption('course', abbr: 'c', help: 'course data id');
+  runParser.addOption('problem', abbr: 'p', help: 'problem id');
+  runParser.addFlag('verbose', abbr: 'v', help: 'verbose log to stdout');
+
+  mainParser.addCommand('run', runParser);
+  mainParser.addCommand('daemon');
+  mainParser.addCommand('start');
+  mainParser.addCommand('stop');
+
+  final parsedArguments = mainParser.parse(arguments);
+  return parsedArguments;
+}
+
+Future<void> main(List<String> arguments) async {
+  final parsedArguments = parseArguments(arguments);
+  if (parsedArguments.command == null) {
+    print('Requires one of subcommands: start, stop, daemon or run\n');
+    io.exit(127);
+  }
+  if (parsedArguments.command!.name! == 'run') {
+    return toolMain(parsedArguments);
+  }
+  else if (parsedArguments.command!.name! == 'daemon') {
+    return serverMain(parsedArguments);
+  }
+  else if (parsedArguments.command!.name! == 'start') {
+    if (io.Platform.isLinux) {
+      startServerOnLinux(parsedArguments, arguments);
+    }
+    else {
+      startServerOnNotLinux(parsedArguments, arguments);
+    }
+  }
+  else if (parsedArguments.command!.name! == 'stop') {
+    stopServer(parsedArguments);
+  }
 }
 
