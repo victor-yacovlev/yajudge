@@ -11,7 +11,6 @@ import 'src/grader_service.dart';
 import 'src/grader_extra_configs.dart';
 import 'package:yaml/yaml.dart';
 import 'package:path/path.dart' as path;
-import 'package:posix/posix.dart' as posix;
 
 Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFile, bool usePidFile) async {
   String configFileName = getConfigFileName(parsedArguments);
@@ -30,7 +29,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   final serviceProperties = ServiceProperties.fromYamlConfig(config['service']);
 
   if (useLogFile) {
-    final logFilePath = serviceProperties.logFilePath;
+    final logFilePath = getLogFileName(parsedArguments);
     if (logFilePath.isNotEmpty && logFilePath!='stdout') {
       final logFile = io.File(logFilePath);
       initializeLogger(logFile.openWrite(mode: io.FileMode.append));
@@ -42,10 +41,8 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
   String pidFilePath = '';
   if (usePidFile) {
-    pidFilePath = serviceProperties.pidFilePath;
-    if (pidFilePath != 'disabled') {
-      io.File(pidFilePath).writeAsStringSync('${io.pid}');
-    }
+    pidFilePath = getPidFileName(parsedArguments);
+    io.File(pidFilePath).writeAsStringSync('${io.pid}');
   }
 
   GradingLimits defaultLimits;
@@ -97,11 +94,45 @@ String getConfigFileName(ArgResults parsedArguments) {
     configFileName = findConfigFile('grader');
   }
   if (configFileName == null) {
-    print('No config file specified\n');
+    print('No config file specified');
     io.exit(1);
   }
   return configFileName;
 }
+
+String getPidFileName(ArgResults parsedArguments) {
+  String? pidFileName = parsedArguments['pid'];
+  if (pidFileName == null) {
+    String configFileName = getConfigFileName(parsedArguments);
+    final conf = loadYaml(io.File(configFileName).readAsStringSync());
+    if (conf['service'] is YamlMap) {
+      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+      pidFileName = serviceProperties.pidFilePath;
+    }
+  }
+  if (pidFileName == null) {
+    print("No pid file specified");
+    io.exit(1);
+  }
+  return pidFileName;
+}
+
+String getLogFileName(ArgResults parsedArguments) {
+  String? logFileName = parsedArguments['log'];
+  if (logFileName == null) {
+    String configFileName = getConfigFileName(parsedArguments);
+    final conf = loadYaml(io.File(configFileName).readAsStringSync());
+    if (conf['service'] is YamlMap) {
+      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+      logFileName = serviceProperties.logFilePath;
+    }
+  }
+  if (logFileName == null) {
+    logFileName = 'stdout';
+  }
+  return logFileName;
+}
+
 
 void initializeLogger(io.IOSink? target) {
   Logger.root.level = Level.ALL;
@@ -138,7 +169,7 @@ Future<void> startServerOnLinux(ArgResults parsedArguments, List<String> sourceA
     mode: io.ProcessStartMode.detached,
   );
   futureProcess.then((final process) {
-    print('Started yajude grader daemon via systemd-run in slice $sliceName');
+    print('Started yajudge grader daemon via systemd-run in slice $sliceName');
     io.exit(0);
   });
 }
@@ -163,7 +194,7 @@ Future<void> startServerOnNotLinux(ArgResults parsedArguments, List<String> sour
     mode: io.ProcessStartMode.detached,
   );
   futureProcess.then((final process) {
-    print('Started yajude grader daemon');
+    print('Started yajudge grader daemon');
     io.exit(0);
   });
 }
@@ -344,6 +375,8 @@ Future<void> toolMain(ArgResults mainArguments) async {
 ArgResults parseArguments(List<String> arguments) {
   final mainParser = ArgParser();
   mainParser.addOption('config', abbr: 'C', help: 'config file name');
+  mainParser.addOption('log', abbr: 'L', help: 'log file name');
+  mainParser.addOption('pid', abbr: 'P', help: 'pid file name');
 
   final runParser = ArgParser();
   runParser.addOption('limits', abbr: 'l', help: 'custom problem limits');

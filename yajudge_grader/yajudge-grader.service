@@ -1,0 +1,11 @@
+[Unit]
+Description=Yajudge grader service
+
+[Service]
+ExecStartPre=/bin/mkdir -p /run/yajudge /var/log/yajudge
+ExecStart=/usr/bin/yajudge-grader -C /etc/yajudge/grader.yaml -P /run/yajudge/grader.pid -L /var/log/yajudge/grader.log daemon
+ExecStopPost=/bin/rm -f /run/yajudge/grader.pid
+PIDFile=/run/yajudge/grader.pid
+Slice=yajudge.slice
+User=yajudge
+Group=yajudge
