@@ -9,6 +9,7 @@ import 'grader_extra_configs.dart';
 import 'chrooted_runner.dart';
 import 'simple_runner.dart';
 import 'submission_processor.dart';
+import 'package:path/path.dart' as path;
 
 import 'abstract_runner.dart';
 
@@ -60,6 +61,9 @@ class GraderService {
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
   late final GraderProperties _graderProperties;
+
+  bool shuttingDown = false;
+  int shutdownExitCode = 0;
 
   GraderService({
     required this.rpcProperties,
@@ -117,29 +121,59 @@ class GraderService {
   void serveSupervised() {
     runZonedGuarded(() async {
       await serveIncomingSubmissions();
+      if (shuttingDown) {
+        if (usePidFile && serviceProperties.pidFilePath!='disabled') {
+          io.File(serviceProperties.pidFilePath).deleteSync();
+        }
+        io.exit(shutdownExitCode);
+      }
     }, (e, s) => handleGraderError(e))!
         .then((_) => serveSupervised());
   }
 
   Future<void> serveIncomingSubmissions() async {
-    while (true) {
-      Submission submission = await submissionsService.takeSubmissionToGrade(
-          _graderProperties);
+    final localInboxDir = io.Directory('${locationProperties.workDir}/inbox');
+    final localDoneDir = io.Directory('${locationProperties.workDir}/done');
+    while (!shuttingDown) {
+      bool processed = false;
+
+      // Check submission from master server
+      Submission submission = await submissionsService.takeSubmissionToGrade(_graderProperties);
       if (submission.id.toInt() > 0) {
         submission = await processSubmission(submission);
         submission = submission.copyWith((s) {
           s.graderName = _graderProperties.name;
         });
         await submissionsService.updateGraderOutput(submission);
+        processed = true;
       }
-      else {
-        // no new submissions -- wait and retry
+
+      // Check submissions from local file system
+      if (localInboxDir.existsSync()) {
+        for (final entry in localInboxDir.listSync()) {
+          String name = path.basename(entry.path);
+          final inboxFile = io.File('${localInboxDir.path}/$name');
+          if (!localDoneDir.existsSync()) {
+            localDoneDir.createSync(recursive: true);
+          }
+          final doneFile = io.File('${localDoneDir.path}/$name');
+          final inboxData = inboxFile.readAsBytesSync();
+          final localSubmission = LocalGraderSubmission.fromBuffer(inboxData);
+          submission = await processSubmission(localSubmission.submission, localSubmission.gradingLimits);
+          doneFile.writeAsBytesSync(submission.writeToBuffer());
+          inboxFile.deleteSync();
+          processed = true;
+        }
+      }
+
+      // Wait and retry if there is no submissions
+      if (!processed) {
         io.sleep(Duration(seconds: 2));
       }
     }
   }
 
-  Future<Submission> processSubmission(Submission submission) async {
+  Future<Submission> processSubmission(Submission submission, [GradingLimits? overrideLimits]) async {
     final courseId = submission.course.dataId;
     final problemId = submission.problemId;
 
@@ -165,6 +199,7 @@ class GraderService {
       defaultSecurityContext: defaultSecurityContext,
       compilersConfig: compilersConfig,
       coursesService: coursesService,
+      overrideLimits: overrideLimits,
     );
 
     await processor.loadProblemData();
@@ -176,13 +211,9 @@ class GraderService {
   }
 
   void shutdown(String reason, [bool error = false]) async {
-    masterServer.shutdown().timeout(Duration(seconds: 2), onTimeout: () {
-      log.info('grader shutdown due to $reason');
-      if (usePidFile && serviceProperties.pidFilePath!='disabled') {
-        io.File(serviceProperties.pidFilePath).deleteSync();
-      }
-      io.exit(error ? 1 : 0);
-    });
+    log.info('grader shutting down due to $reason');
+    shuttingDown = true;
+    shutdownExitCode = error ? 1 : 0;
   }
 
 }

@@ -11,6 +11,7 @@ import 'src/grader_service.dart';
 import 'src/grader_extra_configs.dart';
 import 'package:yaml/yaml.dart';
 import 'package:path/path.dart' as path;
+import 'package:crypto/crypto.dart' as crypto;
 
 Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFile, bool usePidFile) async {
   String configFileName = getConfigFileName(parsedArguments);
@@ -327,18 +328,67 @@ Future<void> toolMain(ArgResults mainArguments) async {
     solutionFiles.add(File(name: path.basename(fileName), data: content));
   }
 
-  final fakeSubmission = Submission(
+  final submission = Submission(
     course: Course(dataId: courseDataId),
     problemId: problemId,
     solutionFiles: FileSet(files: solutionFiles),
   );
 
-  final service = await initializeGrader(mainArguments, false, false);
-  if (subcommandArguments['verbose'] != null && subcommandArguments['verbose']) {
-    initializeLogger(io.stdout);
+  GradingLimits limits = GradingLimits();
+
+  if (subcommandArguments['limits'] != null) {
+    String limitsFileName = subcommandArguments['limits'];
+    final conf = loadYaml(io.File(limitsFileName).readAsStringSync());
+    limits = limitsFromYaml(conf);
   }
 
-  final processed = await service.processSubmission(fakeSubmission);
+  String configFileName = getConfigFileName(mainArguments);
+  String pidFileName = getPidFileName(mainArguments);
+  int pid = 0;
+  bool serviceRunning = false;
+  final pidFile = io.File(pidFileName);
+  if (pidFile.existsSync()) {
+    pid = int.parse(pidFile.readAsStringSync().trim());
+  }
+  if (pid != 0) {
+    String statusPath = '/proc/$pid/status';
+    serviceRunning = io.File(statusPath).existsSync();
+  }
+  if (!serviceRunning) {
+    print('No grader service running');
+    io.exit(1);
+  }
+  final conf = loadYaml(io.File(configFileName).readAsStringSync());
+  final locationProperties = GraderLocationProperties.fromYamlConfig(conf['locations']);
+  String workDirPath = locationProperties.workDir;
+  final inboxDir = io.Directory('$workDirPath/inbox');
+  final doneDir = io.Directory('$workDirPath/done');
+  if (!inboxDir.existsSync()) {
+    inboxDir.createSync(recursive: true);
+  }
+
+  final localGraderSubmission = LocalGraderSubmission(
+    submission: submission,
+    gradingLimits: limits,
+  );
+
+  Uint8List requestData = localGraderSubmission.writeToBuffer();
+  final hash = crypto.sha256.convert(requestData).toString();
+  final inboxFile = io.File('${inboxDir.path}/$hash');
+  inboxFile.writeAsBytesSync(requestData);
+  print('Queued local submission $hash to grader');
+
+  final doneFile = io.File('${doneDir.path}/$hash');
+  io.stdout.write('Waiting for grader done ');
+  while (!doneFile.existsSync()) {
+    io.sleep(Duration(seconds: 1));
+    io.stdout.write('.');
+  }
+  print(' got answer from grader');
+
+  final processedData = doneFile.readAsBytesSync();
+  final processed = Submission.fromBuffer(processedData);
+
   print(processed.status.name + '\n');
   final findFirstTest = () {
     for (final test in processed.testResults) {

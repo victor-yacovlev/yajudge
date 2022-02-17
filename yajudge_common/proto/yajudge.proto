@@ -479,6 +479,11 @@ message RejudgeRequest {
   Submission  submission = 4;
 }
 
+message LocalGraderSubmission {
+  Submission        submission = 1;
+  GradingLimits     grading_limits = 2;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
