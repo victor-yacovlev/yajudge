@@ -9,6 +9,7 @@ import 'controllers/courses_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart' as path;
 import 'package:tuple/tuple.dart';
+import 'package:grpc/grpc.dart' as grpc;
 
 import 'screens/screen_loading.dart';
 import 'screens/screen_course.dart';
@@ -67,9 +68,26 @@ class AppState extends State<App> {
     final futureLoggedUser = ConnectionController.instance!.usersService
         .getProfile(Session(cookie: sessionId));
 
+    bool redirectToLogin = false;
+
+    futureLoggedUser.onError((error, stackTrace) {
+      print('Caught error on futureLoggerUser: $error');
+      if (error is grpc.GrpcError) {
+        print('-- Code name: ${error.codeName}');
+        print('-- Code: ${error.code}');
+        if (error.code == grpc.StatusCode.unauthenticated) {
+          redirectToLogin = true;
+        }
+      }
+      return User();
+    });
+
     return FutureBuilder(
       future: futureLoggedUser,
       builder: (BuildContext context, AsyncSnapshot<User> snapshot) {
+        if (redirectToLogin) {
+          return buildLoginScreen(context);
+        }
         if (snapshot.connectionState != ConnectionState.done) {
           return loadingWaitWidget(context);
         }
