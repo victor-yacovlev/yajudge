@@ -1006,7 +1006,7 @@ static void forbid(const char *name) {
     SolutionStatus solutionStatus = SolutionStatus.OK;
     if (signalKilled==0 && !timeoutExceed && checkValgrindErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
-      String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
+      String runsPath = runner.submissionPrivateDirectory(submission)+'/runs';
       final valgrindOut = io.File('$runsPath/valgrind/$testBaseName.valgrind').readAsStringSync();
       valgrindErrors = 0;
       final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');

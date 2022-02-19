@@ -23,6 +23,7 @@ then
   echo "cant mount $YAJUDGE_OVERLAY_MERGEDIR"
   exit 1
 fi
+mount -t tmpfs tmpfs "$YAJUDGE_OVERLAY_MERGEDIR/tmp"
 
 # create new clean cgroup and dedicated subgroup for solution itself
 echo "+memory +pids" > "$YAJUDGE_CGROUP_PATH/cgroup.subtree_control"
@@ -40,6 +41,7 @@ if [ -n "$YAJUDGE_DEBUG" ]; then echo $YAJUDGE_SCRIPT_STAGE; fi
 unshare -i bash "$YAJUDGE_SCRIPT_DIR/run_wrapper_stage03.sh" $@
 EXIT_STATUS=$?
 
+umount -l "$YAJUDGE_OVERLAY_MERGEDIR/tmp" > /dev/null 2>&1
 umount -l "$YAJUDGE_OVERLAY_MERGEDIR" > /dev/null 2>&1
 #rmdir "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR"
 exit $EXIT_STATUS
