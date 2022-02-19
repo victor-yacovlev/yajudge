@@ -386,7 +386,23 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     }
 
     final solutionFiles = await getSubmissionFiles(submissionId);
-    final testResults = await getSubmissionTestResults(status, submissionId);
+    List<TestResult> testResults = [];
+    final brokenStatuses = [
+      SolutionStatus.RUNTIME_ERROR,
+      SolutionStatus.TIME_LIMIT,
+      SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.WRONG_ANSWER,
+    ];
+    if (brokenStatuses.contains(status)) {
+      final allTestResults = await getSubmissionTestResults(status, submissionId);
+      // find first broken test and send it only to save network traffic
+      for (final test in allTestResults) {
+        if (test.status == status) {
+          testResults.add(test);
+          break;
+        }
+      }
+    }
 
     return Submission(
       id: Int64(submissionId),
@@ -420,7 +436,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     from submission_results
     where submissions_id=@id 
       ''';
-    final testResultsRows = await connection.query(query, substitutionValues: {'id': submissionId});
+    final testResultsRows = await connection.query(query, substitutionValues: {
+      'id': submissionId,
+    });
     List<TestResult> results = [];
     for (final row in testResultsRows) {
       int testNumber = row[0];

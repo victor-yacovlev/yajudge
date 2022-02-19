@@ -649,7 +649,7 @@ static void forbid(const char *name) {
 
   int prepareSubmissionTests(String targetPrefix) {
     String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
-    final runsDir = io.Directory(runner.submissionWorkingDirectory(submission)+'/runs/$targetPrefix/');
+    final runsDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/runs/$targetPrefix/');
     runsDir.createSync(recursive: true);
 
     // Unpack .tgz bundles if any exists
@@ -1163,7 +1163,7 @@ static void forbid(const char *name) {
     final checkerName = checkerData[0];
     final checkerOpts = checkerData.length > 1? checkerData[1] : '';
     wd = path.normalize(
-        path.absolute(runner.submissionWorkingDirectory(submission)+'/'+wd)
+        path.absolute(runner.submissionPrivateDirectory(submission)+'/'+wd)
     );
     if (stdinName.isNotEmpty) {
       stdinName = path.normalize(path.absolute(stdinName));
