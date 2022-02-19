@@ -977,14 +977,23 @@ static void forbid(const char *name) {
     }
 
     bool timeoutExceed = false;
+    Timer? timer;
+
+    void handleTimeout() {
+      timeoutExceed = true;
+      runner.killProcess(solutionProcess);
+    }
+
     if (limits.realTimeLimitSec > 0) {
-      Future.delayed(Duration(seconds: limits.realTimeLimitSec.toInt()), () {
-        timeoutExceed = true;
-        runner.killProcess(solutionProcess);
-      });
+      final timerDuration = Duration(seconds: limits.realTimeLimitSec.toInt());
+      timer = Timer(timerDuration, handleTimeout);
     }
 
     int exitStatus = await solutionProcess.exitCode;
+    if (timer != null) {
+      timer.cancel();
+    }
+
     List<int> stdout = await solutionProcess.stdout;
     List<int> stderr = await solutionProcess.stderr;
 

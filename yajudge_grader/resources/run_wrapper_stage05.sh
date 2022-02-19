@@ -11,7 +11,7 @@ if [ -n "$YAJUDGE_CPU_STACK_SIZE_LIMIT" ]; then ulimit -s "$YAJUDGE_CPU_STACK_SI
 if [ -n "$YAJUDGE_CPU_FD_COUNT_LIMIT" ]; then ulimit -n "$YAJUDGE_CPU_FD_COUNT_LIMIT"; fi
 
 # make limited processes count to prevent fork bombs in case if cgroup will fail
-ulimit -u 2000
+ulimit -u 5000
 
 # move this process to control group
 echo "$$" > "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR/cgroup.procs"
