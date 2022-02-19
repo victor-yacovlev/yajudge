@@ -1,13 +1,12 @@
 import 'dart:async';
-import 'dart:core';
 
-import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
 import 'package:posix/posix.dart' as posix;
 import 'abstract_runner.dart';
+import 'assets_loader.dart';
 
 class ChrootedRunner extends AbstractRunner {
   final GraderLocationProperties locationProperties;
@@ -34,10 +33,10 @@ class ChrootedRunner extends AbstractRunner {
       log.shout('Linux distribution chroot not found');
       throw AssertionError('Linux distribution chroot not found');
     }
-    log.info('using cache dir for course data ${locationProperties.coursesCacheDir}');
-    io.Directory(locationProperties.coursesCacheDir).createSync(recursive: true);
+    log.info('using cache dir for course data ${locationProperties.cacheDir}');
+    io.Directory(locationProperties.cacheDir).createSync(recursive: true);
     String problemCachePath = path.normalize(path.absolute(
-      '${locationProperties.coursesCacheDir}/$courseId/$problemId'
+      '${locationProperties.cacheDir}/$courseId/$problemId'
     ));
     problemDir = io.Directory(problemCachePath);
   }
@@ -151,63 +150,43 @@ class ChrootedRunner extends AbstractRunner {
     log.fine('created submission directory layout $submissionPath');
   }
 
-
-  String get mounterToolPath {
-    String binDir = path.dirname(io.Platform.script.path);
-    String mounter = path.absolute(binDir, '../libexec/', 'overlay-mount');
-    return mounter;
+  String get runWrapperToolPath {
+    final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+    if (!wrappersDir.existsSync()) {
+      wrappersDir.createSync(recursive: true);
+    }
+    final names = [
+      'run_wrapper_stage01.sh',
+      'run_wrapper_stage02.sh',
+      'run_wrapper_stage03.sh',
+      'run_wrapper_stage04.sh',
+      'run_wrapper_stage05.sh',
+    ];
+    for (final name in names) {
+      final file = io.File(wrappersDir.path + '/' + name);
+      if (!file.existsSync()) {
+        final content = assetsLoader.fileAsBytes(name);
+        file.writeAsBytesSync(content);
+      }
+    }
+    return path.absolute(wrappersDir.path, names.first);
   }
 
-  void mountOverlay() {
-    String lowerDir = locationProperties.osImageDir;
-    if (problemDir.path != overlayUpperDir!.path) {
-      lowerDir += ':' + problemDir.path;
-    }
-    final env = {
-      'YAJUDGE_OVERLAY_LOWERDIR': lowerDir,
-      'YAJUDGE_OVERLAY_UPPERDIR': overlayUpperDir!.path,
-      'YAJUDGE_OVERLAY_WORKDIR': overlayWorkDir!.path,
-      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir!.path,
-    };
-    final status = io.Process.runSync(
-      mounterToolPath, [],
-      environment: env,
-    );
-    if (status.stderr.toString().isNotEmpty) {
-      log.severe('mount overlay: ${status.stderr}');
-    }
-    if (status.exitCode != 0) {
-      throw AssertionError('cant mount overlay filesystem: ${status.stderr}');
-    }
-    log.fine('mounted overlay at ${overlayMergeDir!.path}');
-  }
-
-  void unMountOverlay() {
-    final env = {
-      'YAJUDGE_OVERLAY_MERGEDIR': overlayMergeDir!.path,
-    };
-    final status = io.Process.runSync(
-      mounterToolPath, ['-u'],
-      environment: env,
-    );
-    if (status.stderr.toString().isNotEmpty) {
-      log.severe('umount overlay: ${status.stderr}');
+  String submissionCgroupPath(Submission submission) {
+    if (submission.id >= 0) {
+      return cgroupRoot + '/submission-${submission.id}';
     }
     else {
-      log.fine('unmounted overlay at ${overlayMergeDir!.path}');
+      return cgroupRoot + '/problem-${submission.problemId}';
     }
   }
 
-  String submissionCgroupPath(int submissionId) {
-    return cgroupRoot + '/submission-$submissionId';
-  }
+  void createSubmissionCgroup(Submission submission) {
+    // cleanup cgroup directories from possible previous run
+    removeSubmissionCgroup(submission);
 
-  void createSubmissionCgroup(int submissionId) {
-    String path = submissionCgroupPath(submissionId);
+    String path = submissionCgroupPath(submission);
     final dir = io.Directory(path);
-    if (dir.existsSync()) {
-      io.Process.runSync('rmdir', [path]);
-    }
     try {
       dir.createSync(recursive: true);
     } catch (error) {
@@ -219,111 +198,201 @@ class ChrootedRunner extends AbstractRunner {
     }
   }
 
-  void removeSubmissionCgroup(int submissionId) {
-    String path = submissionCgroupPath(submissionId);
-    final result = io.Process.runSync(
-      'rmdir', [path]
-    );
-    if (result.exitCode != 0) {
-      log.severe('cant remove cgroup $path: ${result.stderr.toString()}');
-    } else {
-      log.fine('removed cgroup for submission $submissionId');
+  void _removeCgroup(String path) {
+    final dir = io.Directory(path);
+    final cgroupKill = io.File('$path/cgroup.kill');
+    final cgroupProcs = io.File('$path/cgroup.procs');
+    final cgroupFreeze = io.File('$path/cgroup.freeze');
+    if (dir.existsSync()) {
+      if (cgroupKill.existsSync()) {
+        // Linux Kernel 5.14+ has cgroup.kill file to kill cgroup
+        cgroupKill.writeAsStringSync('1');
+      }
+      else {
+        // freeze process group to prevent spawning new processes
+        cgroupFreeze.writeAsStringSync('1');
+        // get all processes list and then kill em all
+        final procsLines = cgroupProcs.readAsLinesSync();
+        for (final line in procsLines) {
+          io.Process.runSync('kill', ['-SIGKILL', line]);
+        }
+        // unfreeze process group
+        cgroupFreeze.writeAsStringSync('0');
+      }
+
+      // wait to let processes die
+      io.sleep(Duration(milliseconds: 100));
+
+      // remove cgroup with no processes
+      final result = io.Process.runSync('rmdir', [path]);
+      if (result.exitCode != 0) {
+        log.severe('cant remove cgroup $path: ${result.stderr.toString()}');
+      }
     }
   }
 
-  void setupCgroupLimits(String cgroupPath, GradingLimits limits) {
-    final memoryMax = io.File('$cgroupPath/memory.max');
-    if (!memoryMax.existsSync()) {
-      log.severe('no memory cgroup controller enabled. Ensure you a running on system with systemd.unified_cgroup_hierarchy=1');
-    }
-    else if (limits.memoryMaxLimitMb > 0) {
-      int valueInBytes = limits.memoryMaxLimitMb.toInt() * 1024 * 1024;
-      String value = '$valueInBytes\n';
-      memoryMax.writeAsStringSync(value, flush: true);
+  void removeSubmissionCgroup(Submission submission) {
+    String path = submissionCgroupPath(submission);
+    final dir = io.Directory(path);
+    if (dir.existsSync()) {
+      for (final entry in dir.listSync()) {
+        if (entry is io.Directory) {
+          _removeCgroup(entry.absolute.path);
+        }
+      }
+      _removeCgroup(path);
     }
   }
+
 
   @override
-  Future<io.Process> start(int submissionId, List<String> arguments, {
+  Future<YajudgeProcess> start(Submission submission, List<String> arguments, {
     String workingDirectory = '/build',
     Map<String,String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript = false,
-  }) {
+  }) async {
     assert (arguments.length >= 1);
     String executable = arguments.first;
     arguments = arguments.sublist(1);
     arguments.removeWhere((element) => element.trim().isEmpty);
-    if (limits == null) {
-      limits = GradingLimits(
-        procCountLimit: Int64(20),
-      );
-    }
     if (environment == null) {
       environment = Map<String,String>.from(io.Platform.environment);
     }
-    if (submissionId != 0) {
-      String cgroupPath = submissionCgroupPath(submissionId);
-      environment['YAJUDGE_CGROUP_PATH'] = cgroupPath;
-      setupCgroupLimits(cgroupPath, limits);
+    else {
+      environment = Map<String,String>.from(environment);
     }
-    if (limits.stackSizeLimitMb > 0) {
-      environment['YAJUDGE_STACK_SIZE_LIMIT_MB'] = limits.stackSizeLimitMb.toString();
-    }
-    if (limits.cpuTimeLimitSec > 0) {
-      environment['YAJUDGE_CPU_TIME_LIMIT_SEC'] = limits.cpuTimeLimitSec.toString();
-    }
-    if (limits.fdCountLimit > 0) {
-      environment['YAJUDGE_FD_COUNT_LIMIT'] = limits.fdCountLimit.toString();
-    }
-    if (limits.procCountLimit > 0) {
-      environment['YAJUDGE_PROC_COUNT_LIMIT'] = limits.procCountLimit.toString();
+    String cgroupPath = submissionCgroupPath(submission);
+    environment['YAJUDGE_CGROUP_PATH'] = cgroupPath;
+
+    String cgroupSubmodule = path.basenameWithoutExtension(executable);
+    environment['YAJUDGE_CGROUP_SUBDIR'] = cgroupSubmodule;
+
+    if (limits != null) {
+      if (limits.stackSizeLimitMb > 0) {
+        environment['YAJUDGE_CPU_STACK_SIZE_LIMIT'] = (1024*limits.stackSizeLimitMb.toInt()).toString();
+      }
+      if (limits.cpuTimeLimitSec > 0) {
+        environment['YAJUDGE_CPU_TIME_LIMIT'] = limits.cpuTimeLimitSec.toString();
+      }
+      if (limits.fdCountLimit > 0) {
+        environment['YAJUDGE_FD_COUNT_LIMIT'] = limits.fdCountLimit.toString();
+      }
+      if (limits.procCountLimit > 0) {
+        environment['YAJUDGE_PROC_COUNT_LIMIT'] = limits.procCountLimit.toString();
+      }
+      if (limits.memoryMaxLimitMb > 0) {
+        environment['YAJUDGE_PROC_MEMORY_LIMIT'] = (1024*1024*limits.memoryMaxLimitMb.toInt()).toString();
+      }
+      if (limits.allowNetwork) {
+        environment['YAJUDGE_ALLOW_NETWORK'] = '1';
+      }
+      if (limits.realTimeLimitSec > 0) {
+        environment['YAJUDGE_REAL_TIME_LIMIT'] = '${limits.realTimeLimitSec}';
+      }
     }
 
-    String binDir = path.dirname(io.Platform.script.path);
-    String limitedLauncher = path.absolute(binDir, '../libexec/', 'limited-run');
-    String unshareFlags = '-muipUf';
-    if (!limits.allowNetwork) {
-      unshareFlags += 'n';
+    String lowerDir = locationProperties.osImageDir;
+    if (problemDir.path != overlayUpperDir!.path) {
+      lowerDir += ':' + problemDir.path;
     }
+    environment['YAJUDGE_OVERLAY_LOWERDIR'] = lowerDir;
+    environment['YAJUDGE_OVERLAY_UPPERDIR'] = overlayUpperDir!.path;
+    environment['YAJUDGE_OVERLAY_WORKDIR'] = overlayWorkDir!.path;
+    environment['YAJUDGE_OVERLAY_MERGEDIR'] = overlayMergeDir!.path;
+    environment['YAJUDGE_ROOT_DIR'] = overlayMergeDir!.path;
+    environment['YAJUDGE_WORK_DIR'] = workingDirectory;
 
-    String rootDirArg = '--root=${overlayMergeDir!.path}';
-    String workDirArg = '--wd=$workingDirectory';
+    final runWrapperScript = runWrapperToolPath;
 
     List<String> launcherArguments = [
-      'unshare',
-      unshareFlags,
-      rootDirArg,
-      workDirArg,
+      runWrapperScript,
       executable
     ] + arguments;
-    Future<io.Process> result = io.Process.start(
-      limitedLauncher,
+
+    final ioProcess = await io.Process.start(
+      'bash',
       launcherArguments,
       environment: environment,
     );
-    return result;
+
+    final cgroupDirectory = '$cgroupPath/$cgroupSubmodule';
+
+    int pid = -1;
+    int maxTries = 100;
+    final delay = Duration(milliseconds: 50);
+    final cgroupProcs = io.File('$cgroupDirectory/cgroup.procs');
+    for (int i=0; i<maxTries; i++) {
+      if (cgroupProcs.existsSync()) {
+        break;
+      }
+      io.sleep(delay);
+    }
+    final cgroupProcLines = cgroupProcs.readAsLinesSync();
+    for (final line in cgroupProcLines) {
+      if (line.isEmpty)
+        continue;
+      final exeLink = io.Link('/proc/${line.trim()}/exe');
+      if (exeLink.existsSync()) {
+        try {
+          // process might finish too fast and link will not valid,
+          // so check it in try-catch block
+          String linkTarget = exeLink.targetSync();
+          if (path.basename(linkTarget) == path.basename(executable)) {
+            pid = int.parse(line.trim());
+            break;
+          }
+        }
+        catch (_) {
+        }
+      }
+    }
+
+    int stdoutSizeLimit = -1;
+    int stderrSizeLimit = -1;
+    if (limits != null && limits.stdoutSizeLimitMb > 0) {
+      stdoutSizeLimit = 1024 * 1024 * limits.stdoutSizeLimitMb.toInt();
+    }
+    if (limits != null && limits.stderrSizeLimitMb > 0) {
+      stderrSizeLimit = 1024 * 1024 * limits.stderrSizeLimitMb.toInt();
+    }
+
+    log.fine('started process $executable');
+
+    return YajudgeProcess(
+      cgroupDirectory: cgroupDirectory,
+      ioProcess: ioProcess,
+      realPid: pid,
+      stdoutSizeLimit: stdoutSizeLimit,
+      stderrSizeLimit: stderrSizeLimit,
+    );
+  }
+
+  @override
+  void killProcess(YajudgeProcess process) {
+    if (process.cgroupDirectory.isNotEmpty) {
+      // just remove cgroup: it will kill all related processes
+      _removeCgroup(process.cgroupDirectory);
+    }
+    else {
+      io.Process.runSync('kill', ['-KILL', '${process.realPid}']);
+    }
   }
 
   @override
   void createDirectoryForSubmission(Submission submission) {
     if (submission.id >= 0) {
       createSubmissionDir(submission);
-      mountOverlay();
-      createSubmissionCgroup(submission.id.toInt());
     }
     else if (submission.id == -1) {
       createProblemTemporaryDirs();
-      mountOverlay();
     }
+    createSubmissionCgroup(submission);
   }
 
   @override
   void releaseDirectoryForSubmission(Submission submission) {
-    unMountOverlay();
-    if (submission.id >= 0) {
-      removeSubmissionCgroup(submission.id.toInt());
-    }
+    removeSubmissionCgroup(submission);
   }
 
   @override

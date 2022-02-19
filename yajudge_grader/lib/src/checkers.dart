@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
+import 'package:yajudge_common/yajudge_common.dart';
+
+import 'assets_loader.dart';
 
 abstract class AbstractChecker {
   bool get useFiles;
@@ -9,16 +12,28 @@ abstract class AbstractChecker {
 }
 
 class PythonChecker extends AbstractChecker {
+  final GraderLocationProperties locationProperties;
   final String checkerPy;
-  PythonChecker({required this.checkerPy});
+
+  PythonChecker({required this.locationProperties, required this.checkerPy});
 
   @override
   String matchFiles(List<String> args, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) {
-    String binDir = path.dirname(io.Platform.script.path);
-    String pyWrapper = path.normalize(path.absolute(binDir, '../libexec/', 'checker_wrapper.py'));
+    final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+    if (!wrappersDir.existsSync()) {
+      wrappersDir.createSync(recursive: true);
+    }
+    final wrapperFile = io.File(wrappersDir.path + '/checker_wrapper.py');
+    if (!wrapperFile.existsSync()) {
+      final content = assetsLoader.fileAsBytes('checker_wrapper.py');
+      wrapperFile.writeAsBytesSync(content);
+    }
+
     final arguments = [
-      pyWrapper, checkerPy, workDir, args.join(' '), stdinName, stdoutName, referenceName
+      wrapperFile.path, checkerPy,
+      workDir, args.join(' '), stdinName, stdoutName, referenceName
     ];
+
     Map<String,String> environment = Map.from(io.Platform.environment);
     environment['YAJUDGE_ROOT'] = root;
     final processResult = io.Process.runSync(

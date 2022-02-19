@@ -6,16 +6,19 @@ ETC=/etc
 
 first: all
 
-all: grader helpers
+all: grader
 
-grader: deps
+grader: bin/yajudge-grader.exe
+bin/yajudge-grader.exe: deps gen lib/grader_main.dart bin/yajudge-grader.dart lib/src/*.dart
 	$(DART) compile exe bin/yajudge-grader.dart
 
-helpers:
-
-
-deps:
+deps: .packages
+.packages:
 	$(DART) pub get
+
+gen: lib/src/generated/assets.gen.dart
+lib/src/generated/assets.gen.dart: resources/*
+	$(DART) run lib/build_assets.dart
 
 install: grader
 	$(INSTALL) -D bin/yajudge-grader.exe $(PREFIX)/bin/yajudge-grader

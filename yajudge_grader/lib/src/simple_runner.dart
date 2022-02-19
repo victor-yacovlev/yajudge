@@ -1,5 +1,6 @@
+import 'dart:async';
+
 import 'package:logging/logging.dart';
-import 'package:yajudge_common/src/generated/yajudge.pb.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io' as io;
@@ -17,7 +18,7 @@ class SimpleRunner extends AbstractRunner {
     String submissionPath = path.absolute(locationProperties.workDir, '${submission.id}');
     String courseId = submission.course.dataId;
     String problemId = submission.problemId;
-    String problemContentPath = path.absolute(locationProperties.coursesCacheDir, courseId, problemId);
+    String problemContentPath = path.absolute(locationProperties.cacheDir, courseId, problemId);
     final submissionFilesDir = io.Directory(submissionPath+'/build');
     submissionFilesDir.createSync(recursive: true);
     final problemContent = io.Directory(problemContentPath);
@@ -43,32 +44,43 @@ class SimpleRunner extends AbstractRunner {
   }
 
   @override
-  Future<io.Process> start(int submissionId, List<String> arguments, {
+  Future<YajudgeProcess> start(Submission submission, List<String> arguments, {
     String workingDirectory = '/build',
     Map<String, String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript = false,
-      })
+      }) async
   {
     assert (arguments.length >= 1);
     String executable = arguments.first;
     arguments = arguments.sublist(1);
     arguments.removeWhere((element) => element.trim().isEmpty);
     String workDir = path.absolute(
-        path.normalize('${locationProperties.workDir}/$submissionId/$workingDirectory')
+        path.normalize('${locationProperties.workDir}/${submission.id}/$workingDirectory')
     );
     if (!runTargetIsScript && executable.startsWith('/'))
       executable = path.absolute(
-          path.normalize('${locationProperties.workDir}/$submissionId/$executable')
+          path.normalize('${locationProperties.workDir}/${submission.id}/$executable')
       );
     if (environment == null)
       environment = io.Platform.environment;
-    return io.Process.start(
+    final ioProcess = await io.Process.start(
       executable,
       arguments,
       workingDirectory: workDir,
       environment: environment,
     );
+
+    return YajudgeProcess(
+      realPid: ioProcess.pid,
+      cgroupDirectory: '',
+      ioProcess: ioProcess
+    );
+  }
+
+  @override
+  void killProcess(YajudgeProcess process) {
+    process.ioProcess.kill(io.ProcessSignal.sigkill);
   }
 
   @override

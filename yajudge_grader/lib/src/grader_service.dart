@@ -56,6 +56,7 @@ class GraderService {
   final CompilersConfig compilersConfig;
   final ServiceProperties serviceProperties;
   final bool usePidFile;
+  final bool processLocalInboxOnly;
 
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
@@ -75,6 +76,7 @@ class GraderService {
     this.overrideLimits,
     required this.defaultSecurityContext,
     required this.compilersConfig,
+    this.processLocalInboxOnly = false,
   }) {
     _graderProperties = GraderProperties(
       name: identityProperties.name,
@@ -136,16 +138,20 @@ class GraderService {
     final localDoneDir = io.Directory('${locationProperties.workDir}/done');
     while (!shuttingDown) {
       bool processed = false;
+      Submission submission = Submission();
 
       // Check submission from master server
-      Submission submission = await submissionsService.takeSubmissionToGrade(_graderProperties);
-      if (submission.id.toInt() > 0) {
-        submission = await processSubmission(submission);
-        submission = submission.copyWith((s) {
-          s.graderName = _graderProperties.name;
-        });
-        await submissionsService.updateGraderOutput(submission);
-        processed = true;
+      if (!processLocalInboxOnly) {
+        submission =
+        await submissionsService.takeSubmissionToGrade(_graderProperties);
+        if (submission.id.toInt() > 0) {
+          submission = await processSubmission(submission);
+          submission = submission.copyWith((s) {
+            s.graderName = _graderProperties.name;
+          });
+          await submissionsService.updateGraderOutput(submission);
+          processed = true;
+        }
       }
 
       // Check submissions from local file system

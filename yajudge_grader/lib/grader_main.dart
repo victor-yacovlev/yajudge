@@ -72,6 +72,12 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     compilersConfig = CompilersConfig.createDefault();
   }
 
+  bool processInboxOnly = false;
+  if (parsedArguments.command != null) {
+    ArgResults daemonArgs = parsedArguments.command!;
+    processInboxOnly = daemonArgs['inbox'];
+  }
+
   final graderService = GraderService(
     rpcProperties: rpcProperties,
     locationProperties: locationProperties,
@@ -82,6 +88,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     overrideLimits: overrideLimits,
     serviceProperties: serviceProperties,
     usePidFile: usePidFile,
+    processLocalInboxOnly: processInboxOnly,
   );
 
   ChrootedRunner.checkLinuxCgroupCapabilities();
@@ -387,6 +394,7 @@ Future<void> toolMain(ArgResults mainArguments) async {
   print(' got answer from grader');
 
   final processedData = doneFile.readAsBytesSync();
+  doneFile.deleteSync();
   final processed = Submission.fromBuffer(processedData);
 
   print(processed.status.name + '\n');
@@ -434,8 +442,11 @@ ArgResults parseArguments(List<String> arguments) {
   runParser.addOption('problem', abbr: 'p', help: 'problem id');
   runParser.addFlag('verbose', abbr: 'v', help: 'verbose log to stdout');
 
+  final daemonParser = ArgParser();
+  daemonParser.addFlag('inbox', abbr: 'i', help: 'process only local inbox submissions');
+
   mainParser.addCommand('run', runParser);
-  mainParser.addCommand('daemon');
+  mainParser.addCommand('daemon', daemonParser);
   mainParser.addCommand('start');
   mainParser.addCommand('stop');
 

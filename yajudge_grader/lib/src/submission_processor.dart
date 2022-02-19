@@ -6,6 +6,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:yajudge_common/yajudge_common.dart';
+import 'assets_loader.dart';
 import 'checkers.dart';
 import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
@@ -41,7 +42,7 @@ class SubmissionProcessor {
   Future<void> loadProblemData() async {
     final courseId = submission.course.dataId;
     final problemId = submission.problemId;
-    String root = locationProperties.coursesCacheDir;
+    String root = locationProperties.cacheDir;
     final problemDir = io.Directory(path.absolute(root, courseId, problemId));
     final problemTimeStampFile = io.File(problemDir.path + '/.timestamp');
     int timeStamp = 0;
@@ -186,7 +187,7 @@ class SubmissionProcessor {
     final compiler = compilersConfig.cCompiler;
     final options = ['-c', '-fPIC'];
 
-    runner.createDirectoryForSubmission(Submission(id: Int64(-1)));
+    runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId));
 
     bool allowFork = !securityContext.forbiddenFunctions.contains('fork');
     if (allowFork) {
@@ -196,17 +197,13 @@ class SubmissionProcessor {
         '.proc-limiter.c'
       ];
       final process = await runner.start(
-        0,
+        Submission(id: Int64(-1), problemId: problemId),
         [compiler] + arguments,
         workingDirectory: '/build',
       );
-      List<int> stdout = [];
-      List<int> stderr = [];
-      await process.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
-      await process.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
-      int status = await process.exitCode;
-      if (status != 0) {
-        String errorMessage = utf8.decode(stdout) + '\n' + utf8.decode(stderr);
+      bool compilerOk = await process.ok;
+      if (compilerOk) {
+        String errorMessage = await process.outputAsString;
         log.severe(
             'cant build proc limiter object: $compiler ${arguments.join(
                 ' ')}:\n$errorMessage\n');
@@ -234,23 +231,18 @@ static void forbid(const char *name) {
         '.forbidden-functions-wrapper.c'
       ];
       final process = await runner.start(
-        0,
+        Submission(id: Int64(-1), problemId: problemId),
         [compiler] + arguments,
         workingDirectory: '/build',
       );
-      List<int> stdout = [];
-      List<int> stderr = [];
-      await process.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
-      await process.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
-      int status = await process.exitCode;
-      if (status != 0) {
-        String errorMessage = utf8.decode(stdout) + '\n' + utf8.decode(stderr);
+      bool compilerOk = await process.ok;
+      if (compilerOk) {
+        String errorMessage = await process.outputAsString;
         log.severe(
             'cant build security context object: $compiler ${arguments.join(
                 ' ')}:\n$errorMessage\n');
       }
     }
-
     runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)));
   }
 
@@ -348,40 +340,33 @@ static void forbid(const char *name) {
       String styleFile = styleFileName(fileSuffix);
       if (styleFile == '.clang-format') {
         // Run clang-format to check
-        List<int> clangStdout = [];
         final clangProcess = await runner.start(
-          submission.id.toInt(),
+          submission,
           ['clang-format', '-style=file', fileName],
           workingDirectory: '/build',
         );
-        final clangStdoutListener = clangProcess.stdout.listen((List<int> chunk) {
-          clangStdout.addAll(chunk);
-        }).asFuture();
-        int exitCode = await clangProcess.exitCode;
-        await clangStdoutListener;
+        bool clangFormatOk = await clangProcess.ok;
+        if (!clangFormatOk) {
+          String message = await clangProcess.outputAsString;
+          log.severe('clang-format failed: $message');
+        }
 
         String submissionPath = runner.submissionPrivateDirectory(submission);
         String sourcePath = path.normalize('$submissionPath/build/$fileName');
         String formattedPath = sourcePath + '.formatted';
         final formattedFile = io.File(formattedPath);
-        formattedFile.writeAsBytesSync(clangStdout);
+        formattedFile.writeAsStringSync(await clangProcess.outputAsString);
 
-        List<int> diffOut = [];
         final diffProcess = await runner.start(
-          submission.id.toInt(),
+          submission,
           ['diff', fileName, '$fileName.formatted'],
           workingDirectory: '/build',
         );
-        final diffStdoutListener = diffProcess.stdout.listen((List<int> chunk) {
-          diffOut.addAll(chunk);
-        }).asFuture();
-        exitCode = await diffProcess.exitCode;
-        await diffStdoutListener;
-
-        String diffContent = utf8.decode(diffOut, allowMalformed: true);
-        if (exitCode != 0) {
+        bool diffOk = await diffProcess.ok;
+        String diffOut = await diffProcess.outputAsString;
+        if (!diffOk) {
           submission = submission.copyWith((s) {
-            s.styleErrorLog = diffContent;
+            s.styleErrorLog = diffOut;
             s.status = SolutionStatus.STYLE_CHECK_ERROR;
           });
           return false;
@@ -444,18 +429,14 @@ static void forbid(const char *name) {
     final buildDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/build');
     DateTime beforeMake = DateTime.now();
     io.sleep(Duration(milliseconds: 250));
-    io.Process compilerProcess = await runner.start(
-      submission.id.toInt(),
+    final makeProcess = await runner.start(
+      submission,
       ['make'],
       workingDirectory: '/build',
     );
-    List<int> stdout = [];
-    List<int> stderr = [];
-    await compilerProcess.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
-    await compilerProcess.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
-    int compilerExitCode = await compilerProcess.exitCode;
-    if (compilerExitCode != 0) {
-      String message = utf8.decode(stderr) + utf8.decode(stdout);
+    bool makeOk = await makeProcess.ok;
+    if (!makeOk) {
+      String message = await makeProcess.outputAsString;
       log.fine('cant build Makefile project from ${submission.id}:\n$message');
       io.File(buildDir.path+'/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
@@ -605,18 +586,14 @@ static void forbid(const char *name) {
               compileOptions() +
               [sourceFile.name];
       final compilerCommand = [compiler] + compilerArguments;
-      io.Process compilerProcess = await runner.start(
-        submission.id.toInt(),
+      final compilerProcess = await runner.start(
+        submission,
         compilerCommand,
         workingDirectory: '/build',
       );
-      List<int> stdout = [];
-      List<int> stderr = [];
-      await compilerProcess.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
-      await compilerProcess.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
-      int compilerExitCode = await compilerProcess.exitCode;
-      if (compilerExitCode != 0) {
-        String message = utf8.decode(stderr) + utf8.decode(stdout);
+      bool compilerOk = await compilerProcess.ok;
+      if (!compilerOk) {
+        String message = await compilerProcess.outputAsString;
         io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
         log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compilerCommand.join(' ')}\n$message');
         submission = submission.copyWith((changed) {
@@ -633,12 +610,6 @@ static void forbid(const char *name) {
     List<String> wrapOptionsPost = [];
     if (!linkOptions().contains('-nostdlib') && io.Platform.isLinux) {
       final security = securityContext();
-      bool allowFork = !security.forbiddenFunctions.contains('fork');
-      if (allowFork) {
-        wrapOptionsPre.add('-Wl,--wrap=fork');
-        wrapOptionsPre.add('-pthread');
-        wrapOptionsPost.add('.proc-limiter.o');
-      }
       if (security.forbiddenFunctions.isNotEmpty) {
         for (final name in security.forbiddenFunctions) {
           wrapOptionsPre.add('-Wl,--wrap=$name');
@@ -651,18 +622,14 @@ static void forbid(const char *name) {
         wrapOptionsPre + linkOptions() + wrapOptionsPost +
         objectFiles;
     final linkerCommand = [compiler] + linkerArguments;
-    io.Process linkerProcess = await runner.start(
-      submission.id.toInt(),
+    final linkerProcess = await runner.start(
+      submission,
       linkerCommand,
       workingDirectory: '/build'
     );
-    List<int> stdout = [];
-    List<int> stderr = [];
-    await linkerProcess.stdout.listen((chunk) => stdout.addAll(chunk)).asFuture();
-    await linkerProcess.stderr.listen((chunk) => stderr.addAll(chunk)).asFuture();
-    int linkerExitCode = await linkerProcess.exitCode;
-    if (linkerExitCode != 0) {
-      String message = utf8.decode(stderr) + utf8.decode(stdout);
+    bool linkerOk = await linkerProcess.ok;
+    if (!linkerOk) {
+      String message = await linkerProcess.outputAsString;
       log.fine('cant link ${submission.id}: ${linkerCommand.join(' ')}\n$message');
       io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
@@ -708,14 +675,24 @@ static void forbid(const char *name) {
     }
 
     if (testsGenerator.endsWith('.py')) {
-      String binDir = path.dirname(io.Platform.script.path);
-      String pyWrapper = path.normalize(path.absolute(binDir, '../libexec/', 'tests_generator_wrapper.py'));
+      final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+      if (!wrappersDir.existsSync()) {
+        wrappersDir.createSync(recursive: true);
+      }
+      final wrapperFile = io.File(wrappersDir.path + '/tests_generator_wrapper.py');
+      if (!wrapperFile.existsSync()) {
+        final content = assetsLoader.fileAsBytes('tests_generator_wrapper.py');
+        wrapperFile.writeAsBytesSync(content);
+      }
+
       final arguments = [
-        pyWrapper,
+        wrapperFile.path,
         runner.submissionProblemDirectory(submission)+'/build/$testsGenerator',
         runsDir.path,
       ];
+
       final processResult = io.Process.runSync('python3', arguments, runInShell: true);
+
       if (processResult.exitCode != 0) {
         String message = processResult.stdout.toString() + processResult.stderr.toString();
         log.severe('tests generator $testsGenerator failed: $message');
@@ -885,7 +862,7 @@ static void forbid(const char *name) {
 
   GradingLimits getLimitsForProblem() {
     String limitsPath = path.absolute(
-      locationProperties.coursesCacheDir,
+      locationProperties.cacheDir,
       submission.course.dataId,
       submission.problemId,
       '.limits'
@@ -944,8 +921,8 @@ static void forbid(const char *name) {
 
   }) async {
     log.info('running test $testBaseName ($description) for submission ${submission.id}');
-    String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
-    final runsDir = io.Directory(runner.submissionWorkingDirectory(submission)+'/runs/$runsDirPrefix/');
+    String testsPath = runner.submissionProblemDirectory(submission)+'/tests';
+    final runsDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/runs/$runsDirPrefix/');
     String wd;
     if (io.Directory(runsDir.path+'/$testBaseName.dir').existsSync()) {
       wd = '/runs/$runsDirPrefix/$testBaseName.dir';
@@ -987,52 +964,47 @@ static void forbid(const char *name) {
       stdinData = problemStdinFile.readAsBytesSync();
       stdinFilePath = problemStdinFile.path;
     }
-    io.Process solutionProcess = await runner.start(submission.id.toInt(), firstArgs + arguments,
+    final solutionProcess = await runner.start(
+      submission,
+      firstArgs + arguments,
       workingDirectory: wd,
       limits: limits,
       runTargetIsScript: runTargetIsScript,
     );
-    bool killedByTimeout = false;
-    final timer = Timer(Duration(seconds: limits.realTimeLimitSec.toInt()), () {
-      solutionProcess.kill(io.ProcessSignal.sigkill);
-      killedByTimeout = true;
-      log.fine('submission ${submission.id} ($description) killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
-    });
     if (stdinData.isNotEmpty) {
-      solutionProcess.stdin.add(stdinData);
-      await solutionProcess.stdin.flush();
-      solutionProcess.stdin.close();
+      await solutionProcess.writeToStdin(stdinData);
+      await solutionProcess.closeStdin();
     }
-    List<int> stdout = [];
-    List<int> stderr = [];
-    final maxStdoutBytes = limits.stdoutSizeLimitMb.toInt() * 1024 * 1024;
-    final maxStderrBytes = limits.stderrSizeLimitMb.toInt() * 1024 * 1024;
-    final stdoutListener = solutionProcess.stdout.listen((List<int> chunk) {
-      if (stdout.length + chunk.length <= maxStdoutBytes) {
-        stdout.addAll(chunk);
-      }
-    }).asFuture();
-    final stderrListener = solutionProcess.stderr.listen((List<int> chunk) {
-      if (stderr.length + chunk.length <= maxStderrBytes) {
-        stderr.addAll(chunk);
-      }
-    }).asFuture();
+
+    bool timeoutExceed = false;
+    if (limits.realTimeLimitSec > 0) {
+      Future.delayed(Duration(seconds: limits.realTimeLimitSec.toInt()), () {
+        timeoutExceed = true;
+        runner.killProcess(solutionProcess);
+      });
+    }
+
     int exitStatus = await solutionProcess.exitCode;
-    timer.cancel();
-    await stdoutListener;
-    await stderrListener;
+    List<int> stdout = await solutionProcess.stdout;
+    List<int> stderr = await solutionProcess.stderr;
+
+    int signalKilled = 0;
+    if (exitStatus >= 128 && !timeoutExceed) {
+      signalKilled = exitStatus - 128;
+    }
+
     String stdoutFilePath = '${runsDir.path}/$testBaseName.stdout';
     final stdoutFile = io.File(stdoutFilePath);
     final stderrFile = io.File('${runsDir.path}/$testBaseName.stderr');
     stdoutFile.writeAsBytesSync(stdout);
     stderrFile.writeAsBytesSync(stderr);
     String resultCheckerMessage = '';
-    int signalKilled = 0;
-    bool checkAnswer = exitStatus >= 0;
+
+    bool checkAnswer = signalKilled==0 && !timeoutExceed;
     int valgrindErrors = 0;
     String valgrindOutput = '';
     SolutionStatus solutionStatus = SolutionStatus.OK;
-    if (exitStatus >= 0 && checkValgrindErrors) {
+    if (signalKilled==0 && !timeoutExceed && checkValgrindErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
       String runsPath = runner.submissionWorkingDirectory(submission)+'/runs';
       final valgrindOut = io.File('$runsPath/valgrind/$testBaseName.valgrind').readAsStringSync();
@@ -1051,7 +1023,7 @@ static void forbid(const char *name) {
         checkAnswer = false;
       }
     }
-    if (exitStatus >=0 && checkSanitizersErrors) {
+    if (signalKilled==0 && !timeoutExceed && checkSanitizersErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for sanitizer errors');
       String errOut = utf8.decode(stderr, allowMalformed: true);
       final errLines = errOut.split('\n');
@@ -1071,7 +1043,7 @@ static void forbid(const char *name) {
         }
       }
     }
-    if (exitStatus == 127) {
+    if (signalKilled==0 && !timeoutExceed && exitStatus == 127) {
       String errOut = utf8.decode(stderr, allowMalformed: true);
       if (errOut.contains('yajudge_error:')) {
         checkAnswer = false;
@@ -1079,20 +1051,16 @@ static void forbid(const char *name) {
         log.fine('submission ${submission.id} got yajudge error');
       }
     }
-    if (exitStatus < 0) {
-      signalKilled = -exitStatus;
+    if (signalKilled != 0) {
       log.fine('submission ${submission.id} ($description) killed by signal $signalKilled on test $testBaseName');
       exitStatus = 0;
       solutionStatus = SolutionStatus.RUNTIME_ERROR;
       checkAnswer = false;
     }
-    if (killedByTimeout) {
+
+    if (timeoutExceed) {
+      log.fine('submission ${submission.id} ($description) killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
       solutionStatus = SolutionStatus.TIME_LIMIT;
-      checkAnswer = false;
-    }
-    else if (signalKilled > 0) {
-      solutionStatus = SolutionStatus.RUNTIME_ERROR;
-      checkAnswer = false;
     }
 
     if (checkAnswer) {
@@ -1167,7 +1135,7 @@ static void forbid(const char *name) {
       status: solutionStatus,
       stderr: utf8.decode(stderr),
       stdout: utf8.decode(stdout),
-      killedByTimer: killedByTimeout,
+      killedByTimer: timeoutExceed,
       standardMatch: resultCheckerMessage.isEmpty,
       checkerOutput: resultCheckerMessage,
       signalKilled: signalKilled,
@@ -1208,7 +1176,7 @@ static void forbid(const char *name) {
       String checkerPy = path.normalize(
           path.absolute(solutionPath + '/' + checkerName)
       );
-      checker = PythonChecker(checkerPy: checkerPy);
+      checker = PythonChecker(checkerPy: checkerPy, locationProperties: locationProperties);
     }
     else {
       throw UnimplementedError('dont know how to handle checker $checkerName');
