@@ -149,12 +149,26 @@ class SubmissionScreenState extends BaseScreenState {
 
   void _doRejudge() {
     final service = ConnectionController.instance!.submissionsService;
-    final request = RejudgeRequest(
-      user: screen.loggedUser,
-      course: screen.course,
-      problemId: screen.problemData.id,
-      submission: _submission,
+
+    // make cleaned copies of request parameters to prevent
+    // HTTP 413 error (Request Entity Too Large)
+    final courseForRequest = Course(
+      id: screen.course.id,
+      dataId: screen.course.dataId
     );
+    final userForRequest = User(id: screen.loggedUser.id);
+    final submissionForRequest = Submission(
+      id: screen.submission.id,
+      problemId: screen.problemData.id,
+    );
+
+    final request = RejudgeRequest(
+      user: userForRequest,
+      course: courseForRequest,
+      problemId: screen.problemData.id,
+      submission: submissionForRequest,
+    );
+
     final futureResponse = service.rejudge(request);
     futureResponse.then(
       (response) {
