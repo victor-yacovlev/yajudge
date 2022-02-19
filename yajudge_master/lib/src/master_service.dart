@@ -95,7 +95,18 @@ class MasterService {
     }
     Session session = Session();
     session.cookie = sessionId;
-    User currentUser = await userManagementService.getUserBySession(session);
+    User currentUser;
+    try {
+      currentUser = await userManagementService.getUserBySession(session);
+    }
+    catch (error) {
+      if (error is GrpcError) {
+        return error;
+      }
+      else {
+        rethrow;
+      }
+    }
     if (currentUser.defaultRole == Role.ROLE_STUDENT) {
       if (!StudentsMethods.contains(method.name)) {
         return GrpcError.permissionDenied('not allowed for method ${method.name}');
