@@ -189,26 +189,6 @@ class SubmissionProcessor {
 
     runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId));
 
-    bool allowFork = !securityContext.forbiddenFunctions.contains('fork');
-    if (allowFork) {
-      io.File(procLimiterSourcePath).copySync(buildDir + '/.proc-limiter.c');
-      final arguments = compilersConfig.cBaseOptions + options + [
-        '-o', '.proc-limiter.o',
-        '.proc-limiter.c'
-      ];
-      final process = await runner.start(
-        Submission(id: Int64(-1), problemId: problemId),
-        [compiler] + arguments,
-        workingDirectory: '/build',
-      );
-      bool compilerOk = await process.ok;
-      if (compilerOk) {
-        String errorMessage = await process.outputAsString;
-        log.severe(
-            'cant build proc limiter object: $compiler ${arguments.join(
-                ' ')}:\n$errorMessage\n');
-      }
-    }
     if (securityContext.forbiddenFunctions.isNotEmpty) {
       String sourceHeader = r'''
 #include <stdio.h>
@@ -1093,17 +1073,17 @@ static void forbid(const char *name) {
       final checkerOpts = checkerData.length > 1? checkerData[1].split(' ') : [];
       for (String opt in checkerOpts) {
         if (opt.startsWith('stdin=')) {
-          stdinFilePath = runner.submissionWorkingDirectory(submission) + '/$wd/' + opt.substring(6);
+          stdinFilePath = runner.submissionProblemDirectory(submission) + '/$wd/' + opt.substring(6);
           final stdinFile = io.File(stdinFilePath);
           stdinData = stdinFile.existsSync()? stdinFile.readAsBytesSync() : [];
         }
         if (opt.startsWith('stdout=')) {
-          stdoutFilePath = runner.submissionWorkingDirectory(submission) + '/$wd/' + opt.substring(7);
+          stdoutFilePath = runner.submissionPrivateDirectory(submission) + '/$wd/' + opt.substring(7);
           final stdoutFile = io.File(stdoutFilePath);
           stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
         }
         if (opt.startsWith('reference=')) {
-          referencePath = runner.submissionWorkingDirectory(submission) + '/$wd/' + opt.substring(10);
+          referencePath = runner.submissionProblemDirectory(submission) + '/$wd/' + opt.substring(10);
           final referenceFile = io.File(referencePath);
           referenceStdout = referenceFile.existsSync()? referenceFile.readAsBytesSync() : [];
         }
