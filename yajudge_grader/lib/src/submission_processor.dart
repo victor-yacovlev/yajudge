@@ -835,6 +835,9 @@ static void forbid(const char *name) {
       hasRuntimeError = hasRuntimeError || targetResults.any((element) => element.status==SolutionStatus.RUNTIME_ERROR);
       hasValgrindErrors = hasValgrindErrors || targetResults.any((element) => element.status==SolutionStatus.VALGRIND_ERRORS);
       testResults.addAll(targetResults);
+      if (hasWrongAnswer||hasTimeLimit||hasRuntimeError||hasValgrindErrors) {
+        break;
+      }
     }
 
     SolutionStatus newStatus = submission.status;
@@ -862,10 +865,10 @@ static void forbid(const char *name) {
 
   GradingLimits getLimitsForProblem() {
     String limitsPath = path.absolute(
-      locationProperties.cacheDir,
-      submission.course.dataId,
-      submission.problemId,
-      '.limits'
+      locationProperties.cacheDir + '/' +
+      submission.course.dataId + '/' +
+      submission.problemId + '/' +
+      'build/.limits'
     );
     GradingLimits limits = defaultLimits;
     final limitsFile = io.File(limitsPath);
