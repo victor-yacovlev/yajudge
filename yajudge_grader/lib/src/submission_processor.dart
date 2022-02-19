@@ -939,6 +939,7 @@ static void forbid(const char *name) {
     final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
     final targetStdinFile = io.File('${runsDir.path}/$testBaseName.dat');
     String stdinFilePath = '';
+
     if (targetStdinFile.existsSync()) {
       stdinData = targetStdinFile.readAsBytesSync();
       stdinFilePath = targetStdinFile.path;
@@ -954,10 +955,12 @@ static void forbid(const char *name) {
       limits: limits,
       runTargetIsScript: runTargetIsScript,
     );
+
     if (stdinData.isNotEmpty) {
       await solutionProcess.writeToStdin(stdinData);
-      await solutionProcess.closeStdin();
     }
+    await solutionProcess.closeStdin();
+
 
     bool timeoutExceed = false;
     Timer? timer;
