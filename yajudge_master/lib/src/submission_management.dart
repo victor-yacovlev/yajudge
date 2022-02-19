@@ -930,7 +930,14 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
 
     if (request.submission.id != 0) {
+      // TODO make transaction
       // rejudge only just one submission
+      await connection.query(
+        'delete from submission_results where submissions_id=@id',
+        substitutionValues: {
+          'id': request.submission.id.toInt(),
+        }
+      );
       await connection.query(
         'update submissions set status=@new_status where id=@id',
         substitutionValues: {
@@ -938,12 +945,23 @@ values (@submissions_id,@test_number,@stdout,@stderr,
           'id': request.submission.id.toInt(),
         }
       );
+      final rows = await connection.query(
+        'select timestamp, grader_name from submissions where id=@id',
+        substitutionValues: {
+          'id': request.submission.id.toInt(),
+        }
+      );
+      final firstRow = rows.first;
+      final timestamp = Int64(firstRow[0]);
+      final graderName = firstRow[1] as String;
       final changedSubmission = request.submission.copyWith((s) {
         s.status = SolutionStatus.SUBMITTED;
         s.styleErrorLog = '';
         s.buildErrorLog = '';
         s.testResults.clear();
         s.graderScore = 0.0;
+        s.graderName = graderName;
+        s.timestamp = timestamp;
       });
       _notifySubmissionResultChanged(changedSubmission);
       return request.copyWith((r) {
