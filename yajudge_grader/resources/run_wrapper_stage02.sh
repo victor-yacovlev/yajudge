@@ -40,6 +40,6 @@ if [ -n "$YAJUDGE_DEBUG" ]; then echo $YAJUDGE_SCRIPT_STAGE; fi
 unshare -i bash "$YAJUDGE_SCRIPT_DIR/run_wrapper_stage03.sh" $@
 EXIT_STATUS=$?
 
-umount -l "$YAJUDGE_OVERLAY_MERGEDIR"
+umount -l "$YAJUDGE_OVERLAY_MERGEDIR" 1>&2 2>/dev/null
 #rmdir "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR"
 exit $EXIT_STATUS
