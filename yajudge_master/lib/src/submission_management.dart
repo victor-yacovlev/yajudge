@@ -535,24 +535,23 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return Submission(id: Int64(submissionId));
   }
 
-  void assignGrader(int submissionId, String graderName) {
+  void assignGrader(Submission submission, String graderName) {
     connection.query('''
       update submissions
       set status=@status, grader_name=@grader_name
       where id=@id
       ''',
       substitutionValues: {
-        'id': submissionId,
+        'id': submission.id.toInt(),
         'status': SolutionStatus.GRADER_ASSIGNED.value,
         'grader_name': graderName,
       }
     );
     _notifySubmissionResultChanged(
-      Submission(
-        id: Int64(submissionId),
-        graderName: graderName,
-        status: SolutionStatus.GRADER_ASSIGNED,
-      )
+      submission.copyWith((s) {
+        s.graderName = graderName;
+        s.status = SolutionStatus.GRADER_ASSIGNED;
+      })
     );
   }
 
@@ -640,7 +639,25 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       }
     });
     _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
-    _notifySubmissionResultChanged(request);
+    final notification = request.copyWith((s) {
+      // clean unnecessary test results
+      List<TestResult> testResults = [];
+      final brokenStatuses = [
+        SolutionStatus.RUNTIME_ERROR, SolutionStatus.VALGRIND_ERRORS,
+        SolutionStatus.TIME_LIMIT, SolutionStatus.WRONG_ANSWER,
+      ];
+      if (brokenStatuses.contains(s.status)) {
+        for (final test in s.testResults) {
+          if (test.status == s.status) {
+            testResults.add(test);
+            break;
+          }
+        }
+      }
+      s.testResults.clear();
+      s.testResults.addAll(testResults);
+    });
+    _notifySubmissionResultChanged(notification);
     return request;
   }
 
@@ -734,7 +751,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     for (Submission submission in newSubmissions) {
       ProblemData problemData = await getProblemDataForSubmission(submission);
       if (graderMatch(request, problemData.gradingOptions)) {
-        assignGrader(submission.id.toInt(), request.name);
+        assignGrader(submission, request.name);
         _notifyProblemStatusChanged(submission.user, submission.course, submission.problemId, true);
         log.info('submission ${submission.id} assigned and sent to grader ${request.name}');
         return submission;
