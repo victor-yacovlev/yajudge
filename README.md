@@ -1,18 +1,35 @@
-# Yajudge 
+# Yet Another Judge 
 
-## How to build
+Learning management and programming tasks submissions grader.
 
-Prerequirements:
- - Dart >= 2.15
- - Flutter SDK >= 2.2
- - XCode to build native MacOS app
+Almost everything implemented using 
+[Dart Programming Language](https://dart.dev) and
+use [gRPC Framework](https://grpc.io) for inter-component
+communication.
 
-To build native app (currently only MacOS supported, Linux planned):
+Requires Dart >= 2.12 and Protobuf Compiler to build 
+server-side components and 
+also [Flutter SDK](https://flutter.dev) >= 2.8 to 
+build client-side app.
 
-`make native-client`
+## Build
 
-To build web app to be exposed by server:
+ 1. Make sure you have `dart`, `flutter` and `protobuf-compiler`
+packages installed
+ 2. Run `make` to build everything but native client apps
+ 3. To build native client app for current platform
+(only macOS and partially Linux/GTK implemented yet)
+run `make native-client` in `yajudge_client` subdirectory.
+ 
+## Components of software
 
-`make web-client`
+See README.md in subdirectories for details):
 
-Also do not forget to build server-side tools (see separate README.md) 
+ - [yajudge_master](./yajudge_master) - server-side backend to manage
+courses, problems and studients
+ - [yajudge_client](./yajudge_client) - frontend app for Web and Desktops
+ - [yajudge_grader](./yajudge_grader) - submissions grader to be run on
+the same hosts as master or run on independent hosts
+ - [yajudge_common](./yajudge_common) - common library required by all
+three components listed above.
+ 

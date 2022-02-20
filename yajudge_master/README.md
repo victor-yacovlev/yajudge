@@ -1,16 +1,31 @@
-# Yajudge Master Server
+## Master Backend Server for Yajudge
 
-## Prerequirements
+### Prerequirements
+
  - Dart 2.12 or later
  - PostgreSQL 10 or later
  - protoc compiler
 
-## Build
-Just type `make master` from parent directory.
+In order to use within Web interface target there are
+additional third-party components required:
 
-## Configuration
+ - `nginx` web-server to serve static content exposed
+by `yajudge_client` and handle SSL connections
 
-### Prepare database
+ - [envoy proxy-server](https://www.envoyproxy.io) to
+translate gRPC-web request from browsers into native
+gRPC requests to master server.
+
+Example configurations for nginx and envoy provided
+in `conf` subdirectory.
+
+### Build
+Just type `make` from parent directory, or from this 
+directory after package `yajudge_common` built.
+
+### Configuration
+
+#### Prepare database
 
 Create PostgreSQL database and create user:
 
@@ -21,7 +36,7 @@ Create PostgreSQL database and create user:
  postgres=# grant all privileges on database yajudge to yajudge;  
  ```
 
-### Make initial database records
+#### Make initial database records
 
 There is no automatic database initialization yet :( So it will appear in some future. 
 
