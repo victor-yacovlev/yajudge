@@ -628,7 +628,7 @@ static void forbid(const char *name) {
   }
 
   int prepareSubmissionTests(String targetPrefix) {
-    String testsPath = runner.submissionWorkingDirectory(submission)+'/tests';
+    String testsPath = runner.submissionProblemDirectory(submission)+'/tests';
     final runsDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/runs/$targetPrefix/');
     runsDir.createSync(recursive: true);
 
