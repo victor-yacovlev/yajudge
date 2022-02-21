@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:yaml/yaml.dart';
 import 'package:path/path.dart' as path;
 
-String? findConfigFile(String baseName) {
+String findConfigFile(String baseName) {
   String homeDir = Platform.environment['HOME']!;
   List<String> variants = [
     homeDir + '/.config/yajudge/' + baseName + '.yaml',
@@ -14,7 +14,7 @@ String? findConfigFile(String baseName) {
       return path.normalize(item);
     }
   }
-  return null;
+  return '';
 }
 
 dynamic parseYamlConfig(String fileName) {
@@ -30,19 +30,22 @@ String expandPathEnvVariables(String source) {
   Map<String,String> env = Map.from(Platform.environment);
   env['YAJUDGE_BINDIR'] = binDir;
   if (!env.containsKey('RUNTIME_DIRECTORY')) {
-    env['RUNTIME_DIRECTORY'] = '/run';
+    env['RUNTIME_DIRECTORY'] = '/run/yajudge';
   }
   if (!env.containsKey('CACHE_DIRECTORY')) {
-    env['CACHE_DIRECTORY'] = '/var/cache';
+    env['CACHE_DIRECTORY'] = '/var/cache/yajudge';
   }
   if (!env.containsKey('STATE_DIRECTORY')) {
-    env['STATE_DIRECTORY'] = '/var/lib';
+    env['STATE_DIRECTORY'] = '/var/lib/yajudge';
   }
   if (!env.containsKey('LOGS_DIRECTORY')) {
-    env['LOGS_DIRECTORY'] = '/var/log';
+    env['LOGS_DIRECTORY'] = '/var/log/yajudge';
   }
   if (!env.containsKey('CONFIGURATION_DIRECTORY')) {
-    env['CONFIGURATION_DIRECTORY'] = '/etc';
+    env['CONFIGURATION_DIRECTORY'] = '/etc/yajudge';
+  }
+  if (!env.containsKey('SERVE_DIRECTORY')) {
+    env['SERVE_DIRECTORY'] = '/srv/yajudge';
   }
   while (rxEnvVar.hasMatch(expanded)) {
     RegExpMatch match = rxEnvVar.firstMatch(expanded)!;

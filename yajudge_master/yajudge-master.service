@@ -1,0 +1,31 @@
+[Unit]
+Description=Yajudge master service
+
+[Service]
+Type=exec
+RuntimeDirectory=yajudge
+ConfigurationDirectory=yajudge
+LogsDirectory=yajudge
+StateDirectory=yajudge
+RuntimeDirectoryMode=0770
+StateDirectoryMode=0770
+LogsDirectoryMode=0770
+
+ExecStart=/usr/bin/yajudge-master -C /etc/yajudge/master.yaml -P /run/yajudge/master.pid -L /var/log/yajudge/master.log daemon
+ExecStopPost=/bin/rm -f /run/yajudge/master.pid
+PIDFile=$RUNTIME_DIRECTORY/master.pid
+
+MemoryAccounting=yes
+MemoryMax=1G
+
+TasksAccounting=yes
+TasksMax=100
+
+User=yajudge
+Group=yajudge
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

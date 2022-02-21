@@ -135,7 +135,7 @@ String getConfigFileName(ArgResults parsedArguments) {
   if (configFileName == null) {
     configFileName = findConfigFile('grader');
   }
-  if (configFileName == null) {
+  if (configFileName.isEmpty) {
     print('No config file specified');
     io.exit(1);
   }

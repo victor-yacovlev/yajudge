@@ -1,0 +1,22 @@
+service:
+  # NOTE: service configuration has less priority than command-line arguments
+  log_file: '$LOGS_DIRECTORY/master.log'     # /var/log/yajudge/grader.log
+  pid_file: '$RUNTIME_DIRECTORY/master.pid'  # /run/yajudge/grader.pid
+
+database:
+  host: localhost
+  port: 5432
+  user: yajudge
+  name: yajudge
+  password: yajudge
+
+rpc:
+  host: any
+  port: 9095
+
+  # private token must be stored in separate file not readable by random user
+  private_token_file: '$CONFIGURATION_DIRECTORY/private-token.txt'  # /etc/yajudge/private-token.txt
+
+locations:
+  courses_root: '$STATE_DIRECTORY/courses'   # /srv/yajudge/courses
+  problems_root: '$STATE_DIRECTORY/problems' # /srv/yajudge/problems

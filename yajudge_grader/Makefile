@@ -27,7 +27,7 @@ lib/src/generated/assets.gen.dart: $(wildcard resources/*)
 
 install: bin/yajudge-grader yajudge-grader.service conf/grader.yaml
 	$(INSTALL) -D bin/yajudge-grader $(PREFIX)/bin/yajudge-grader
-	$(INSTALL) -D -m 0644 yajudge-grader.service $(ETC)/systemd/system.control/yajudge-grader.service
+	$(INSTALL) -D -m 0644 yajudge-grader.service $(ETC)/systemd/system/yajudge-grader.service
 	if [ -f $(ETC)/yajudge/grader.yaml ]; then $(INSTALL) -m 0644 -D conf/grader.yaml $(ETC)/yajudge/grader.yaml.new; else $(INSTALL) -D -m 0644 conf/grader.yaml $(ETC)/yajudge/grader.yaml; fi
 	if [ ! -d /var/log/yajudge ]; then $(MAKEDIRS) /var/log/yajudge; fi
 	chown $(USER):$(USER) /var/log/yajudge
