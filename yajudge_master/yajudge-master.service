@@ -2,6 +2,7 @@
 Description=Yajudge master service
 
 [Service]
+After=network.target postgresql.target
 Type=exec
 RuntimeDirectory=yajudge
 ConfigurationDirectory=yajudge
