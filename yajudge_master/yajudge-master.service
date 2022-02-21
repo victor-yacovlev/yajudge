@@ -1,8 +1,8 @@
 [Unit]
 Description=Yajudge master service
+After=network.target postgresql.service
 
 [Service]
-After=network.target postgresql.target
 Type=exec
 RuntimeDirectory=yajudge
 ConfigurationDirectory=yajudge
