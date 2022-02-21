@@ -61,7 +61,6 @@ class GraderService {
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
-  late final GraderProperties _graderProperties;
 
   bool shuttingDown = false;
   int shutdownExitCode = 0;
@@ -78,10 +77,6 @@ class GraderService {
     required this.compilersConfig,
     this.processLocalInboxOnly = false,
   }) {
-    _graderProperties = GraderProperties(
-      name: identityProperties.name,
-      platform: GradingPlatform(arch: identityProperties.arch),
-    );
     masterServer = GrpcOrGrpcWebClientChannel.grpc(
       rpcProperties.host,
       port: rpcProperties.port,
@@ -143,11 +138,14 @@ class GraderService {
       // Check submission from master server
       if (!processLocalInboxOnly) {
         submission =
-        await submissionsService.takeSubmissionToGrade(_graderProperties);
+        await submissionsService.takeSubmissionToGrade(GraderProperties(
+          name: identityProperties.name,
+          platform: GradingPlatform(arch: identityProperties.arch),
+        ));
         if (submission.id.toInt() > 0) {
           submission = await processSubmission(submission);
           submission = submission.copyWith((s) {
-            s.graderName = _graderProperties.name;
+            s.graderName = identityProperties.name;
           });
           await submissionsService.updateGraderOutput(submission);
           processed = true;

@@ -17,17 +17,17 @@ class ServiceProperties {
     required this.runAsGroup,
   });
 
-  factory ServiceProperties.fromYamlConfig(YamlMap conf) {
+  factory ServiceProperties.fromYamlConfig(YamlMap conf, String name) {
     String logFilePath = 'grader.log';
     String pidFilePath = 'grader.pid';
     String systemdSlice = 'yajudge';
     String runAsUser = '';
     String runAsGroup = '';
     if (conf['log_file'] is String) {
-      logFilePath = expandPathEnvVariables(conf['log_file']);
+      logFilePath = expandPathEnvVariables(conf['log_file'], name);
     }
     if (conf['pid_file'] is String) {
-      pidFilePath = expandPathEnvVariables(conf['pid_file']);
+      pidFilePath = expandPathEnvVariables(conf['pid_file'], name);
     }
     if (conf['systemd_slice'] is String) {
       systemdSlice = conf['systemd_slice'];

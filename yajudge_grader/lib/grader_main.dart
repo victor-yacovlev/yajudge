@@ -19,22 +19,36 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
   GradingLimits? overrideLimits;
   if (parsedArguments.command!.name=='run' && parsedArguments.command!['limits'] != null) {
-    final limitsFileName = expandPathEnvVariables(parsedArguments.command!['limits']!);
+    final limitsFileName = expandPathEnvVariables(parsedArguments.command!['limits']!, '');
     final limitsConf = loadYaml(io.File(limitsFileName).readAsStringSync());
     overrideLimits = limitsFromYaml(limitsConf);
   }
 
   final config = parseYamlConfig(configFileName);
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
-  final locationProperties = GraderLocationProperties.fromYamlConfig(config['locations']);
-  final identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
-  final serviceProperties = ServiceProperties.fromYamlConfig(config['service']);
+
+  var identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
+  String graderInstanceName = 'default';
+  if (parsedArguments['name'] != null) {
+    graderInstanceName = parsedArguments['name'];
+  }
+  else if (identityProperties.name.isNotEmpty) {
+    graderInstanceName = identityProperties.name;
+  }
+  String hostName = io.Platform.localHostname;
+  String graderFullName = '$graderInstanceName@$hostName';
+  identityProperties = GraderIdentityProperties(graderFullName);
+
+  print('Using $graderFullName as full grader name');
+
+  var locationProperties = GraderLocationProperties.fromYamlConfig(config['locations'], graderInstanceName);
+  final serviceProperties = ServiceProperties.fromYamlConfig(config['service'], graderInstanceName);
 
   print('Configs parsed successfully');
 
   if (useLogFile) {
     print('Configuring logger');
-    final logFilePath = getLogFileName(parsedArguments);
+    final logFilePath = getLogFileName(parsedArguments, graderInstanceName);
     if (logFilePath.isNotEmpty && logFilePath!='stdout') {
       print('Using log file $logFilePath');
       final logFile = io.File(logFilePath);
@@ -53,7 +67,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
   String pidFilePath = '';
   if (usePidFile) {
-    pidFilePath = getPidFileName(parsedArguments);
+    pidFilePath = getPidFileName(parsedArguments, graderInstanceName);
     Logger.root.info('Using PID file $pidFilePath');
     io.File(pidFilePath).writeAsStringSync('${io.pid}');
     print('Using PID file $pidFilePath: written value ${io.pid}');
@@ -101,7 +115,9 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
   if (io.Platform.isLinux) {
     Logger.root.info('Checking for linux cgroup capabilities');
-    String cgroupInitializationError = ChrootedRunner.checkLinuxCgroupCapabilities();
+    String cgroupInitializationError = ChrootedRunner.initializeLinuxCgroup();
+    Logger.root.info('Will use cgroup root: ${ChrootedRunner.cgroupRoot}');
+    print('Will use cgroup root: ${ChrootedRunner.cgroupRoot}');
     if (cgroupInitializationError.isEmpty) {
       Logger.root.info('Linux cgroup requirements met');
     }
@@ -109,7 +125,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
       // Allow log flushed
       Logger.root.shout('Linux cgroup requirements not met: $cgroupInitializationError. Exiting');
       print('Linux cgroup requirements not met: $cgroupInitializationError. Exiting');
-      io.sleep(Duration(seconds: 1));
+      io.sleep(Duration(seconds: 2));
       io.exit(1);
     }
   }
@@ -142,13 +158,13 @@ String getConfigFileName(ArgResults parsedArguments) {
   return configFileName;
 }
 
-String getPidFileName(ArgResults parsedArguments) {
+String getPidFileName(ArgResults parsedArguments, String graderName) {
   String? pidFileName = parsedArguments['pid'];
   if (pidFileName == null) {
     String configFileName = getConfigFileName(parsedArguments);
     final conf = loadYaml(io.File(configFileName).readAsStringSync());
     if (conf['service'] is YamlMap) {
-      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service'], graderName);
       pidFileName = serviceProperties.pidFilePath;
     }
   }
@@ -159,13 +175,13 @@ String getPidFileName(ArgResults parsedArguments) {
   return pidFileName;
 }
 
-String getLogFileName(ArgResults parsedArguments) {
+String getLogFileName(ArgResults parsedArguments, String graderName) {
   String? logFileName = parsedArguments['log'];
   if (logFileName == null) {
     String configFileName = getConfigFileName(parsedArguments);
     final conf = loadYaml(io.File(configFileName).readAsStringSync());
     if (conf['service'] is YamlMap) {
-      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service'], graderName);
       logFileName = serviceProperties.logFilePath;
     }
   }
@@ -182,7 +198,13 @@ void initializeLogger(io.IOSink? target) {
     String messageLine = '${record.time}: ${record.level.name} - ${record.message}\n';
     List<int> bytes = utf8.encode(messageLine);
     if (target != null) {
-      target.add(bytes);
+      try {
+        target.add(bytes);
+      }
+      catch (error) {
+        print('LOG: ' + messageLine);
+        print('Got logger error: $error');
+      }
     }
   });
   if (target != null) {
@@ -200,8 +222,12 @@ Future<void> startServerOnLinux(ArgResults parsedArguments, List<String> sourceA
   String configFileName = getConfigFileName(parsedArguments);
   final conf = loadYaml(io.File(configFileName).readAsStringSync());
   String sliceName = 'yajudge';
+  String graderName = 'default';
+  if (parsedArguments['name'] != null) {
+    graderName = parsedArguments['name'];
+  }
   if (conf['service'] is YamlMap) {
-    final serviceProperties = ServiceProperties.fromYamlConfig(conf);
+    final serviceProperties = ServiceProperties.fromYamlConfig(conf, graderName);
     sliceName = serviceProperties.systemdSlice;
   }
   final systemdArguments = ['--user', '--slice=$sliceName'];
@@ -246,8 +272,12 @@ Future<void> stopServer(ArgResults parsedArguments) async {
   final conf = loadYaml(io.File(configFileName).readAsStringSync());
   int pid = 0;
   String pidFilePath = '';
+  String graderName = 'default';
+  if (parsedArguments['name'] != null) {
+    graderName = parsedArguments['name'];
+  }
   if (conf['service'] is YamlMap) {
-    final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+    final serviceProperties = ServiceProperties.fromYamlConfig(conf['service'], graderName);
     pidFilePath = serviceProperties.pidFilePath;
   }
   if (pidFilePath.isEmpty || pidFilePath=='disabled') {
@@ -382,8 +412,13 @@ Future<void> toolMain(ArgResults mainArguments) async {
     limits = limitsFromYaml(conf);
   }
 
+  String graderName = 'default';
+  if (mainArguments['name'] != null) {
+    graderName = mainArguments['name'];
+  }
+
   String configFileName = getConfigFileName(mainArguments);
-  String pidFileName = getPidFileName(mainArguments);
+  String pidFileName = getPidFileName(mainArguments, graderName);
   int pid = 0;
   bool serviceRunning = false;
   final pidFile = io.File(pidFileName);
@@ -399,7 +434,7 @@ Future<void> toolMain(ArgResults mainArguments) async {
     io.exit(1);
   }
   final conf = loadYaml(io.File(configFileName).readAsStringSync());
-  final locationProperties = GraderLocationProperties.fromYamlConfig(conf['locations']);
+  final locationProperties = GraderLocationProperties.fromYamlConfig(conf['locations'], graderName);
   String workDirPath = locationProperties.workDir;
   final inboxDir = io.Directory('$workDirPath/inbox');
   final doneDir = io.Directory('$workDirPath/done');
@@ -468,6 +503,7 @@ ArgResults parseArguments(List<String> arguments) {
   mainParser.addOption('config', abbr: 'C', help: 'config file name');
   mainParser.addOption('log', abbr: 'L', help: 'log file name');
   mainParser.addOption('pid', abbr: 'P', help: 'pid file name');
+  mainParser.addOption('name', abbr: 'N', help: 'grader name in case of multiple instances running same host');
 
   final runParser = ArgParser();
   runParser.addOption('limits', abbr: 'l', help: 'custom problem limits');

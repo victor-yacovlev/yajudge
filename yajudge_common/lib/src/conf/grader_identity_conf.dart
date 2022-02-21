@@ -27,11 +27,9 @@ class GraderIdentityProperties {
   }
 
   factory GraderIdentityProperties.fromYamlConfig(YamlMap? conf) {
-    String name;
+    String name = '';
     if (conf != null && conf.containsKey('name')) {
       name = conf['name'];
-    } else {
-      name = Platform.localHostname;
     }
     return GraderIdentityProperties(name);
   }

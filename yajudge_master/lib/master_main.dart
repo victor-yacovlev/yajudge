@@ -105,7 +105,7 @@ String getPidFileName(ArgResults parsedArguments) {
     String configFileName = getConfigFileName(parsedArguments);
     final conf = loadYaml(io.File(configFileName).readAsStringSync());
     if (conf['service'] is YamlMap) {
-      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service'], '');
       pidFileName = serviceProperties.pidFilePath;
     }
   }
@@ -122,7 +122,7 @@ String getLogFileName(ArgResults parsedArguments) {
     String configFileName = getConfigFileName(parsedArguments);
     final conf = loadYaml(io.File(configFileName).readAsStringSync());
     if (conf['service'] is YamlMap) {
-      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service']);
+      final serviceProperties = ServiceProperties.fromYamlConfig(conf['service'], '');
       logFileName = serviceProperties.logFilePath;
     }
   }

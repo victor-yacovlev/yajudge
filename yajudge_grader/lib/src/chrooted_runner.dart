@@ -63,7 +63,8 @@ class ChrootedRunner extends AbstractRunner {
     return cgroupSystemPath;
   }
 
-  static String checkLinuxCgroupCapabilities() {
+  static String initializeLinuxCgroup() {
+    // io.sleep(Duration(minutes: 5));
     String cgroupFsRoot = systemRootCgroupLocation();
     if (cgroupFsRoot.isEmpty) {
       return 'cant find cgroup2 filesystem mounted. Check your systemd boot settings';
@@ -79,8 +80,8 @@ class ChrootedRunner extends AbstractRunner {
     bool foundWritableSlice = false;
     while (parts.isNotEmpty) {
       String lastPart = parts.last;
-      if (lastPart.endsWith('.slice') || lastPart.endsWith('.service')) {
-        cgroupRoot = cgroupFsRoot + '/' + parts.join('/');
+      if (lastPart.endsWith('.slice')) {
+        cgroupRoot = path.normalize(path.absolute(cgroupFsRoot + '/' + parts.join('/')));
         final cgroupProcsFilePath = cgroupRoot + '/cgroup.procs';
         if (0 == posix.access(cgroupProcsFilePath, posix.R_OK | posix.W_OK)) {
           foundWritableSlice = true;
@@ -95,10 +96,32 @@ class ChrootedRunner extends AbstractRunner {
     List<String> controllersAvailable = io.File(cgroupRoot+'/cgroup.controllers')
         .readAsStringSync().trim().split(' ');
     if (!controllersAvailable.contains('memory')) {
-      Logger.root.severe('memory cgroup controller not available');
+      return 'memory cgroup controller not available';
     }
     if (!controllersAvailable.contains('pids')) {
-      Logger.root.severe('pids cgroup controller not available');
+      return 'pids cgroup controller not available';
+    }
+    // io.sleep(Duration(minutes: 5)); // to explore WTF
+    // Check if it is possible to create subgroup with pids and memory
+    final checkDirectory = io.Directory('$cgroupRoot/check');
+    try {
+      checkDirectory.createSync();
+    }
+    catch (error) {
+      return 'cant create subdirectory ${checkDirectory.path}: $error';
+    }
+    final checkSubtreeControl = io.File('$cgroupRoot/check/cgroup.subtree_control');
+    try {
+      checkSubtreeControl.writeAsStringSync('+pids');
+    }
+    catch (error) {
+      return 'cant write +pids to ${checkSubtreeControl.path}: $error';
+    }
+    try {
+      checkSubtreeControl.writeAsStringSync('+memory');
+    }
+    catch (error) {
+      return 'cant write +memory to ${checkSubtreeControl.path}: $error';
     }
     return '';
   }
@@ -190,7 +213,12 @@ class ChrootedRunner extends AbstractRunner {
     }
     final subtreeControl = io.File('$path/cgroup.subtree_control');
     if (subtreeControl.existsSync()) {
-      subtreeControl.writeAsStringSync('+pids +memory');
+      try {
+        subtreeControl.writeAsStringSync('+pids +memory');
+      }
+      catch (error) {
+        log.severe('cant write +pids +memory to ${subtreeControl.path}: $error');
+      }
     }
   }
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=Scope used to run grader itself
+
+[Slice]
+MemoryAccounting=yes
+MemoryMax=4Gb
+TasksAccounting=yes
+TasksMax=3000
+

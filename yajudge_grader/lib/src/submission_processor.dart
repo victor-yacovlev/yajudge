@@ -216,7 +216,7 @@ static void forbid(const char *name) {
         workingDirectory: '/build',
       );
       bool compilerOk = await process.ok;
-      if (compilerOk) {
+      if (!compilerOk) {
         String errorMessage = await process.outputAsString;
         log.severe(
             'cant build security context object: $compiler ${arguments.join(

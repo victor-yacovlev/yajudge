@@ -23,7 +23,7 @@ dynamic parseYamlConfig(String fileName) {
   return loadYaml(content, sourceUrl: Uri(path: fileName));
 }
 
-String expandPathEnvVariables(String source) {
+String expandPathEnvVariables(String source, String nameVariable) {
   String binDir = path.absolute(dirname(Platform.script.path));
   String expanded = source;
   final rxEnvVar = RegExp(r'(\$[A-Z0-9_a-z]+)');
@@ -47,6 +47,7 @@ String expandPathEnvVariables(String source) {
   if (!env.containsKey('SERVE_DIRECTORY')) {
     env['SERVE_DIRECTORY'] = '/srv/yajudge';
   }
+  env['NAME'] = nameVariable;
   while (rxEnvVar.hasMatch(expanded)) {
     RegExpMatch match = rxEnvVar.firstMatch(expanded)!;
     String key = match.group(1)!.substring(1);
@@ -59,6 +60,6 @@ String expandPathEnvVariables(String source) {
 }
 
 String readPrivateTokenFromFile(String fileName) {
-  final expanded = expandPathEnvVariables(fileName);
+  final expanded = expandPathEnvVariables(fileName, '');
   return File(expanded).readAsStringSync().trim();
 }

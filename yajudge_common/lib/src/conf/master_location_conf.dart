@@ -9,8 +9,8 @@ class MasterLocationProperties {
 
   factory MasterLocationProperties.fromYamlConfig(YamlMap conf) {
     return MasterLocationProperties(
-      coursesRoot: expandPathEnvVariables(conf['courses_root']),
-      problemsRoot: expandPathEnvVariables(conf['problems_root']),
+      coursesRoot: expandPathEnvVariables(conf['courses_root'], ''),
+      problemsRoot: expandPathEnvVariables(conf['problems_root'], ''),
     );
   }
 }

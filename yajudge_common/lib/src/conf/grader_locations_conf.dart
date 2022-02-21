@@ -8,14 +8,14 @@ class GraderLocationProperties {
 
   GraderLocationProperties();
 
-  factory GraderLocationProperties.fromYamlConfig(YamlMap conf) {
+  factory GraderLocationProperties.fromYamlConfig(YamlMap conf, String nameVariable) {
     var result = GraderLocationProperties();
     if (conf.containsKey('working_directory'))
-      result.workDir = expandPathEnvVariables(conf['working_directory']);
+      result.workDir = expandPathEnvVariables(conf['working_directory'], nameVariable);
     if (conf.containsKey('cache_directory'))
-      result.cacheDir = expandPathEnvVariables(conf['cache_directory']);
+      result.cacheDir = expandPathEnvVariables(conf['cache_directory'], nameVariable);
     if (conf.containsKey('system_environment'))
-      result.osImageDir = expandPathEnvVariables(conf['system_environment']);
+      result.osImageDir = expandPathEnvVariables(conf['system_environment'], nameVariable);
     return result;
   }
 }

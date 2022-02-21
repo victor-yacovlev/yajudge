@@ -1,0 +1,30 @@
+[Unit]
+Description=Yajudge grader instance service
+Requires=yajudge-grader-prepare.service
+
+[Service]
+Type=exec
+RuntimeDirectory=yajudge
+ConfigurationDirectory=yajudge
+LogsDirectory=yajudge
+StateDirectory=yajudge
+CacheDirectory=yajudge
+RuntimeDirectoryMode=0770
+CacheDirectoryMode=0770
+StateDirectoryMode=0770
+LogsDirectoryMode=0770
+
+User=yajudge
+Group=yajudge
+Slice=yajudge-grader.slice
+Delegate=yes
+
+ExecStart=/usr/bin/yajudge-grader -N %i -C /etc/yajudge/grader.yaml -P /run/yajudge/grader-%i.pid -L /var/log/yajudge/grader-%i.log daemon
+ExecStopPost=/bin/rm -f /run/yajudge/grader-%i.pid
+PIDFile=$RUNTIME_DIRECTORY/grader-%i.pid
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
