@@ -49,7 +49,7 @@ class ChrootedRunner extends AbstractRunner {
     assert(mountResult.exitCode == 0);
     final lines = mountResult.stdout.toString().split('\n');
     final rxMount = RegExp(r'cgroup2 on (\S+) type cgroup2 (.+)');
-    String? cgroupSystemPath;
+    String cgroupSystemPath = '';
     for (final line in lines) {
       if (rxMount.hasMatch(line)) {
         RegExpMatch match = rxMount.firstMatch(line)!;
@@ -60,22 +60,18 @@ class ChrootedRunner extends AbstractRunner {
         }
       }
     }
-    if (cgroupSystemPath == null) {
-      Logger.root.severe('cant find cgroup2 filesystem mounted. Check your systemd boot settings');
-    }
-    return cgroupSystemPath!;
+    return cgroupSystemPath;
   }
 
-  static void checkLinuxCgroupCapabilities() {
-    if (!io.Platform.isLinux) {
-      return;
-    }
+  static String checkLinuxCgroupCapabilities() {
     String cgroupFsRoot = systemRootCgroupLocation();
+    if (cgroupFsRoot.isEmpty) {
+      return 'cant find cgroup2 filesystem mounted. Check your systemd boot settings';
+    }
     String myPid = '${io.pid}';
     final procPidCgroupFile = io.File('/proc/$myPid/cgroup');
     if (!procPidCgroupFile.existsSync()) {
-      Logger.root.shout('cant open ${procPidCgroupFile.path}');
-      io.exit(1);
+      return 'cant open ${procPidCgroupFile.path}';
     }
     String cgroupLocationSuffix = procPidCgroupFile.readAsStringSync()
       .trim().split(':')[2];
@@ -83,7 +79,7 @@ class ChrootedRunner extends AbstractRunner {
     bool foundWritableSlice = false;
     while (parts.isNotEmpty) {
       String lastPart = parts.last;
-      if (lastPart.endsWith('.slice')) {
+      if (lastPart.endsWith('.slice') || lastPart.endsWith('.service')) {
         cgroupRoot = cgroupFsRoot + '/' + parts.join('/');
         final cgroupProcsFilePath = cgroupRoot + '/cgroup.procs';
         if (0 == posix.access(cgroupProcsFilePath, posix.R_OK | posix.W_OK)) {
@@ -94,8 +90,7 @@ class ChrootedRunner extends AbstractRunner {
       parts = parts.sublist(0, parts.length-1);
     }
     if (!foundWritableSlice) {
-      Logger.root.shout('no writable parent cgroup slice found. Launch me using systemd-run --slice=NAME');
-      io.exit(1);
+      return 'no writable parent cgroup slice or service found. My current cgroup location is ${cgroupLocationSuffix}. Launch me using systemd-run --slice=NAME';
     }
     List<String> controllersAvailable = io.File(cgroupRoot+'/cgroup.controllers')
         .readAsStringSync().trim().split(' ');
@@ -105,6 +100,7 @@ class ChrootedRunner extends AbstractRunner {
     if (!controllersAvailable.contains('pids')) {
       Logger.root.severe('pids cgroup controller not available');
     }
+    return '';
   }
 
   void createProblemTemporaryDirs() {

@@ -15,6 +15,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFile, bool usePidFile) async {
   String configFileName = getConfigFileName(parsedArguments);
+  print('Using config file ${configFileName}');
 
   GradingLimits? overrideLimits;
   if (parsedArguments.command!.name=='run' && parsedArguments.command!['limits'] != null) {
@@ -29,13 +30,23 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   final identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
   final serviceProperties = ServiceProperties.fromYamlConfig(config['service']);
 
+  print('Configs parsed successfully');
+
   if (useLogFile) {
+    print('Configuring logger');
     final logFilePath = getLogFileName(parsedArguments);
     if (logFilePath.isNotEmpty && logFilePath!='stdout') {
+      print('Using log file $logFilePath');
       final logFile = io.File(logFilePath);
       initializeLogger(logFile.openWrite(mode: io.FileMode.append));
+      print('Logger initialized so next non-critical messages will be in $logFilePath');
+
+      // duplicate initialization messages to log file
+      Logger.root.info('Starting grader daemon at PID = ${io.pid}');
+      Logger.root.info('Using config file ${configFileName}');
     }
     else {
+      print('Log file not set so will use stdout for logging');
       initializeLogger(io.stdout);
     }
   }
@@ -43,7 +54,9 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   String pidFilePath = '';
   if (usePidFile) {
     pidFilePath = getPidFileName(parsedArguments);
+    Logger.root.info('Using PID file $pidFilePath');
     io.File(pidFilePath).writeAsStringSync('${io.pid}');
+    print('Using PID file $pidFilePath: written value ${io.pid}');
   }
 
   GradingLimits defaultLimits;
@@ -76,6 +89,29 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   if (parsedArguments.command != null) {
     ArgResults daemonArgs = parsedArguments.command!;
     processInboxOnly = daemonArgs['inbox'];
+    if (processInboxOnly) {
+      Logger.root.info('Will process only local inbox submissions');
+    }
+  }
+
+  if (rpcProperties.privateToken.isEmpty) {
+    Logger.root.shout('private access token not set in configuration. Exiting');
+    io.exit(1);
+  }
+
+  if (io.Platform.isLinux) {
+    Logger.root.info('Checking for linux cgroup capabilities');
+    String cgroupInitializationError = ChrootedRunner.checkLinuxCgroupCapabilities();
+    if (cgroupInitializationError.isEmpty) {
+      Logger.root.info('Linux cgroup requirements met');
+    }
+    else {
+      // Allow log flushed
+      Logger.root.shout('Linux cgroup requirements not met: $cgroupInitializationError. Exiting');
+      print('Linux cgroup requirements not met: $cgroupInitializationError. Exiting');
+      io.sleep(Duration(seconds: 1));
+      io.exit(1);
+    }
   }
 
   final graderService = GraderService(
@@ -90,8 +126,6 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     usePidFile: usePidFile,
     processLocalInboxOnly: processInboxOnly,
   );
-
-  ChrootedRunner.checkLinuxCgroupCapabilities();
 
   return graderService;
 }
@@ -152,7 +186,7 @@ void initializeLogger(io.IOSink? target) {
     }
   });
   if (target != null) {
-    Timer.periodic(Duration(seconds: 1), (timer) {
+    Timer.periodic(Duration(milliseconds: 250), (timer) {
       target.flush();
     });
   }
@@ -293,13 +327,12 @@ String realGraderExecutablePath() {
 
 Future<void> serverMain(ArgResults parsedArguments) async {
   GraderService service = await initializeGrader(parsedArguments, true, true);
-
+  Logger.root.info('Grader successfully initialized');
   String name = service.identityProperties.name;
   Logger.root.info('started grader server "$name" at PID = ${io.pid}');
   if (!io.Platform.isLinux) {
     Logger.root.warning('running grader on systems other than Linux is completely unsecure!');
   }
-
   service.serveSupervised();
 }
 
@@ -458,12 +491,14 @@ Future<void> main(List<String> arguments) async {
   final parsedArguments = parseArguments(arguments);
   if (parsedArguments.command == null) {
     print('Requires one of subcommands: start, stop, daemon or run\n');
+    print('Command line arguments passed: $arguments');
     io.exit(127);
   }
   if (parsedArguments.command!.name! == 'run') {
     return toolMain(parsedArguments);
   }
   else if (parsedArguments.command!.name! == 'daemon') {
+    print('Starting grader daemon at PID = ${io.pid}');
     return serverMain(parsedArguments);
   }
   else if (parsedArguments.command!.name! == 'start') {
