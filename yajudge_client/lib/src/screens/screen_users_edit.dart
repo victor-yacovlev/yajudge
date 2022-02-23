@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../client_app.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
@@ -103,6 +104,7 @@ class UserEditScreenState extends BaseScreenState {
   @override
   void initState() {
     super.initState();
+    _user = User();
     _loadUserProfile();
   }
 
@@ -124,36 +126,20 @@ class UserEditScreenState extends BaseScreenState {
   TextEditingController _roleController = TextEditingController();
 
   Widget _buildFieldItem(
-      BuildContext context, String label, TextEditingController controller,
-      String value, bool editable, {Widget? actionWidget, String? hintText} )
+      BuildContext context, String label, Widget child,
+      {List<Widget> actionWidgets = const []})
   {
-    if (controller.text.isEmpty) {
-      controller.text = value;
-    }
-
     List<Widget> rowItems = List.empty(growable: true);
     rowItems.add(Container(
       width: 150,
       margin: EdgeInsets.fromLTRB(0, 0, 10, 0),
       child: Text(label+':', textAlign: TextAlign.end),
     ));
-    rowItems.add(Expanded(
-        child: TextField(
-          controller: controller,
-          decoration: InputDecoration(hintText: hintText),
-          focusNode: editable? null : AlwaysDisabledFocusNode(),
-          style: TextStyle(
-            color: editable
-                ? Theme.of(context).textTheme.bodyText1!.color
-                : Theme.of(context).disabledColor,
-          ),
-          onChanged: (_) => setState(() {_checkIfCanSubmit();}),
-        )
-    ));
-    if (actionWidget != null) {
+    rowItems.add(Expanded(child: child));
+    if (actionWidgets.isNotEmpty) {
       rowItems.add(Container(
-        width: 100,
-        child: actionWidget,
+        constraints: BoxConstraints(minWidth: 100),
+        child: Row(children: actionWidgets),
       ));
     }
     return Container(
@@ -161,6 +147,50 @@ class UserEditScreenState extends BaseScreenState {
             children: rowItems
         )
     );
+  }
+
+  Widget _buildDropdownFieldItem(
+      BuildContext context, String label, List<String> values, TextEditingController controller,
+      String value, bool editable, {List<Widget> actionWidgets = const [], String? hintText} )
+  {
+    if (controller.text.isEmpty) {
+      controller.text = value;
+    }
+    final items = values
+        .map((e) => DropdownMenuItem<String>(child: Text(e), value: e))
+        .toList();
+    final dropdown = DropdownButtonFormField(
+      items: items,
+      value: value,
+      onChanged: editable? (String? newValue) {
+        if (newValue != null) {
+          controller.text = newValue;
+        }
+      } : null,
+    );
+    return _buildFieldItem(context, label, dropdown, actionWidgets: actionWidgets);
+  }
+
+  Widget _buildTextFieldItem(
+      BuildContext context, String label, TextEditingController controller,
+      String value, bool editable, {List<Widget> actionWidgets = const [], String? hintText} )
+  {
+    if (controller.text.isEmpty) {
+      controller.text = value;
+    }
+    final textField = TextField(
+      controller: controller,
+      enableInteractiveSelection: true,
+      decoration: InputDecoration(hintText: hintText),
+      focusNode: editable? null : AlwaysDisabledFocusNode(),
+      style: TextStyle(
+        color: editable
+            ? Theme.of(context).textTheme.bodyText1!.color
+            : Theme.of(context).disabledColor,
+      ),
+      onChanged: (_) => setState(() {_checkIfCanSubmit();}),
+    );
+    return _buildFieldItem(context, label, textField, actionWidgets: actionWidgets);
   }
 
   void _resetPassword() {
@@ -201,6 +231,11 @@ class UserEditScreenState extends BaseScreenState {
         _statusText = '';
       });
     });
+  }
+
+  void _copyPasswordToClipboard() {
+    final passwordValue = _passwordController.text.trim();
+    Clipboard.setData(ClipboardData(text: passwordValue));
   }
 
   Role _roleByName(String name) {
@@ -266,53 +301,63 @@ class UserEditScreenState extends BaseScreenState {
       ));
     }
     if (_user.id > 0) {
-      items.add(_buildFieldItem(context, 'ID пользователя', _userIdController, _user.id.toString(), false));
+      items.add(_buildTextFieldItem(context, 'ID пользователя', _userIdController, _user.id.toString(), false));
     }
-    items.add(_buildFieldItem(context, 'Фамилия', _lastNameController, _user.lastName, isAdministrator));
-    items.add(_buildFieldItem(context, 'Имя', _firstNameController, _user.firstName, isAdministrator));
-    items.add(_buildFieldItem(context, 'Отчество', _midNameController, _user.midName, isAdministrator));
-    items.add(_buildFieldItem(context, 'Группа', _groupNameController, _user.groupName, isAdministrator));
-    items.add(_buildFieldItem(context, 'EMail', _emailController, _user.email, isAdministrator));
+    items.add(_buildTextFieldItem(context, 'Фамилия', _lastNameController, _user.lastName, isAdministrator));
+    items.add(_buildTextFieldItem(context, 'Имя', _firstNameController, _user.firstName, isAdministrator));
+    items.add(_buildTextFieldItem(context, 'Отчество', _midNameController, _user.midName, isAdministrator));
+    items.add(_buildTextFieldItem(context, 'Группа', _groupNameController, _user.groupName, isAdministrator));
+    items.add(_buildTextFieldItem(context, 'EMail', _emailController, _user.email, isAdministrator));
 
     String passwordValue = '';
     String? passwordHint = '';
     bool passwordEditable = false;
-    YTextButton? passwordActionButton = null;
+    List<Widget> passwordActionButtons = [];
+    final copyPasswordButton = TextButton(child: Text('Скопировать'), onPressed: _copyPasswordToClipboard);
+    final changePasswordButton = TextButton(child: Text('Изменить'), onPressed: _changePassword);
+    final resetPasswordButton = TextButton(
+      child: Text('Сбросить'),
+      onPressed: _resetPassword,
+      style: ButtonStyle(foregroundColor: MaterialStateProperty.all(Theme.of(context).errorColor)),
+    );
     if (isMyself) {
       passwordEditable = true;
       if (_user.password.isNotEmpty) {
         passwordValue = _user.password;
         passwordHint = null;
+        passwordActionButtons.add(copyPasswordButton);
       } else {
         passwordValue = '';
         passwordHint = 'Не отображается, но можно изменить';
       }
-      passwordActionButton = YTextButton('Изменить', _changePassword);
+      passwordActionButtons.add(changePasswordButton);
     }
     else if (isAdministrator && _user.id>0) {
       passwordEditable = false;
       if (_user.password.isNotEmpty) {
         passwordValue = _user.password;
         passwordHint = null;
+        passwordActionButtons.add(copyPasswordButton);
       } else {
         passwordValue = '';
         passwordHint = 'Пароль был изменен пользователем';
       }
-      passwordActionButton = YTextButton('Сбросить', _resetPassword);
+      passwordActionButtons.add(resetPasswordButton);
     }
     else if (_user.id == 0) {
+      passwordActionButtons.add(copyPasswordButton);
       passwordValue = generateRandomPassword();
     }
-    items.add(_buildFieldItem(context, 'Пароль', _passwordController,
+    items.add(_buildTextFieldItem(context, 'Пароль', _passwordController,
         passwordValue, passwordEditable,
         hintText: passwordHint,
-        actionWidget: passwordActionButton));
+        actionWidgets: passwordActionButtons));
 
-    YTextButton? roleActionButton = null;
+    // YTextButton? roleActionButton = null;
     String roleName = '';
-    if (isAdministrator) {
-      roleActionButton = YTextButton('Изменить', _pickRole);
-    }
+    // if (isAdministrator) {
+    //   roleActionButton = YTextButton('Изменить', _pickRole);
+    // }
     if (_user.id == 0) {
       if (_roleController.text.trim().isNotEmpty)
         roleName = _roleController.text.trim();
@@ -322,11 +367,14 @@ class UserEditScreenState extends BaseScreenState {
     else {
       roleName = RoleNames[_user.defaultRole]!;
     }
-    items.add(_buildFieldItem(context, 'Роль по умолчанию',
-        _roleController, roleName, false,
-        actionWidget: roleActionButton
+    // items.add(_buildTextFieldItem(context, 'Роль по умолчанию',
+    //     _roleController, roleName, false,
+    //     actionWidgets: [roleActionButton!]
+    // ));
+    items.add(_buildDropdownFieldItem(
+        context, 'Роль по умолчанию', RoleNames.values.toList().sublist(1),
+        _roleController, roleName, isAdministrator,
     ));
-
     if (_errorString.isNotEmpty) {
       items.add(Padding(padding: EdgeInsets.all(10), child: Text(_errorString,
         style: TextStyle(color: Theme.of(context).errorColor),
