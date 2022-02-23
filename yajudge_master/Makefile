@@ -36,7 +36,10 @@ install: bin/yajudge-master yajudge-master.service conf/master.yaml
 	chmod 0770 /var/lib/yajudge/
 	touch $(ETC)/yajudge/private-token.txt
 	chown $(USER):$(USER) $(ETC)/yajudge/private-token.txt
-	chmod 0660 $(ETC)/yajudge/private-token.txt
+	chmod 0440 $(ETC)/yajudge/private-token.txt
+	touch $(ETC)/yajudge/database-password.txt
+	chown $(USER):$(USER) $(ETC)/yajudge/database-password.txt
+	chmod 0440 $(ETC)/yajudge/database-password.txt
 
 user:
 	if [ ! `id -u $(USER)` ]; then $(USERADD) -d /var/lib/$(USER) $(USER); fi
