@@ -34,17 +34,52 @@ class DashboardScreenState extends BaseScreenState {
       style: Theme.of(context).textTheme.headline6,
     );
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
+
     for (final e in courses) {
       String title = e.course.name;
+      final progressAction = () {
+        Navigator.pushNamed(context, '/progress/${e.course.urlPrefix}');
+      };
+      final submissionsAction = () {
+        Navigator.pushNamed(context, '/submissions/${e.course.urlPrefix}');
+      };
+      final settingsAction = () {
+        Navigator.pushNamed(context, '/courses/${e.course.urlPrefix}');
+      };
       String? roleTitle;
+      List<Widget> subactions = [];
       if (e.role != Role.ROLE_STUDENT) {
         roleTitle = 'Вид глазами студента';
+        subactions.addAll([
+          IconButton(
+            icon: const Icon(Icons.sort),
+            color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
+            onPressed: progressAction,
+            tooltip: 'Прогресс',
+          ),
+          IconButton(
+            icon: const Icon(Icons.view_list_outlined),
+            color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
+            onPressed: progressAction,
+            tooltip: 'Посылки',
+          ),
+        ]);
+      }
+      if (e.role == Role.ROLE_LECTUER || e.role == Role.ROLE_ADMINISTRATOR) {
+        subactions.add(
+          IconButton(
+            icon: const Icon(Icons.settings),
+            color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
+            onPressed: settingsAction,
+            tooltip: 'Настройки курса',
+          )
+        );
       }
       String link = '/' + e.course.urlPrefix + '/';
-      VoidCallback action = () {
+      final action = () {
         Navigator.pushNamed(context, link);
       };
-      YCardLikeButton button = YCardLikeButton(title, action, subtitle: roleTitle);
+      YCardLikeButton button = YCardLikeButton(title, action, subtitle: roleTitle, subactions: subactions);
       result.add(button);
     }
     return result;

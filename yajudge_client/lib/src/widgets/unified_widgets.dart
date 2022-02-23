@@ -88,9 +88,14 @@ class YCardLikeButton extends StatelessWidget {
   final String? subtitle;
   final bool disabled;
   final String? disabledHint;
+  final List<Widget> subactions;
 
   YCardLikeButton(this.title, this.action, {
-    this.leadingIcon, this.subtitle, this.disabled=false, this.disabledHint
+    this.leadingIcon,
+    this.subtitle,
+    this.disabled=false,
+    this.disabledHint,
+    this.subactions = const [],
   }) : super();
 
   @override
@@ -139,6 +144,12 @@ class YCardLikeButton extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(20, 0, 0, 0),
       )
     ));
+    for (final subaction in subactions) {
+      rowItems.add(Padding(
+        child: subaction,
+        padding: EdgeInsets.fromLTRB(2, 0, 0, 0),
+      ));
+    }
     Widget cardContainer = Container(
       child: Row(children: rowItems),
     );
