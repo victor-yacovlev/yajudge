@@ -1,5 +1,7 @@
 import 'package:yaml/yaml.dart';
 
+import 'config_file.dart';
+
 class DatabaseProperties {
   late final String engine;
   late final String host;
@@ -35,6 +37,9 @@ class DatabaseProperties {
     String user = conf.containsKey('user')? conf['user'] : '';
     String password = conf.containsKey('password')? conf['password'] : '';
     String dbName = conf.containsKey('name')? conf['name'] : '';
+    if (conf.containsKey('password_file')) {
+      password = readPrivateTokenFromFile(conf['password_file']);
+    }
     return DatabaseProperties(
         engine: engine,
         host: host,
