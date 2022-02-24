@@ -324,17 +324,17 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
       if (request.nameQuery.trim().isNotEmpty) {
         queryFilter += ''' and (
-          upper(users.first_name) like %name%
+          upper(users.first_name) like @name
           or
-          upper(users.last_name)) like %name%
+          upper(users.last_name) like @name
           or
-          upper(concat(users.last_name, ' ', users.first_name)) like %name%
+          upper(concat(users.last_name, ' ', users.first_name)) like @name
           or
-          upper(concat(users.first_name, ' ', users.last_name)) line %name%
+          upper(concat(users.first_name, ' ', users.last_name)) like @name
         )  
         ''';
         String normalizedName = request.nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
-        queryValues['name'] = normalizedName;
+        queryValues['name'] = normalizedName + '%';
       }
     }
     final query = queryBegin + queryFilter + queryEnd;
@@ -347,8 +347,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       int status = row[3];
       String firstName = row[4];
       String lastName = row[5];
-      String midName = row[6];
-      String groupName = row[7];
+      String midName = row[6] is String? row[6] : '';
+      String groupName = row[7] is String? row[7] : '';
       result.add(SubmissionListEntry(
         submissionId: Int64(id),
         problemId: problemId,
