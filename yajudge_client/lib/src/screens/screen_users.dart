@@ -108,8 +108,8 @@ class UsersScreenState extends BaseScreenState {
 
 
 
-  Widget _createSearchBoxWidgetMaterial(BuildContext context) {
-    final List<Widget> searchWidgets = [
+  Widget _createSearchBoxWidget(BuildContext context) {
+    final searchWidgets = <Widget>[
       Expanded(
         child: TextField(
           controller: _searchField,
@@ -222,7 +222,7 @@ class UsersScreenState extends BaseScreenState {
 
   @override
   Widget buildCentralWidget(BuildContext context) {
-    Widget searchBox = _createSearchBoxWidgetMaterial(context);
+    Widget searchBox = _createSearchBoxWidget(context);
     Widget usersTable = _buildUsersTable(context);
     return Column(children: [ searchBox, usersTable ]);
   }

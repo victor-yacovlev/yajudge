@@ -60,7 +60,7 @@ class DashboardScreenState extends BaseScreenState {
           IconButton(
             icon: const Icon(Icons.view_list_outlined),
             color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
-            onPressed: progressAction,
+            onPressed: submissionsAction,
             tooltip: 'Посылки',
           ),
         ]);

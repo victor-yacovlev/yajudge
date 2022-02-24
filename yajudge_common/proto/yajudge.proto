@@ -484,11 +484,36 @@ message LocalGraderSubmission {
   GradingLimits     grading_limits = 2;
 }
 
+message SubmissionListQuery {
+  int64             submission_id = 1;  // ignore rest fields if > 0
+  int64             course_id = 2;
+  string            name_query = 3;
+  string            problem_id_filter = 4;
+  SolutionStatus    status_filter = 5;
+  bool              show_mine_submissions = 6;
+  int32             limit = 7;
+  int32             offset = 8;
+}
+
+message SubmissionListEntry {
+  int64             submission_id = 1;
+  SolutionStatus    status = 2;
+  User              sender = 3;
+  int64             timestamp = 4;
+  string            problem_id = 5;
+}
+
+message SubmissionListResponse {
+  repeated SubmissionListEntry entries = 1;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
   rpc GetSubmissions(SubmissionFilter) returns (SubmissionList) {}
   rpc GetSubmissionResult(Submission) returns (Submission) {}
+
+  rpc GetSubmissionList(SubmissionListQuery) returns (SubmissionListResponse) {}
 
   rpc Rejudge(RejudgeRequest) returns (RejudgeRequest) {}
 

@@ -262,6 +262,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return _getSubmissions(request.user, request.course, request.problemId, request.status);
   }
 
+  @override
+  Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
+    throw GrpcError.unknown('not implemented yet');
+  }
+
   Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
     User currentUser = await parent.userManagementService.getUserFromContext(call);
     List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);

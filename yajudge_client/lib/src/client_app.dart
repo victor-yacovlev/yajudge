@@ -16,6 +16,7 @@ import 'screens/screen_course.dart';
 import 'screens/screen_course_reading.dart';
 import 'screens/screen_dashboard.dart';
 import 'screens/screen_login.dart';
+import 'screens/screen_submissions_list.dart';
 import 'screens/screen_users.dart';
 import 'screens/screen_users_edit.dart';
 import 'screens/screen_users_import_csv.dart';
@@ -118,6 +119,17 @@ class AppState extends State<App> {
       final String arg = usersMatch.matchAsPrefix(fullPath)!.group(1)!;
       return UsersEditScreen(
           loggedInUser: loggedUser, userIdOrNewOrMyself: arg);
+    }
+
+    final RegExp submissionsWithFilters = RegExp(r'/submissions/([a-z_-]+)(/filter:.+)?');
+    if (submissionsWithFilters.hasMatch(fullPath)) {
+      final match = submissionsWithFilters.matchAsPrefix(fullPath)!;
+      final courseUrlPrefix = match.group(1)!;
+      final filterString = match.groupCount > 2 ? match.group(2) : '';
+      return SubmissionsListScreen(
+        loggedUser: loggedUser,
+        courseUrlPrefix: courseUrlPrefix,
+      );
     }
 
     final coursesFilter = CoursesFilter(user: loggedUser);
