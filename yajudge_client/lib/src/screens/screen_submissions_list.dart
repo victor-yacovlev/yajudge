@@ -1,3 +1,4 @@
+import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:tuple/tuple.dart';
@@ -7,6 +8,8 @@ import 'package:yajudge_common/yajudge_common.dart';
 import '../controllers/connection_controller.dart';
 import '../controllers/courses_controller.dart';
 import 'screen_base.dart';
+import 'screen_course_problem.dart';
+import 'screen_submission.dart';
 
 class SubmissionsListScreen extends BaseScreen {
 
@@ -115,6 +118,7 @@ class SubmissionsListScreenState extends BaseScreenState {
               _courseData = value;
             }
             _populateCourseProblems();
+            _sendListQuery();
       });
     }
   }
@@ -124,7 +128,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     for (final section in _courseData.sections) {
       for (final lesson in section.lessons) {
         for (final problem in lesson.problems) {
-          problemIdsAndTitles.add(Tuple2(problem.id, problem.title));
+          problemIdsAndTitles.add(Tuple2(problem.id, '${problem.title} (${problem.id})'));
         }
       }
     }
@@ -180,9 +184,13 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   void _processSearch(String? userName) {
-    setState(() {
-      query = query.copyWith((s) { s.nameQuery = userName!=null? userName.trim() : ''; });
-    });
+    if (userName != null) {
+      setState(() {
+        query = query.copyWith((s) {
+          s.nameQuery = userName.trim();
+        });
+      });
+    }
     _sendListQuery();
   }
 
@@ -261,8 +269,11 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   Widget _createNameSearchField(BuildContext context) {
+    final styleTheme = Theme.of(context);
+    final textTheme = styleTheme.primaryTextTheme;
     return Expanded(
       child: TextField(
+        style: textTheme.labelLarge!.merge(TextStyle(color: Colors.black87)),
         controller: _nameEditController,
         decoration: InputDecoration(labelText: 'ID посылки или Фамилия/Имя'),
         onSubmitted: (name) => _processSearch(name),
@@ -324,6 +335,28 @@ class SubmissionsListScreenState extends BaseScreenState {
     );
   }
 
+  void _navigateToSubmission(Int64 submissionId, String problemId) {
+    final service = ConnectionController.instance!.submissionsService;
+    service.getSubmissionResult(Submission(id: submissionId)).then((submissionWithData) {
+      final problemData = findProblemById(_courseData, problemId);
+      final problemMetadata = findProblemMetadataById(_courseData, problemId);
+      final routeBuilder = PageRouteBuilder(
+          settings: RouteSettings(name: '/submissions/${submissionId}'),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return SubmissionScreen(
+              user: screen.loggedUser,
+              course: _course,
+              role: _role,
+              courseData: _courseData,
+              problemData: problemData,
+              problemMetadata: problemMetadata,
+              submission: submissionWithData,
+            );
+          }
+      );
+      Navigator.push(context, routeBuilder);
+    });
+  }
 
   @protected
   Widget buildCentralWidget(BuildContext context) {
@@ -331,9 +364,99 @@ class SubmissionsListScreenState extends BaseScreenState {
       return Center(child: Text('Загрузка данных...'));
     }
     Widget searchBox = _createSearchBoxWidget(context);
-    return Column(children: [ SizedBox(height: 8), searchBox ]);
+    Widget resultsView;
+    if (_submissionEntries.isEmpty) {
+      resultsView = Center(child: Text('Нет посылок'));
+    }
+    else {
+      List<TableRow> tableItems = [];
+      for (final entry in _submissionEntries) {
+        String id = '${entry.submissionId}';
+        String dateTime = formatDateTime(entry.timestamp.toInt());
+        String name = '${entry.sender.lastName} ${entry.sender.firstName} ${entry.sender.midName}'.trim();
+        String problemId = entry.problemId;
+        String status = entry.status.toString();
+        final makeClickableCellFromText = (String text) {
+          return TableCell(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  child: Container(
+                    height: 32,
+                    padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
+                    alignment: Alignment.centerLeft,
+                    child: Text(text),
+                  ),
+                  onTap: () => _navigateToSubmission(entry.submissionId, entry.problemId),
+                ),
+              )
+          );
+        };
+        final tableRow = TableRow(
+          children: [
+            makeClickableCellFromText(id),
+            makeClickableCellFromText(dateTime),
+            makeClickableCellFromText(name),
+            makeClickableCellFromText(problemId),
+            makeClickableCellFromText(status),
+          ]
+        );
+        tableItems.add(tableRow);
+      }
+      BorderSide borderSide = BorderSide(
+          color: Theme.of(context).colorScheme.secondary.withAlpha(50)
+      );
+      final makeSimpleCellFromText = (String text) {
+        return TableCell(
+            child: Container(
+              height: 32,
+              padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
+              alignment: Alignment.centerLeft,
+              child: Text(text),
+            )
+        );
+      };
+      final headerRow = TableRow(
+        decoration: BoxDecoration(
+          color: Theme.of(context).secondaryHeaderColor,
+        ),
+        children: [
+          makeSimpleCellFromText('ID'),
+          makeSimpleCellFromText('Время'),
+          makeSimpleCellFromText('Фамилия Имя Отчество'),
+          makeSimpleCellFromText('ID задачи'),
+          makeSimpleCellFromText('Статус выполнения'),
+        ]
+      );
+      final table = Table(
+        border: TableBorder(
+          horizontalInside: borderSide,
+          top: borderSide,
+          bottom: borderSide,
+          left: borderSide,
+          right: borderSide
+        ),
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        columnWidths: {
+          0: FixedColumnWidth(50),
+          1: FixedColumnWidth(180),
+          2: FlexColumnWidth(),
+          3: FixedColumnWidth(150),
+          4: FixedColumnWidth(150),
+        },
+        children: [headerRow] + tableItems,
+      );
+      double availableHeight = MediaQuery.of(context).size.height - 258;
+      resultsView = Container(
+        constraints: BoxConstraints(
+          maxHeight: availableHeight
+        ),
+        child: SingleChildScrollView(
+          child: table,
+        ),
+        padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
+      );
+    }
+    return Column(children: [ SizedBox(height: 8), searchBox, SizedBox(height: 8), resultsView ]);
   }
-
-
-
 }
