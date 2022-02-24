@@ -37,6 +37,7 @@ class SubmissionsListScreenState extends BaseScreenState {
   CourseData _courseData = CourseData();
   List<Tuple2<String,String>> _courseProblems = [];
   TextEditingController _nameEditController = TextEditingController();
+  List<SubmissionListEntry> _submissionEntries = [];
 
   final statuses = <String,SolutionStatus>{
     'Любой статус': SolutionStatus.ANY_STATUS_OR_NULL,
@@ -138,6 +139,7 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   void _setFilterProblemId(String? problemId) {
+    bool changed = problemId != query.problemIdFilter;
     setState(() {
       String id = '';
       if (problemId!=null) {
@@ -147,9 +149,13 @@ class SubmissionsListScreenState extends BaseScreenState {
         s.problemIdFilter = id;
       });
     });
+    if (changed) {
+      _sendListQuery();
+    }
   }
 
   void _setFilterStatus(SolutionStatus? status) {
+    bool changed = status != query.statusFilter;
     setState(() {
       if (status == null) {
         status = SolutionStatus.ANY_STATUS_OR_NULL;
@@ -158,16 +164,38 @@ class SubmissionsListScreenState extends BaseScreenState {
         s.statusFilter = status!;
       });
     });
+    if (changed) {
+      _sendListQuery();
+    }
   }
 
   void _setShowMineSubmissions(bool? value) {
+    bool changed = value != query.showMineSubmissions;
     setState(() {
       query = query.copyWith((s) { s.showMineSubmissions = value!; });
     });
+    if (changed) {
+      _sendListQuery();
+    }
   }
 
   void _processSearch(String? userName) {
+    setState(() {
+      query = query.copyWith((s) { s.nameQuery = userName!=null? userName.trim() : ''; });
+    });
+    _sendListQuery();
+  }
 
+  void _sendListQuery() {
+    final submissionsService = ConnectionController.instance!.submissionsService;
+    final futureList = submissionsService.getSubmissionList(query);
+    futureList.then(_setSubmissionsList);
+  }
+
+  void _setSubmissionsList(SubmissionListResponse listResponse) {
+    setState(() {
+      _submissionEntries = listResponse.entries;
+    });
   }
 
   Widget _createProblemSearchField(BuildContext context) {
@@ -295,7 +323,6 @@ class SubmissionsListScreenState extends BaseScreenState {
       )
     );
   }
-
 
 
   @protected

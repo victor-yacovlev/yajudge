@@ -262,11 +262,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return _getSubmissions(request.user, request.course, request.problemId, request.status);
   }
 
-  @override
-  Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
-    throw GrpcError.unknown('not implemented yet');
-  }
-
   Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
     User currentUser = await parent.userManagementService.getUserFromContext(call);
     List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
@@ -286,6 +281,88 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         throw GrpcError.permissionDenied('cant access not own submissions');
       }
     }
+  }
+
+
+  @override
+  Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
+    String queryBegin = '''
+      select submissions.id, problem_id, timestamp, status,
+        users.first_name, users.last_name, users.mid_name,
+        users.group_name
+      from submissions, users
+      where users_id=users.id 
+      ''';
+    String queryEnd = ' order by timestamp desc ';
+    String queryFilter = '';
+    Map<String,dynamic> queryValues = {};
+    if (request.limit > 0) {
+      queryEnd += 'limit ${request.limit} ';
+    }
+    if (request.offset > 0) {
+      queryEnd += 'offset ${request.offset} ';
+    }
+    if (request.submissionId > 0) {
+      // return just one submission if exists
+      queryFilter = ' and submissions.id=%id ';
+      queryValues['id'] = request.submissionId.toInt();
+    }
+    else {
+      // create a filter for submissions list
+      if (request.showMineSubmissions == false) {
+        final currentUser = await parent.userManagementService.getUserFromContext(call);
+        queryFilter += ' and users.id!=@user_id ';
+        queryValues['user_id'] = currentUser.id.toInt();
+      }
+      if (request.statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
+        queryFilter += ' and status=@status ';
+        queryValues['status'] = request.statusFilter.value;
+      }
+      if (request.problemIdFilter.isNotEmpty) {
+        queryFilter += ' and problem_id=@problem_id ';
+        queryValues['problem_id'] = request.problemIdFilter;
+      }
+      if (request.nameQuery.trim().isNotEmpty) {
+        queryFilter += ''' and (
+          upper(users.first_name) like %name%
+          or
+          upper(users.last_name)) like %name%
+          or
+          upper(concat(users.last_name, ' ', users.first_name)) like %name%
+          or
+          upper(concat(users.first_name, ' ', users.last_name)) line %name%
+        )  
+        ''';
+        String normalizedName = request.nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
+        queryValues['name'] = normalizedName;
+      }
+    }
+    final query = queryBegin + queryFilter + queryEnd;
+    List<dynamic> queryRows = await connection.query(query, substitutionValues: queryValues);
+    List<SubmissionListEntry> result = [];
+    for (final row in queryRows) {
+      int id = row[0];
+      String problemId = row[1];
+      int timestamp = row[2];
+      int status = row[3];
+      String firstName = row[4];
+      String lastName = row[5];
+      String midName = row[6];
+      String groupName = row[7];
+      result.add(SubmissionListEntry(
+        submissionId: Int64(id),
+        problemId: problemId,
+        timestamp: Int64(timestamp),
+        status: SolutionStatus.valueOf(status),
+        sender: User(
+          firstName: firstName,
+          lastName: lastName,
+          midName: midName,
+          groupName: groupName,
+        )
+      ));
+    }
+    return SubmissionListResponse(entries: result);
   }
 
   Future<SubmissionList> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
