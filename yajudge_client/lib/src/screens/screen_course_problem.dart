@@ -292,26 +292,24 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _navigateToSubmission(Submission submission) {
-    final service = ConnectionController.instance!.submissionsService;
-    service.getSubmissionResult(submission).then((submissionWithData) {
-      String currentUrl = ModalRoute.of(context)!.settings.name!;
-      String newUrl = '$currentUrl/${submission.id}';
-      final routeBuilder = PageRouteBuilder(
-          settings: RouteSettings(name: newUrl),
-          pageBuilder: (context, animation, secondaryAnimation) {
-            return SubmissionScreen(
-              user: screen.loggedUser,
-              course: _course,
-              role: screen.role,
-              courseData: _courseData,
-              problemData: _problemData,
-              problemMetadata: _problemMetadata,
-              submission: submissionWithData,
-            );
-          }
-      );
-      Navigator.push(context, routeBuilder);
-    });
+    String currentUrl = ModalRoute.of(context)!.settings.name!;
+    String newUrl = '$currentUrl/${submission.id}';
+    final submissionScreen = SubmissionScreen(
+      courseUrlPrefix: _course.urlPrefix,
+      user: screen.loggedUser,
+      course: _course,
+      role: screen.role,
+      submissionId: submission.id,
+      courseData: _courseData,
+    );
+    final pageBuilder = (context, animation, secondaryAnimation) {
+      return submissionScreen;
+    };
+    final routeBuilder = PageRouteBuilder(
+        settings: RouteSettings(name: newUrl),
+        pageBuilder: pageBuilder,
+    );
+    Navigator.push(context, routeBuilder);
   }
 
   List<Widget> buildNewSubmissionItems(BuildContext context) {

@@ -1,36 +1,32 @@
 import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:math' as math;
+import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart' as grpc;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tuple/tuple.dart';
+import '../controllers/courses_controller.dart';
 import 'screen_course_problem.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../utils/utils.dart';
-import '../widgets/rich_text_viewer.dart';
 import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:intl/intl.dart';
 import 'dart:async';
 
 class SubmissionScreen extends BaseScreen {
-  final Course course;
-  final Role role;
-  final CourseData courseData;
-  final ProblemData problemData;
-  final ProblemMetadata problemMetadata;
-  final Submission submission;
+  final Course? course;
+  final Role? role;
+  final CourseData? courseData;
+  final String courseUrlPrefix;
+  final Int64 submissionId;
 
   SubmissionScreen({
     required User user,
-    required this.course,
-    required this.role,
-    required this.courseData,
-    required this.problemData,
-    required this.problemMetadata,
-    required this.submission,
+    required this.courseUrlPrefix,
+    required this.submissionId,
+    this.course,
+    this.role,
+    this.courseData,
     Key? key
   }) : super(loggedUser: user, key: key) {
 
@@ -44,17 +40,81 @@ class SubmissionScreen extends BaseScreen {
 class SubmissionScreenState extends BaseScreenState {
 
   final SubmissionScreen screen;
-  late Submission _submission;
+  Submission? _submission;
+  CourseData? _courseData;
+  ProblemData? _problemData;
+  ProblemMetadata? _problemMetadata;
+  Course? _course;
+  Role? _role;
   grpc.ResponseStream<Submission>? _statusStream;
 
   SubmissionScreenState(this.screen)
-      : super(title: 'Посылка ${screen.submission.id}: ${screen.problemData.title}');
+      : super(title: 'Посылка ${screen.submissionId}');
 
   @override
   void initState() {
     super.initState();
-    _submission = screen.submission;
-    _subscribeToNotifications();
+    if (screen.courseData != null && screen.course != null && screen.role != null) {
+      _courseData = screen.courseData;
+      _course = screen.course;
+      _role = screen.role;
+      _loadSubmission();
+    }
+    else {
+      _loadCourse();
+    }
+  }
+
+  FutureOr<Null> _handleLoadError(Object error, StackTrace stackTrace) {
+    setState(() {
+      errorMessage = error;
+    });
+  }
+
+  void _loadCourse() {
+    CoursesController.instance!
+        .loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
+        .then((Tuple2<Course,Role> entry) {
+          setState(() {
+            _course = entry.item1;
+            _role = entry.item2;
+          });
+          _loadCourseData();
+        })
+        .onError(_handleLoadError);
+  }
+
+  void _loadCourseData() {
+    CoursesController.instance!
+        .loadCourseData(_course!.dataId)
+        .then((CourseData courseData) {
+          setState(() {
+            _courseData = courseData;
+          });
+          _loadSubmission();
+        })
+        .onError(_handleLoadError);
+  }
+
+  void _loadSubmission() {
+    final service = ConnectionController.instance!.submissionsService;
+    service.getSubmissionResult(Submission(id: screen.submissionId))
+        .then((submission) {
+          _updateSubmission(submission);
+          _subscribeToNotifications();
+        })
+        .onError(_handleLoadError);
+  }
+
+  void _updateTitle() {
+    setState(() {
+      if (_problemData != null) {
+        title = 'Посылка ${screen.submissionId}: ${_problemData!.title}';
+      }
+      else {
+        title = 'Посылка ${screen.submissionId}';
+      }
+    });
   }
 
   @override
@@ -69,9 +129,9 @@ class SubmissionScreenState extends BaseScreenState {
     log.info('subscribing to submission notifications');
     final submissionsService = ConnectionController.instance!.submissionsService;
     final request = Submission(
-      id: _submission.id,
-      course: _submission.course,
-      user: _submission.user,
+      id: _submission!.id,
+      course: _course,
+      user: _submission!.user,
     );
     _statusStream = submissionsService.subscribeToSubmissionResultNotifications(request);
     _statusStream!.listen(
@@ -89,13 +149,16 @@ class SubmissionScreenState extends BaseScreenState {
     );
   }
 
-  void _updateSubmission(Submission event) {
-    if (event.id != _submission.id) {
+  void _updateSubmission(Submission submission) {
+    if (_submission != null && submission.id != _submission!.id) {
       return;
     }
     setState(() {
-      _submission = event;
+      _submission = submission;
+      _problemData = findProblemById(_courseData!, _submission!.problemId);
+      _problemMetadata = findProblemMetadataById(_courseData!, _submission!.problemId);
     });
+    _updateTitle();
   }
 
   void _saveStatementFile(File file) {
@@ -104,7 +167,9 @@ class SubmissionScreenState extends BaseScreenState {
 
   List<Widget> buildSubmissionCommonItems(BuildContext context) {
     List<Widget> contents = [];
-    final submission = _submission;
+    if (_submission == null) {
+      return [];
+    }
     final theme = Theme.of(context);
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
@@ -123,8 +188,8 @@ class SubmissionScreenState extends BaseScreenState {
         wrapIntoPadding(makeText(text))
       );
     };
-    String statusName = submission.status.name;
-    String dateSent = formatDateTime(submission.timestamp.toInt());
+    String statusName = _submission!.status.name;
+    String dateSent = formatDateTime(_submission!.timestamp.toInt());
     final whoCanRejudge = [
       Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
     ];
@@ -153,26 +218,26 @@ class SubmissionScreenState extends BaseScreenState {
     // make cleaned copies of request parameters to prevent
     // HTTP 413 error (Request Entity Too Large)
     final courseForRequest = Course(
-      id: screen.course.id,
-      dataId: screen.course.dataId
+      id: _course!.id,
+      dataId: _course!.dataId
     );
     final userForRequest = User(id: screen.loggedUser.id);
     final submissionForRequest = Submission(
-      id: screen.submission.id,
-      problemId: screen.problemData.id,
+      id: _submission!.id,
+      problemId: _problemData!.id,
     );
 
     final request = RejudgeRequest(
       user: userForRequest,
       course: courseForRequest,
-      problemId: screen.problemData.id,
+      problemId: _problemData!.id,
       submission: submissionForRequest,
     );
 
     final futureResponse = service.rejudge(request);
     futureResponse.then(
       (response) {
-        if (response.submission.id == _submission.id) {
+        if (response.submission.id == _submission!.id) {
           _updateSubmission(response.submission);
         }
       },
@@ -186,13 +251,15 @@ class SubmissionScreenState extends BaseScreenState {
 
   List<Widget> buildSubmissionFileItems(BuildContext context) {
     List<Widget> contents = [];
-    final submission = _submission;
+    if (_submission == null) {
+      return [];
+    }
     final theme = Theme.of(context);
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
     final maxFileSizeToShow = 50 * 1024;
 
-    for (File file in submission.solutionFiles.files) {
+    for (File file in _submission!.solutionFiles.files) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text(file.name+':', style: fileHeadStyle))
@@ -225,27 +292,29 @@ class SubmissionScreenState extends BaseScreenState {
 
   List<Widget> buildSubmissionErrors(BuildContext context) {
     List<Widget> contents = [];
-    final submission = _submission;
+    if (_submission == null) {
+      return [];
+    }
     final theme = Theme.of(context);
     final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
     final maxFileSizeToShow = 10 * 1024;
     String? fileContent;
-    if (submission.status == SolutionStatus.COMPILATION_ERROR ) {
+    if (_submission!.status == SolutionStatus.COMPILATION_ERROR ) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Ошибки компиляции:', style: fileHeadStyle))
       );
-      fileContent = submission.buildErrorLog;
+      fileContent = _submission!.buildErrorLog;
     }
-    else if (submission.status == SolutionStatus.STYLE_CHECK_ERROR) {
+    else if (_submission!.status == SolutionStatus.STYLE_CHECK_ERROR) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Ошибки форматирования кода:', style: fileHeadStyle))
       );
-      fileContent = submission.styleErrorLog;
+      fileContent = _submission!.styleErrorLog;
     }
-    else if (submission.status == SolutionStatus.RUNTIME_ERROR) {
+    else if (_submission!.status == SolutionStatus.RUNTIME_ERROR) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Ошибка выполнения:', style: fileHeadStyle))
@@ -253,7 +322,7 @@ class SubmissionScreenState extends BaseScreenState {
       final brokenTestCase = findFirstBrokenTest();
       fileContent = '=== stdout:\n' + brokenTestCase.stdout + '\n\n=== stderr:\n' + brokenTestCase.stderr;
     }
-    else if (submission.status == SolutionStatus.VALGRIND_ERRORS) {
+    else if (_submission!.status == SolutionStatus.VALGRIND_ERRORS) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Ошибки памяти, обраруженные Valgrind:', style: fileHeadStyle))
@@ -261,7 +330,7 @@ class SubmissionScreenState extends BaseScreenState {
       final brokenTestCase = findFirstBrokenTest();
       fileContent = brokenTestCase.valgrindOutput;
     }
-    else if (submission.status == SolutionStatus.WRONG_ANSWER) {
+    else if (_submission!.status == SolutionStatus.WRONG_ANSWER) {
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Неверный ответ, вывод чекера:', style: fileHeadStyle))
@@ -291,7 +360,7 @@ class SubmissionScreenState extends BaseScreenState {
       SolutionStatus.VALGRIND_ERRORS,
       SolutionStatus.TIME_LIMIT,
     ];
-    for (final test in _submission.testResults) {
+    for (final test in _submission!.testResults) {
       final status = test.status;
       if (brokenStatuses.contains(status)) {
         return test;
@@ -330,6 +399,9 @@ class SubmissionScreenState extends BaseScreenState {
 
   @override
   Widget buildCentralWidget(BuildContext context) {
+    if (_submission == null) {
+      return Center(child: Text('Загрузка посылки...'));
+    }
     final theme = Theme.of(context);
     List<Widget> contents = [];
     final mainHeadStyle = theme.textTheme.headline4!.merge(TextStyle(color: theme.primaryColor));

@@ -336,26 +336,20 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   void _navigateToSubmission(Int64 submissionId, String problemId) {
-    final service = ConnectionController.instance!.submissionsService;
-    service.getSubmissionResult(Submission(id: submissionId)).then((submissionWithData) {
-      final problemData = findProblemById(_courseData, problemId);
-      final problemMetadata = findProblemMetadataById(_courseData, problemId);
-      final routeBuilder = PageRouteBuilder(
-          settings: RouteSettings(name: '/submissions/${submissionId}'),
-          pageBuilder: (context, animation, secondaryAnimation) {
-            return SubmissionScreen(
-              user: screen.loggedUser,
-              course: _course,
-              role: _role,
-              courseData: _courseData,
-              problemData: problemData,
-              problemMetadata: problemMetadata,
-              submission: submissionWithData,
-            );
-          }
-      );
-      Navigator.push(context, routeBuilder);
-    });
+    final routeBuilder = PageRouteBuilder(
+        settings: RouteSettings(name: '/submissions/${screen.courseUrlPrefix}/${submissionId}'),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return SubmissionScreen(
+            courseUrlPrefix: _course.urlPrefix,
+            submissionId: submissionId,
+            user: screen.loggedUser,
+            course: _course,
+            role: _role,
+            courseData: _courseData,
+          );
+        }
+    );
+    Navigator.push(context, routeBuilder);
   }
 
   @protected

@@ -121,6 +121,18 @@ class AppState extends State<App> {
           loggedInUser: loggedUser, userIdOrNewOrMyself: arg);
     }
 
+    final RegExp submissionsWithNumber = RegExp(r'/submissions/([a-z_-]+)/([0-9]+)');
+    if (submissionsWithNumber.hasMatch(fullPath)) {
+      final match = submissionsWithNumber.matchAsPrefix(fullPath)!;
+      final courseUrlPrefix = match.group(1)!;
+      final submissionId = int.parse(match.group(2)!);
+      return SubmissionScreen(
+        user: loggedUser,
+        courseUrlPrefix: courseUrlPrefix,
+        submissionId: Int64(submissionId),
+      );
+    }
+
     final RegExp submissionsWithFilters = RegExp(r'/submissions/([a-z_-]+)(/filter:.+)?');
     if (submissionsWithFilters.hasMatch(fullPath)) {
       final match = submissionsWithFilters.matchAsPrefix(fullPath)!;
@@ -131,6 +143,7 @@ class AppState extends State<App> {
         courseUrlPrefix: courseUrlPrefix,
       );
     }
+
 
     final coursesFilter = CoursesFilter(user: loggedUser);
     final futureCoursesList = ConnectionController.instance!.coursesService
@@ -315,36 +328,17 @@ class AppState extends State<App> {
       if (submissionId == null) {
         return ErrorScreen('Ошибка 404', '');
       }
-      final submissionsService = ConnectionController.instance!.submissionsService;
-      final futureSubmission = submissionsService.getSubmissionResult(
-        Submission(
-          id: Int64(submissionId),
-          course: courseEntry.course,
-        )
-      );
       Role userRoleForCourse = loggedUser.defaultRole;
       if (userRoleForCourse != Role.ROLE_ADMINISTRATOR) {
         userRoleForCourse = courseEntry.role;
       }
-      return FutureBuilder(
-        future: futureSubmission,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            final content = snapshot.requireData as Submission;
-            return SubmissionScreen(
-              user: loggedUser,
-              course: courseEntry.course,
-              role: courseEntry.role,
-              courseData: courseData,
-              problemData: problemData,
-              problemMetadata: problemMetadata,
-              submission: content,
-            );
-          }
-          else {
-            return LoadingScreen('Посылка $submissionId', '');
-          }
-        },
+      return SubmissionScreen(
+        user: loggedUser,
+        courseUrlPrefix: courseEntry.course.urlPrefix,
+        submissionId: Int64(submissionId),
+        course: courseEntry.course,
+        role: courseEntry.role,
+        courseData: courseData,
       );
     }
 
