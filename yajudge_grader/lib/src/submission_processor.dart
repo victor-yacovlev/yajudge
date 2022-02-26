@@ -106,8 +106,12 @@ class SubmissionProcessor {
       final coprocess = opts.coprocess;
       if (coprocess.name.isNotEmpty) {
         io.File(buildDir + '/.coprocess').writeAsStringSync(coprocess.name);
-        io.File(buildDir + '/' + coprocess.name)
-            .writeAsBytesSync(coprocess.data);
+        io.File(buildDir + '/' + coprocess.name).writeAsBytesSync(coprocess.data);
+        if (coprocess.name.endsWith('.c') || coprocess.name.endsWith('.cxx') || coprocess.name.endsWith('.cpp')) {
+          final binaryName = path.basenameWithoutExtension(coprocess.name);
+          await buildSupplementaryProgram(coprocess.name, binaryName, buildDir, courseId, problemId);
+          io.File(buildDir + '/.coprocess').writeAsStringSync(binaryName);
+        }
       }
       final testsGenerator = opts.testsGenerator;
       if (testsGenerator.name.isNotEmpty) {
@@ -190,6 +194,35 @@ class SubmissionProcessor {
       problemTimeStampFile.writeAsStringSync(
           '${response.lastModified.toInt()}\n');
     }
+  }
+
+  Future<void> buildSupplementaryProgram(
+      String sourceName, String binaryName,
+      String buildDir, String courseId, String problemId
+      ) async {
+
+    bool useCxx = sourceName.endsWith('.cxx') || sourceName.endsWith('.cpp');
+    final compiler = useCxx ? compilersConfig.cxxCompiler : compilersConfig.cCompiler;
+    final baseOptions = useCxx ? compilersConfig.cxxBaseOptions : compilersConfig.cBaseOptions;
+
+    runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId));
+
+    final arguments = baseOptions + ['-o', binaryName, sourceName];
+    final process = await runner.start(
+      Submission(id: Int64(-1), problemId: problemId),
+      [compiler] + arguments,
+      workingDirectory: '/build',
+    );
+
+    bool compilerOk = await process.ok;
+    if (!compilerOk) {
+      String errorMessage = await process.outputAsString;
+      log.severe(
+          'cant build supplementary $sourceName: $compiler ${arguments.join(
+              ' ')}:\n$errorMessage\n');
+    }
+
+    runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)));
   }
 
   Future<void> buildSecurityContextObjects(SecurityContext securityContext,
