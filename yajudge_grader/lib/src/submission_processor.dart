@@ -12,6 +12,8 @@ import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
 import 'package:yaml/yaml.dart';
 
+import 'interactors.dart';
+
 class SubmissionProcessor {
   Submission submission;
   final AbstractRunner runner;
@@ -22,6 +24,8 @@ class SubmissionProcessor {
   final SecurityContext defaultSecurityContext;
   final CompilersConfig compilersConfig;
   final CourseManagementClient coursesService;
+  final InteractorFactory interactorFactory;
+
   String plainBuildTarget = '';
   String sanitizersBuildTarget = '';
   bool runTargetIsScript = false;
@@ -37,7 +41,7 @@ class SubmissionProcessor {
     this.overrideLimits,
     required this.defaultSecurityContext,
     required this.compilersConfig,
-  });
+  }): interactorFactory = InteractorFactory(locationProperties: locationProperties);
 
   Future<void> loadProblemData() async {
     final courseId = submission.course.dataId;
@@ -92,6 +96,18 @@ class SubmissionProcessor {
         String checkerOpts = opts.standardCheckerOpts;
         io.File(buildDir + '/.checker').writeAsStringSync(
             '=$checkerName\n$checkerOpts\n');
+      }
+      final interactor = opts.interactor;
+      if (interactor.name.isNotEmpty) {
+        io.File(buildDir + '/.interactor').writeAsStringSync(interactor.name);
+        io.File(buildDir + '/' + interactor.name)
+            .writeAsBytesSync(interactor.data);
+      }
+      final coprocess = opts.coprocess;
+      if (coprocess.name.isNotEmpty) {
+        io.File(buildDir + '/.coprocess').writeAsStringSync(coprocess.name);
+        io.File(buildDir + '/' + coprocess.name)
+            .writeAsBytesSync(coprocess.data);
       }
       final testsGenerator = opts.testsGenerator;
       if (testsGenerator.name.isNotEmpty) {
@@ -261,6 +277,30 @@ static void forbid(const char *name) {
   String problemChecker() {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
     return io.File(solutionPath+'/.checker').readAsStringSync().trim();
+  }
+
+  String interactorFilePath() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    final interactorLinkFile = io.File(solutionPath+'/.interactor');
+    if (interactorLinkFile.existsSync()) {
+      String interactorName = interactorLinkFile.readAsStringSync().trim();
+      return solutionPath + '/' + interactorName;
+    }
+    else {
+      return '';
+    }
+  }
+
+  String coprocessFilePath() {
+    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    final coprocessLinkFile = io.File(solutionPath+'/.coprocess');
+    if (coprocessLinkFile.existsSync()) {
+      String coprocessName = coprocessLinkFile.readAsStringSync().trim();
+      return solutionPath + '/' + coprocessName;
+    }
+    else {
+      return '';
+    }
   }
 
   int problemTestsCount() {
@@ -948,19 +988,35 @@ static void forbid(const char *name) {
       stdinData = problemStdinFile.readAsBytesSync();
       stdinFilePath = problemStdinFile.path;
     }
+
+    String interactorName = interactorFilePath();
+    AbstractInteractor? interactor;
+    Function? interactorShutdown;
+
+    if (interactorName.isNotEmpty) {
+      interactor = interactorFactory.getInteractor(interactorName);
+    }
+
+    String coprocessName = coprocessFilePath();
+
     final solutionProcess = await runner.start(
       submission,
       firstArgs + arguments,
       workingDirectory: wd,
       limits: limits,
       runTargetIsScript: runTargetIsScript,
+      coprocessFileName: coprocessName,
     );
 
-    if (stdinData.isNotEmpty) {
-      await solutionProcess.writeToStdin(stdinData);
+    if (interactor != null) {
+      interactorShutdown = await interactor.interact(solutionProcess, wd, stdinFilePath);
     }
-    await solutionProcess.closeStdin();
-
+    else {
+      if (stdinData.isNotEmpty) {
+        await solutionProcess.writeToStdin(stdinData);
+      }
+      await solutionProcess.closeStdin();
+    }
 
     bool timeoutExceed = false;
     Timer? timer;
@@ -978,6 +1034,9 @@ static void forbid(const char *name) {
     int exitStatus = await solutionProcess.exitCode;
     if (timer != null) {
       timer.cancel();
+    }
+    if (interactorShutdown != null) {
+      await interactorShutdown();
     }
 
     List<int> stdout = await solutionProcess.stdout;

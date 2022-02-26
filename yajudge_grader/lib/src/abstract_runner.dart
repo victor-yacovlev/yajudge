@@ -13,6 +13,7 @@ abstract class AbstractRunner {
     Map<String,String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript,
+    String coprocessFileName,
   });
 
   void killProcess(YajudgeProcess process);
@@ -25,7 +26,7 @@ abstract class AbstractRunner {
 }
 
 class YajudgeProcess {
-  final int realPid;
+  final Future<int> realPid;
   final String cgroupDirectory;
   final int stdoutSizeLimit;
   final int stderrSizeLimit;
@@ -120,6 +121,14 @@ class YajudgeProcess {
 
   Future<void> closeStdin() async {
     await ioProcess.stdin.close();
+  }
+
+  void attachStdoutConsumer(void listener(List<int> data)) {
+    if (_stdout.isNotEmpty) {
+      // in case if there are already something written to stdout
+      listener(_stdout);
+    }
+    ioProcess.stdout.listen(listener);
   }
 
 }

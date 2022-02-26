@@ -409,7 +409,9 @@ Future<void> toolMain(ArgResults mainArguments) async {
   if (subcommandArguments['limits'] != null) {
     String limitsFileName = subcommandArguments['limits'];
     final conf = loadYaml(io.File(limitsFileName).readAsStringSync());
-    limits = limitsFromYaml(conf);
+    if (conf is YamlMap) {
+      limits = limitsFromYaml(conf);
+    }
   }
 
   String graderName = 'default';

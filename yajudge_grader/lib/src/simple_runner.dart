@@ -49,6 +49,7 @@ class SimpleRunner extends AbstractRunner {
     Map<String, String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript = false,
+    String coprocessFileName = '',
       }) async
   {
     assert (arguments.length >= 1);
@@ -71,8 +72,10 @@ class SimpleRunner extends AbstractRunner {
       environment: environment,
     );
 
+    Future<int> realPid = Future.value(ioProcess.pid);
+
     return YajudgeProcess(
-      realPid: ioProcess.pid,
+      realPid: realPid,
       cgroupDirectory: '',
       ioProcess: ioProcess
     );

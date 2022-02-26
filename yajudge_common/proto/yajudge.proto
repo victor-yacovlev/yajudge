@@ -118,12 +118,13 @@ message GradingOptions {
   string              standard_checker      = 8; // named by ejudge checkers name
   string              standard_checker_opts = 9; // like ejudge checker environment
   File                custom_checker        = 10;// checker source file
-  File                custom_interactor     = 11;// interactor source file
+  File                interactor            = 11;// interactor source file
   repeated CodeStyle  code_styles           = 12;// just copied from parent course for convience
   FileSet             extra_build_files     = 13;
   bool                disable_valgrind      = 14;
   repeated string     disable_sanitizers    = 15;
   File                tests_generator       = 16;
+  File                coprocess             = 17;// supplementary program or script running the same unshare namespace
 
   SecurityContext     security_context      = 30;
 }

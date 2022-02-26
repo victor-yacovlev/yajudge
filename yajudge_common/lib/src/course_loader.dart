@@ -406,6 +406,7 @@ class CourseLoader {
     String checkerOpts = data['checker_options'] is String? data['checker_options'] : '';
     String customCheckerName = data['custom_checker'] is String? data['custom_checker'] : '';
     String interactorName = data['interactor'] is String? data['interactor'] : '';
+    String coprocessName = data['coprocess'] is String? data['coprocess'] : '';
     String testsGeneratorName = data['tests_generator'] is String? data['tests_generator'] : '';
     String compileOptions = data['compile_options'] is String? data['compile_options'] : '';
     String linkOptions = data['link_options'] is String? data['link_options'] : '';
@@ -440,6 +441,12 @@ class CourseLoader {
       updateProblemLastModified(problemId, generatorFile);
       testsGenerator = File(name: testsGeneratorName, data: generatorFile.readAsBytesSync());
     }
+    File coprocess = File();
+    if (coprocessName.isNotEmpty) {
+      final coprocessFile = io.File(problemPath(problemId)+'/'+coprocessName);
+      updateProblemLastModified(problemId, coprocessFile);
+      coprocess = File(name: coprocessName, data: coprocessFile.readAsBytesSync());
+    }
     FileSet privateFiles = FileSet();
     if (data['private_files'] is YamlList) {
       YamlList yamlList = data['private_files'];
@@ -462,7 +469,8 @@ class CourseLoader {
       standardChecker: checker,
       standardCheckerOpts: checkerOpts,
       customChecker: customChecker,
-      customInteractor: customInteractor,
+      interactor: customInteractor,
+      coprocess: coprocess,
       codeStyles: codeStyles,
       extraBuildFiles: FileSet(files: publicFiles.files + privateFiles.files),
       testCases: testCases,

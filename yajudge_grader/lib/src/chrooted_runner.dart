@@ -180,6 +180,7 @@ class ChrootedRunner extends AbstractRunner {
       'run_wrapper_stage03.sh',
       'run_wrapper_stage04.sh',
       'run_wrapper_stage05.sh',
+      'run_wrapper_stage05_coprocess.sh',
     ];
     for (final name in names) {
       final file = io.File(wrappersDir.path + '/' + name);
@@ -275,6 +276,7 @@ class ChrootedRunner extends AbstractRunner {
     Map<String,String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript = false,
+    String coprocessFileName = '',
   }) async {
     assert (arguments.length >= 1);
     String executable = arguments.first;
@@ -316,6 +318,21 @@ class ChrootedRunner extends AbstractRunner {
       }
     }
 
+    if (coprocessFileName.isNotEmpty) {
+      if (coprocessFileName.startsWith(problemDir.path)) {
+        coprocessFileName = coprocessFileName.substring(problemDir.path.length);
+      }
+      String coprocess = coprocessFileName;
+      if (coprocess.endsWith('.py')) {
+        coprocess = 'python3 ' + coprocess;
+      }
+      else if (coprocessFileName.endsWith('.sh')) {
+        coprocess = 'bash ' + coprocess;
+      }
+      environment['YAJUDGE_COPROCESS'] = coprocess;
+      environment['YAJUDGE_COPROCESS_NAME'] = path.basename(coprocessFileName);
+    }
+
     String lowerDir = locationProperties.osImageDir;
     if (problemDir.path != overlayUpperDir!.path) {
       lowerDir += ':' + problemDir.path;
@@ -341,36 +358,9 @@ class ChrootedRunner extends AbstractRunner {
     );
 
     final cgroupDirectory = '$cgroupPath/$cgroupSubmodule';
-
-    int pid = -1;
-    int maxTries = 100;
-    final delay = Duration(milliseconds: 50);
-    final cgroupProcs = io.File('$cgroupDirectory/cgroup.procs');
-    for (int i=0; i<maxTries; i++) {
-      if (cgroupProcs.existsSync()) {
-        break;
-      }
-      io.sleep(delay);
-    }
-    final cgroupProcLines = cgroupProcs.readAsLinesSync();
-    for (final line in cgroupProcLines) {
-      if (line.isEmpty)
-        continue;
-      final exeLink = io.Link('/proc/${line.trim()}/exe');
-      if (exeLink.existsSync()) {
-        try {
-          // process might finish too fast and link will not valid,
-          // so check it in try-catch block
-          String linkTarget = exeLink.targetSync();
-          if (path.basename(linkTarget) == path.basename(executable)) {
-            pid = int.parse(line.trim());
-            break;
-          }
-        }
-        catch (_) {
-        }
-      }
-    }
+    final realPidCompleter = Completer<int>();
+    _extractRealPid(cgroupDirectory, executable, realPidCompleter);
+    Future<int> realPid = realPidCompleter.future;
 
     int stdoutSizeLimit = -1;
     int stderrSizeLimit = -1;
@@ -386,10 +376,54 @@ class ChrootedRunner extends AbstractRunner {
     return YajudgeProcess(
       cgroupDirectory: cgroupDirectory,
       ioProcess: ioProcess,
-      realPid: pid,
+      realPid: realPid,
       stdoutSizeLimit: stdoutSizeLimit,
       stderrSizeLimit: stderrSizeLimit,
     );
+  }
+
+  Future _extractRealPid(String cgroupPath, String executableName, Completer<int> completer) async {
+    final maxSearchCGroupProcsTries = 100;
+    final maxChecksForCGroupContent = 100;
+    final delay = Duration(milliseconds: 50);
+    final cgroupProcs = io.File('$cgroupPath/cgroup.procs');
+    int pid = -1;
+    for (int k=0; k<maxChecksForCGroupContent; k++) {
+      for (int i=0; i<maxSearchCGroupProcsTries; i++) {
+        if (cgroupProcs.existsSync()) {
+          break;
+        }
+        io.sleep(delay);
+      }
+      final cgroupProcLines = cgroupProcs.readAsLinesSync();
+      if (cgroupProcLines.isEmpty) {
+        io.sleep(delay);
+        continue;
+      }
+      bool pidFound = false;
+      for (final line in cgroupProcLines) {
+        final exeLink = io.Link('/proc/${line.trim()}/exe');
+        if (exeLink.existsSync()) {
+          try {
+            // process might finish too fast and link will not valid,
+            // so check it in try-catch block
+            String linkTarget = exeLink.targetSync();
+            if (path.basename(linkTarget) == path.basename(executableName)) {
+              pid = int.parse(line.trim());
+              pidFound = true;
+              break;
+            }
+          }
+          catch (_) {
+            pidFound = true;
+          }
+        }
+      }
+      if (pidFound) {
+        break;
+      }
+    }
+    completer.complete(pid);
   }
 
   @override
@@ -417,6 +451,15 @@ class ChrootedRunner extends AbstractRunner {
   @override
   void releaseDirectoryForSubmission(Submission submission) {
     removeSubmissionCgroup(submission);
+
+    // clean temporary directories and files
+    final workdirWork = io.Directory(overlayWorkDir!.path + '/work');
+    if (workdirWork.existsSync()) {
+      io.Process.runSync('rmdir', [overlayWorkDir!.path + '/work']);
+    }
+    if (workdirWork.existsSync()) {
+      io.Process.runSync('rmdir', [overlayWorkDir!.path]);
+    }
   }
 
   @override
