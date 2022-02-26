@@ -1,0 +1,24 @@
+[Unit]
+Description=Envoy service for Yajudge
+After=network.target
+
+[Service]
+Type=exec
+LogsDirectory=yajudge
+RuntimeDirectory=yajudge
+RuntimeDirectoryMode=0770
+LogsDirectoryMode=0770
+ExecStart=bash -c '/usr/bin/envoy --config-path /etc/yajudge/envoy.yaml --log-path /var/log/yajudge/envoy.log | tee'
+ExecStopPost=/bin/rm -f /run/yajudge/envoy.pid
+PIDFile=/run/yajudge/envoy.pid
+
+User=yajudge
+Group=yajudge
+Slice=yajudge.slice
+
+Restart=on-failure
+RestartSec=5
+
+
+[Install]
+WantedBy=multi-user.target

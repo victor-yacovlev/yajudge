@@ -24,7 +24,10 @@ deps: .packages
 install: bin/yajudge-master yajudge-master.service conf/master.yaml
 	$(INSTALL) -D bin/yajudge-master $(PREFIX)/bin/yajudge-master
 	$(INSTALL) -D -m 0644 yajudge-master.service $(ETC)/systemd/system/yajudge-master.service
+	$(INSTALL) -D -m 0644 yajudge-envoy.service $(ETC)/systemd/system/yajudge-envoy.service
+	systemctl daemon-reload
 	if [ -f $(ETC)/yajudge/master.yaml ]; then $(INSTALL) -m 0644 -D conf/master.yaml $(ETC)/yajudge/master.yaml.new; else $(INSTALL) -D -m 0644 conf/master.yaml $(ETC)/yajudge/master.yaml; fi
+	if [ -f $(ETC)/yajudge/envoy.yaml ]; then $(INSTALL) -m 0644 -D conf/envoy.yaml $(ETC)/yajudge/envoy.yaml.new; else $(INSTALL) -D -m 0644 conf/envoy.yaml $(ETC)/yajudge/envoy.yaml; fi
 	if [ ! -d /var/log/yajudge ]; then $(MAKEDIRS) /var/log/yajudge; fi
 	chown $(USER):$(USER) /var/log/yajudge
 	chmod 0770 /var/log/yajudge

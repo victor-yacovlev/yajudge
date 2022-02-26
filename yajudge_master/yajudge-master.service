@@ -24,6 +24,7 @@ TasksMax=100
 
 User=yajudge
 Group=yajudge
+Slice=yajudge.slice
 
 Restart=on-failure
 RestartSec=5
