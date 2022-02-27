@@ -88,14 +88,17 @@ class SubmissionProcessor {
       }
       final customChecker = opts.customChecker;
       if (customChecker.name.isNotEmpty) {
-        io.File(buildDir + '/' + customChecker.name).writeAsBytesSync(
-            customChecker.data);
-        io.File(buildDir + '/.checker').writeAsStringSync(customChecker.name);
+        io.File(buildDir + '/' + customChecker.name)
+            .writeAsBytesSync(customChecker.data);
+        String checkerName = opts.customChecker.name;
+        String checkerOpts = opts.standardCheckerOpts;
+        io.File(buildDir + '/.checker')
+            .writeAsStringSync('$checkerName\n$checkerOpts\n');
       } else {
         String checkerName = opts.standardChecker;
         String checkerOpts = opts.standardCheckerOpts;
-        io.File(buildDir + '/.checker').writeAsStringSync(
-            '=$checkerName\n$checkerOpts\n');
+        io.File(buildDir + '/.checker')
+            .writeAsStringSync('=$checkerName\n$checkerOpts\n');
       }
       final interactor = opts.interactor;
       if (interactor.name.isNotEmpty) {
@@ -1186,7 +1189,7 @@ static void forbid(const char *name) {
       log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
       resultCheckerMessage = runChecker(arguments,
           stdinData==null? [] : stdinData, stdinFilePath,
-          stdout, stdoutFile.path,
+          stdout, stdoutFilePath,
           referenceStdout, referencePath,
           wd);
       final checkerOutFile = io.File('${runsDir.path}/$testBaseName.checker');
