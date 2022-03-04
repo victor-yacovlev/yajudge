@@ -1,6 +1,6 @@
 [Unit]
-Description=Yajudge master service
-After=network.target postgresql.service
+Description=Yajudge master instance service
+Requires=postgresql.service yajudge-envoy@%i.service
 
 [Service]
 Type=exec
@@ -12,9 +12,9 @@ RuntimeDirectoryMode=0770
 StateDirectoryMode=0770
 LogsDirectoryMode=0770
 
-ExecStart=/usr/bin/yajudge-master -C /etc/yajudge/master.yaml -P /run/yajudge/master.pid -L /var/log/yajudge/master.log daemon
-ExecStopPost=/bin/rm -f /run/yajudge/master.pid
-PIDFile=$RUNTIME_DIRECTORY/master.pid
+ExecStart=/usr/bin/yajudge-master -C /etc/yajudge/master-%i.yaml -P /run/yajudge/master-%i.pid -L /var/log/yajudge/master-%i.log daemon
+ExecStopPost=/bin/rm -f /run/yajudge/master-%i.pid
+PIDFile=/run/yajudge/master-%i.pid
 
 MemoryAccounting=yes
 MemoryMax=1G
