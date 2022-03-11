@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart' as grpc;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tuple/tuple.dart';
 import '../controllers/courses_controller.dart';
+import '../widgets/source_view_widget.dart';
 import 'screen_course_problem.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
@@ -278,7 +278,7 @@ class SubmissionScreenState extends BaseScreenState {
         } catch (_) {
         }
         if (fileContent != null) {
-          contents.add(createFilePreview(context, fileContent));
+          contents.add(createFilePreview(context, fileContent, true));
         }
         else {
           contents.add(SizedBox(height: 20));
@@ -340,11 +340,11 @@ class SubmissionScreenState extends BaseScreenState {
     }
     if (fileContent != null) {
       if (fileContent.length <= maxFileSizeToShow) {
-        contents.add(createFilePreview(context, fileContent));
+        contents.add(createFilePreview(context, fileContent, false));
       }
       else {
         contents.add(Text('Вывод слишком большой, отображается только первые ${maxFileSizeToShow} символов'));
-        contents.add(createFilePreview(context, fileContent.substring(0, maxFileSizeToShow)));
+        contents.add(createFilePreview(context, fileContent.substring(0, maxFileSizeToShow), false));
       }
     }
     else {
@@ -369,32 +369,8 @@ class SubmissionScreenState extends BaseScreenState {
     return TestResult();
   }
 
-  Widget createFilePreview(BuildContext context, String data) {
-    final theme = Theme.of(context);
-    final codeTextStyle = theme.textTheme.bodyText1!
-        .merge(GoogleFonts.ptMono())
-        .merge(TextStyle(letterSpacing: 1.1));
-    double screenWidth = MediaQuery.of(context).size.width;
-    double horizontalMargins = (screenWidth - 950) / 2;
-    if (horizontalMargins < 0) {
-      horizontalMargins = 0;
-    }
-    final contentView = SelectableText(data, style: codeTextStyle);
-    final outerBox = Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.all(Radius.circular(10)),
-      ),
-      margin: EdgeInsets.fromLTRB(8, 4, 8, 20),
-      padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
-      constraints: BoxConstraints(
-        minWidth: screenWidth - horizontalMargins * 1,
-        minHeight: 50,
-      ),
-      child: contentView,
-    );
-    return outerBox;
+  Widget createFilePreview(BuildContext context, String data, bool withLineNumbers) {
+    return SourceViewWidget(text: data, withLineNumbers: withLineNumbers);
   }
 
   @override
