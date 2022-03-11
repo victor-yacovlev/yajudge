@@ -150,7 +150,8 @@ class MasterService {
 
   void shutdown(String reason, [bool error = false]) async {
     log.info('shutting down due to $reason');
-    await grpcServer.shutdown();
+    grpcServer.shutdown();
+    io.sleep(Duration(seconds: 2));
     log.info('shutdown');
     io.exit(error? 1 : 0);
   }
