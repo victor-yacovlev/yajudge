@@ -98,7 +98,7 @@ class SubmissionScreenState extends BaseScreenState {
 
   void _loadSubmission() {
     final service = ConnectionController.instance!.submissionsService;
-    service.getSubmissionResult(Submission(id: screen.submissionId))
+    service.getSubmissionResult(Submission(id: screen.submissionId, course: _course, user: screen.loggedUser))
         .then((submission) {
           _updateSubmission(submission);
           _subscribeToNotifications();

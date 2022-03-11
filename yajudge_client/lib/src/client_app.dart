@@ -1,7 +1,7 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:yajudge_client/src/screens/screen_submission.dart';
+import 'screens/screen_submission.dart';
 import 'screens/screen_course_problem.dart';
 import 'screens/screen_error.dart';
 import 'controllers/connection_controller.dart';
