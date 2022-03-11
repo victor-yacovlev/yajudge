@@ -21,7 +21,7 @@ Delegate=yes
 
 ExecStart=/usr/bin/yajudge-grader -N %i -C /etc/yajudge/grader.yaml -P /run/yajudge/grader-%i.pid -L /var/log/yajudge/grader-%i.log daemon
 ExecStopPost=/bin/rm -f /run/yajudge/grader-%i.pid
-PIDFile=$RUNTIME_DIRECTORY/grader-%i.pid
+PIDFile=/run/yajudge/grader-%i.pid
 
 Restart=on-failure
 RestartSec=5
