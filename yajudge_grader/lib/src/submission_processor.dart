@@ -1122,7 +1122,8 @@ static void forbid(const char *name) {
         String part = solutionFile.name.replaceAll('.', r'\.');
         patternParts.add(part);
       }
-      final rxRuntimeError = RegExp('('+patternParts.join('|')+r'):\d+:\d+:\s+runtime\s+error:');
+      // final rxRuntimeError = RegExp('('+patternParts.join('|')+r'):\d+:\d+:\s+runtime\s+error:');
+      final rxRuntimeError = RegExp(r'==\d+==ERROR:\s+.+Sanitizer:');
       for (final line in errLines) {
         final match = rxRuntimeError.matchAsPrefix(line);
         if (match != null) {
