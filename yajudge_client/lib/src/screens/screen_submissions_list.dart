@@ -118,7 +118,7 @@ class SubmissionsListScreenState extends BaseScreenState {
               _courseData = value;
             }
             _populateCourseProblems();
-            _sendListQuery();
+            _sendListQuery(query);
       });
     }
   }
@@ -144,57 +144,74 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _setFilterProblemId(String? problemId) {
     bool changed = problemId != query.problemIdFilter;
+    String id = '';
+    if (problemId!=null) {
+      id = problemId;
+    }
+    final newQuery = query.copyWith((s) {
+      s.problemIdFilter = id;
+    });
     setState(() {
-      String id = '';
-      if (problemId!=null) {
-        id = problemId;
-      }
-      query = query.copyWith((s) {
-        s.problemIdFilter = id;
-      });
+      query = newQuery;
     });
     if (changed) {
-      _sendListQuery();
+      _sendListQuery(newQuery);
     }
   }
 
   void _setFilterStatus(SolutionStatus? status) {
     bool changed = status != query.statusFilter;
+    if (status == null) {
+      status = SolutionStatus.ANY_STATUS_OR_NULL;
+    }
+    final newQuery = query.copyWith((s) {
+      s.statusFilter = status!;
+    });
     setState(() {
-      if (status == null) {
-        status = SolutionStatus.ANY_STATUS_OR_NULL;
-      }
-      query = query.copyWith((s) {
-        s.statusFilter = status!;
-      });
+      query = newQuery;
     });
     if (changed) {
-      _sendListQuery();
+      _sendListQuery(newQuery);
     }
   }
 
   void _setShowMineSubmissions(bool? value) {
     bool changed = value != query.showMineSubmissions;
+    final newQuery = query.copyWith((s) { s.showMineSubmissions = value!; });
     setState(() {
-      query = query.copyWith((s) { s.showMineSubmissions = value!; });
+      query = newQuery;
     });
     if (changed) {
-      _sendListQuery();
+      _sendListQuery(newQuery);
     }
   }
 
   void _processSearch(String? userName) {
-    if (userName != null) {
-      setState(() {
-        query = query.copyWith((s) {
-          s.nameQuery = userName.trim();
-        });
+    if (userName == null) {
+      if (_nameEditController.text.trim().isNotEmpty) {
+        userName = _nameEditController.text.trim();
+      }
+    }
+    SubmissionListQuery newQuery = query.copyWith((s) {
+      if (userName != null) {
+        s.nameQuery = userName.trim();
+      }
+      s.submissionId = Int64(0);
+    });
+    int? submissionId = int.tryParse(newQuery.nameQuery);
+    if (submissionId != null && submissionId > 0) {
+      newQuery = newQuery.copyWith((s) {
+        s.submissionId = Int64(submissionId);
+        s.nameQuery = '';
       });
     }
-    _sendListQuery();
+    setState(() {
+      query = newQuery;
+    });
+    _sendListQuery(newQuery);
   }
 
-  void _sendListQuery() {
+  void _sendListQuery(SubmissionListQuery query) {
     final submissionsService = ConnectionController.instance!.submissionsService;
     final futureList = submissionsService.getSubmissionList(query);
     futureList.then(_setSubmissionsList);
@@ -435,7 +452,7 @@ class SubmissionsListScreenState extends BaseScreenState {
           0: FixedColumnWidth(50),
           1: FixedColumnWidth(180),
           2: FlexColumnWidth(),
-          3: FixedColumnWidth(150),
+          3: FixedColumnWidth(180),
           4: FixedColumnWidth(150),
         },
         children: [headerRow] + tableItems,
