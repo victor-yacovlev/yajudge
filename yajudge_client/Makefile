@@ -1,3 +1,4 @@
+DART=dart
 FLUTTER=flutter
 PUB=dart pub
 RM=rm
@@ -23,7 +24,8 @@ macos/Podfile.lock:
 	cd macos && pod install
 
 web-client: deps
-	$(FLUTTER) build web
+	$(FLUTTER) build web --release
+	$(DART) run lib/download_3rdparty.dart
 
 deps:
 	$(FLUTTER) pub get
