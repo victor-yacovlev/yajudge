@@ -25,10 +25,11 @@ macos/Podfile.lock:
 
 web-client: deps
 	$(FLUTTER) build web --release
-	$(DART) run lib/download_3rdparty.dart
+	bash fix-issue-70101.sh
 
 deps:
 	$(FLUTTER) pub get
+
 
 clean:
 	$(RM) .dart_tool || true
