@@ -304,7 +304,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     }
     if (request.submissionId > 0) {
       // return just one submission if exists
-      queryFilter = ' and submissions.id=%id ';
+      queryFilter = ' and submissions.id=@id ';
       queryValues['id'] = request.submissionId.toInt();
     }
     else {
