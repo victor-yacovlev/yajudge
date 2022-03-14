@@ -154,7 +154,20 @@ class SubmissionScreenState extends BaseScreenState {
       return;
     }
     setState(() {
-      _submission = submission;
+      if (_submission == null) {
+        _submission = submission;
+      }
+      else {
+        _submission = _submission!.copyWith((s) {
+          s.status = submission.status;
+          s.graderName = submission.graderName;
+          s.buildErrorLog = submission.buildErrorLog;
+          s.graderScore = submission.graderScore;
+          s.styleErrorLog = submission.styleErrorLog;
+          s.testResults.clear();
+          s.testResults.addAll(submission.testResults);
+        });
+      }
       _problemData = findProblemById(_courseData!, _submission!.problemId);
       _problemMetadata = findProblemMetadataById(_courseData!, _submission!.problemId);
     });
