@@ -14,9 +14,13 @@ wasmLocation=$(grep canvaskit-wasm build/web/main.dart.js | $SED -e 's/.*https/h
 echo "Downloading WASM from $wasmLocation"
 curl -o build/web/canvaskit.js "$wasmLocation/canvaskit.js"
 curl -o build/web/canvaskit.wasm "$wasmLocation/canvaskit.wasm"
+curl -o "build/web/Roboto-Regular.ttf" "https://fonts.gstatic.com/s/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf"
+curl -o "build/web/Noto-Sans-Symbols.css" "https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols"
+curl -o "build/web/Noto-Color-Emoji-Compat.css" "https://fonts.googleapis.com/css2?family=Noto+Color+Emoji+Compat"
+
 $SED -e "s!$wasmLocation!.!" \
- # -e "s!https://fonts.gstatic.com/s/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf!./assets/packages/amos_mobile_widgets/assets/google_fonts/Roboto-Regular.ttf!" \
- # -e "s!https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols!./assets/assets/css/Noto-Sans-Symbols.css!" \
- # -e "s!https://fonts.googleapis.com/css2?family=Noto+Color+Emoji+Compat!./assets/assets/css/Noto-Color-Emoji-Compat.css!" \
+ -e "s!https://fonts.gstatic.com/s/roboto/v20/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf!./Roboto-Regular.ttf!" \
+ -e "s!https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols!./Noto-Sans-Symbols.css!" \
+ -e "s!https://fonts.googleapis.com/css2?family=Noto+Color+Emoji+Compat!./Noto-Color-Emoji-Compat.css!" \
  -i \
  build/web/main.dart.js
