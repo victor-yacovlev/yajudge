@@ -424,6 +424,16 @@ message TextReadingDone {
   int64       time      = 6;  // in seconds from page load to leave
 }
 
+message CourseProgressRequest {
+  Course      course = 1;
+  string      name_filter = 2;
+}
+
+message CourseProgressResponse {
+  repeated CourseStatus entries = 1;
+}
+
+
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
   rpc EnrollUser(Enroll) returns (Course) {}
@@ -432,6 +442,8 @@ service CourseManagement {
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
   rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
   rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
+
+  rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse) {}
 }
 
 message GraderProperties {

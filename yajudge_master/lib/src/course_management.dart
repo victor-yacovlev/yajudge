@@ -298,4 +298,59 @@ class CourseManagementService extends CourseManagementServiceBase {
     return enrollments;
   }
 
+  @override
+  Future<CourseProgressResponse> getProgress(ServiceCall call, CourseProgressRequest request) async {
+    int courseId = request.course.id.toInt();
+    final enrolledUsersRows = connection.query(
+      '''
+      select users_id from enrollments
+      where courses_id=@course_id and role=@role_student
+      ''',
+      substitutionValues: {
+        'course_id': courseId,
+        'role_student': Role.ROLE_STUDENT.value
+      },
+    );
+    List<CourseStatus> statuses = [];
+    for (final userRow in enrolledUsersRows as List<dynamic>) {
+      int userId = (userRow as List<dynamic>).single;
+      final user = await parent.userManagementService.getUserById(Int64(userId));
+      if (request.nameFilter.isNotEmpty) {
+        final filter = request.nameFilter.trim().toUpperCase();
+        bool test1 = user.lastName.toUpperCase().contains(filter);
+        bool test2 = user.firstName.toUpperCase().contains(filter);
+        bool test3 = (user.firstName + ' ' + user.lastName).toUpperCase().contains(filter);
+        bool test4 = (user.lastName + ' ' + user.firstName).toUpperCase().contains(filter);
+        bool test5 = user.groupName.toUpperCase().contains(filter);
+        bool matched = test1 || test2 || test3 || test4 || test5;
+        if (!matched) {
+          continue;
+        }
+      }
+      final statusRequest = CheckCourseStatusRequest(user: user, course: request.course);
+      final statusResponse = await parent.submissionManagementService.checkCourseStatus(call, statusRequest);
+      statuses.add(statusResponse);
+    }
+    final statusComparator = (CourseStatus a, CourseStatus b) {
+      if (a.user.groupName == b.user.groupName) {
+        if (a.user.lastName == b.user.lastName) {
+          if (a.user.firstName == b.user.firstName) {
+            return a.user.midName.compareTo(b.user.midName);
+          }
+          else {
+            return a.user.firstName.compareTo(b.user.firstName);
+          }
+        }
+        else {
+          return a.user.lastName.compareTo(b.user.lastName);
+        }
+      }
+      else {
+        return a.user.groupName.compareTo(b.user.groupName);
+      }
+    };
+    statuses.sort(statusComparator);
+    return CourseProgressResponse(entries: statuses);
+  }
+
 }
