@@ -313,6 +313,7 @@ class SubmissionScreenState extends BaseScreenState {
     final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
     final maxFileSizeToShow = 10 * 1024;
     String? fileContent;
+    int brokenTestNumber = 0;
     if (_submission!.status == SolutionStatus.COMPILATION_ERROR ) {
       contents.add(Container(
           padding: fileHeadPadding,
@@ -328,28 +329,31 @@ class SubmissionScreenState extends BaseScreenState {
       fileContent = _submission!.styleErrorLog;
     }
     else if (_submission!.status == SolutionStatus.RUNTIME_ERROR) {
-      contents.add(Container(
-          padding: fileHeadPadding,
-          child: Text('Ошибка выполнения:', style: fileHeadStyle))
-      );
       final brokenTestCase = findFirstBrokenTest();
       fileContent = '=== stdout:\n' + brokenTestCase.stdout + '\n\n=== stderr:\n' + brokenTestCase.stderr;
+      brokenTestNumber = brokenTestCase.testNumber.toInt();
+      contents.add(Container(
+          padding: fileHeadPadding,
+          child: Text('Ошибка выполнения на тесте $brokenTestNumber:', style: fileHeadStyle))
+      );
     }
     else if (_submission!.status == SolutionStatus.VALGRIND_ERRORS) {
-      contents.add(Container(
-          padding: fileHeadPadding,
-          child: Text('Ошибки памяти, обраруженные Valgrind:', style: fileHeadStyle))
-      );
       final brokenTestCase = findFirstBrokenTest();
       fileContent = brokenTestCase.valgrindOutput;
-    }
-    else if (_submission!.status == SolutionStatus.WRONG_ANSWER) {
+      brokenTestNumber = brokenTestCase.testNumber.toInt();
       contents.add(Container(
           padding: fileHeadPadding,
-          child: Text('Неверный ответ, вывод чекера:', style: fileHeadStyle))
+          child: Text('Ошибки памяти, обнаруженные Valgrind на тесте $brokenTestNumber:', style: fileHeadStyle))
       );
+    }
+    else if (_submission!.status == SolutionStatus.WRONG_ANSWER) {
       final brokenTestCase = findFirstBrokenTest();
       fileContent = brokenTestCase.checkerOutput;
+      brokenTestNumber = brokenTestCase.testNumber.toInt();
+      contents.add(Container(
+          padding: fileHeadPadding,
+          child: Text('Неверный ответ, вывод чекера на тесте $brokenTestNumber:', style: fileHeadStyle))
+      );
     }
     if (fileContent != null) {
       if (fileContent.length <= maxFileSizeToShow) {
