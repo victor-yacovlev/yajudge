@@ -427,12 +427,22 @@ message TextReadingDone {
 message CourseProgressRequest {
   Course      course = 1;
   string      name_filter = 2;
+  bool        include_problem_details = 3;
+}
+
+message CourseStatusEntry {
+  User                    user = 1;
+  repeated ProblemStatus  statuses = 2;
+  repeated double         scores = 3;
+  bool                    course_completed = 4;
+  double                  score_got = 5;
+  double                  score_max = 6;
 }
 
 message CourseProgressResponse {
-  repeated CourseStatus entries = 1;
+  repeated CourseStatusEntry  entries = 1;
+  repeated ProblemData        problems = 2;
 }
-
 
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}

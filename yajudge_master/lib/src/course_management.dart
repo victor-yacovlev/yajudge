@@ -350,7 +350,38 @@ class CourseManagementService extends CourseManagementServiceBase {
       }
     };
     statuses.sort(statusComparator);
-    return CourseProgressResponse(entries: statuses);
+    List<ProblemData> problems = [];
+    if (request.includeProblemDetails) {
+      final courseData = await getCoursePublicContent(call, CourseContentRequest(courseDataId: request.course.dataId));
+      for (final section in courseData.data.sections) {
+        for (final lesson in section.lessons) {
+          problems.addAll(lesson.problems);
+        }
+      }
+    }
+    List<CourseStatusEntry> entries = [];
+    for (final status in statuses) {
+      double scoreGot = status.scoreGot;
+      double scoreMax = status.scoreMax;
+      bool courseCompleted = status.completed;
+      List<ProblemStatus> problemStatuses = [];
+      if (request.includeProblemDetails) {
+        for (final section in status.sections) {
+          for (final lesson in section.lessons) {
+            problemStatuses.addAll(lesson.problems);
+          }
+        }
+      }
+      final entry = CourseStatusEntry(
+        user: status.user,
+        scoreGot: scoreGot,
+        scoreMax: scoreMax,
+        courseCompleted: courseCompleted,
+        statuses: problemStatuses,
+      );
+      entries.add(entry);
+    }
+    return CourseProgressResponse(entries: entries, problems: problems);
   }
 
 }
