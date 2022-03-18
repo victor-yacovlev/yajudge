@@ -12,6 +12,7 @@ import '../utils/utils.dart';
 import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 class SubmissionScreen extends BaseScreen {
   final Course? course;
@@ -193,15 +194,21 @@ class SubmissionScreenState extends BaseScreenState {
           padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
       );
     };
-    final makeText = (String text) {
-      return Text(text, style: theme.textTheme.bodyText1!.merge(TextStyle(fontSize: 16)));
-    };
-    final addText = (String text) {
-      contents.add(
-        wrapIntoPadding(makeText(text))
+    final makeText = (String text, [Color? color]) {
+      return Text(text,
+          style: theme.textTheme.bodyText1!.merge(TextStyle(
+            fontSize: 16,
+            color: color,
+          ))
       );
     };
-    String statusName = _submission!.status.name;
+    final addText = (String text, [Color? color]) {
+      contents.add(
+        wrapIntoPadding(makeText(text, color))
+      );
+    };
+    String statusName = statusMessageText(_submission!.status, false);
+    Color statusColor = statusMessageColor(context, _submission!.status);
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
     final whoCanRejudge = [
       Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
@@ -209,7 +216,7 @@ class SubmissionScreenState extends BaseScreenState {
     if (screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanRejudge.contains(screen.role)) {
       contents.add(wrapIntoPadding(Row(
         children: [
-          makeText('Статус: $statusName'),
+          wrapIntoPadding(Row(children: [makeText('Статус: '), makeText(statusName, statusColor)])),
           Spacer(),
           ElevatedButton(
             onPressed: _doRejudge,
@@ -447,6 +454,95 @@ class SubmissionScreenState extends BaseScreenState {
     );
   }
 
+}
 
+const StatusesFull = {
+  SolutionStatus.ANY_STATUS_OR_NULL: 'Любой статус',
+  SolutionStatus.PENDING_REVIEW: 'Ожидает ревью',
+  SolutionStatus.OK: 'Решение зачтено',
+  SolutionStatus.PLAGIARISM_DETECTED: 'Подозрение на плагиат',
+  SolutionStatus.CODE_REVIEW_REJECTED: 'Отправлено на доработку',
+  SolutionStatus.DEFENCE_FAILED: 'Неуспешная защита',
+  SolutionStatus.SUBMITTED: 'В очереди на тестирование',
+  SolutionStatus.GRADER_ASSIGNED: 'Тестируется',
+  SolutionStatus.DISQUALIFIED: 'Дисквалификация',
+  SolutionStatus.COMPILATION_ERROR: 'Ошибка компиляции',
+  SolutionStatus.STYLE_CHECK_ERROR: 'Ошибка форматирования',
+  SolutionStatus.RUNTIME_ERROR: 'Ошибка выполнения',
+  SolutionStatus.WRONG_ANSWER: 'Неправильный ответ',
+  SolutionStatus.VALGRIND_ERRORS: 'Ошибки Valgrind',
+  SolutionStatus.TIME_LIMIT: 'Лимит времени',
+};
 
+const StatusesShort = {
+  SolutionStatus.ANY_STATUS_OR_NULL: 'ANY',
+  SolutionStatus.SUBMITTED: 'NEW',
+  SolutionStatus.PENDING_REVIEW: 'PR',
+  SolutionStatus.GRADER_ASSIGNED: '...',
+  SolutionStatus.DISQUALIFIED: 'DISQ',
+  SolutionStatus.COMPILATION_ERROR: 'CE',
+  SolutionStatus.STYLE_CHECK_ERROR: 'STY',
+  SolutionStatus.RUNTIME_ERROR: 'RE',
+  SolutionStatus.WRONG_ANSWER: 'WA',
+  SolutionStatus.VALGRIND_ERRORS: 'VLG',
+  SolutionStatus.TIME_LIMIT: 'TL',
+  SolutionStatus.PLAGIARISM_DETECTED: 'CHEAT?',
+  SolutionStatus.CODE_REVIEW_REJECTED: 'REJ',
+  SolutionStatus.DEFENCE_FAILED: '!DEF',
+};
+
+String statusMessageText(SolutionStatus status, bool shortVariant) {
+  // TODO implement i18n for non-Russian languages
+  String message = '';
+
+  if (!shortVariant) {
+    if (StatusesFull.containsKey(status)) {
+      message = StatusesFull[status]!;
+    }
+    else {
+      message = status.name;
+    }
+  }
+  else {
+    if (StatusesShort.containsKey(status)) {
+      message = StatusesShort[status]!;
+    }
+    else {
+      message = status.name.substring(0, math.min(4, status.name.length)).toUpperCase();
+    }
+  }
+  return message;
+}
+
+Color statusMessageColor(BuildContext buildContext, SolutionStatus status) {
+  const okStatuses = {
+    SolutionStatus.OK,
+  };
+  const needActionStatuses = {
+    SolutionStatus.PLAGIARISM_DETECTED,
+    SolutionStatus.PENDING_REVIEW,
+    SolutionStatus.ACCEPTABLE,
+  };
+  const badStatuses = {
+    SolutionStatus.CODE_REVIEW_REJECTED,
+    SolutionStatus.DEFENCE_FAILED,
+    SolutionStatus.WRONG_ANSWER,
+    SolutionStatus.RUNTIME_ERROR,
+    SolutionStatus.VALGRIND_ERRORS,
+    SolutionStatus.TIME_LIMIT,
+    SolutionStatus.COMPILATION_ERROR,
+    SolutionStatus.STYLE_CHECK_ERROR,
+  };
+  final theme = Theme.of(buildContext);
+  Color color = theme.textTheme.bodyText1!.color!;
+  if (okStatuses.contains(status)) {
+    color = Colors.green;
+  }
+  else if (badStatuses.contains(status)) {
+    color = theme.errorColor;
+  }
+  else if (needActionStatuses.contains(status)) {
+    color = theme.primaryColor;
+  }
+  return color;
 }

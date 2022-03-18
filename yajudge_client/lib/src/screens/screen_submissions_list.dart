@@ -1,14 +1,15 @@
+import 'dart:math';
+
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/src/generated/yajudge.pb.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-
+import 'package:intl/intl.dart';
 import '../controllers/connection_controller.dart';
 import '../controllers/courses_controller.dart';
 import 'screen_base.dart';
-import 'screen_course_problem.dart';
 import 'screen_submission.dart';
 
 class SubmissionsListScreen extends BaseScreen {
@@ -31,6 +32,10 @@ class SubmissionsListScreen extends BaseScreen {
   }
 }
 
+const AboutNarrowWidthThereshold = 850;
+const NarrowWidthThereshold = 685;
+
+
 class SubmissionsListScreenState extends BaseScreenState {
 
   final SubmissionsListScreen screen;
@@ -41,24 +46,6 @@ class SubmissionsListScreenState extends BaseScreenState {
   List<Tuple2<String,String>> _courseProblems = [];
   TextEditingController _nameEditController = TextEditingController();
   List<SubmissionListEntry> _submissionEntries = [];
-
-  final statuses = <String,SolutionStatus>{
-    'Любой статус': SolutionStatus.ANY_STATUS_OR_NULL,
-    'Решение зачтено': SolutionStatus.OK,
-    'Ожидает ревью': SolutionStatus.PENDING_REVIEW,
-    'Защита': SolutionStatus.ACCEPTABLE,
-    'Неправильный ответ': SolutionStatus.WRONG_ANSWER,
-    'Ошибка выполнения': SolutionStatus.RUNTIME_ERROR,
-    'Ошибки Valgrind': SolutionStatus.VALGRIND_ERRORS,
-    'Ошибка компиляции': SolutionStatus.COMPILATION_ERROR,
-    'Ошибка форматирования': SolutionStatus.STYLE_CHECK_ERROR,
-    'Тестируется': SolutionStatus.GRADER_ASSIGNED,
-    'Подозрение на плагиат': SolutionStatus.PLAGIARISM_DETECTED,
-    'Отправлено на доработку': SolutionStatus.CODE_REVIEW_REJECTED,
-    'Дисквалифицированы': SolutionStatus.DISQUALIFIED,
-    'Неуспешная защита': SolutionStatus.DEFENCE_FAILED,
-    'Новые посылки': SolutionStatus.SUBMITTED,
-  };
 
   SubmissionsListScreenState({
     required this.screen,
@@ -256,7 +243,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     final styleTheme = Theme.of(context);
     final textTheme = styleTheme.primaryTextTheme;
     bool first = true;
-    for (final entry in statuses.entries) {
+    for (final entry in StatusesFull.entries) {
       Color textColor;
       if (first) {
         textColor = styleTheme.hintColor;
@@ -266,12 +253,12 @@ class SubmissionsListScreenState extends BaseScreenState {
         textColor = Colors.black87;
       }
       final itemText = Text(
-        entry.key,
+        entry.value,
         style: textTheme.labelLarge!.merge(TextStyle(color: textColor)),
       );
       menuItems.add(DropdownMenuItem<SolutionStatus>(
         child: itemText,
-        value: entry.value,
+        value: entry.key,
       ));
     }
     return Container(
@@ -371,9 +358,19 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   @protected
   Widget buildCentralWidget(BuildContext context) {
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final narrow = screenWidth < NarrowWidthThereshold;
+    final aboutNarrow = screenWidth < AboutNarrowWidthThereshold;
+
     if (_courseData.id.isEmpty) {
       return Center(child: Text('Загрузка данных...'));
     }
+    final formatDateTime = (Int64 timestamp) {
+      DateFormat formatter = DateFormat(aboutNarrow? 'MM/dd, HH:mm' : 'yyyy-MM-dd, HH:mm:ss');
+      DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt() * 1000);
+      return formatter.format(dateTime);
+    };
     Widget searchBox = _createSearchBoxWidget(context);
     Widget resultsView;
     if (_submissionEntries.isEmpty) {
@@ -383,11 +380,22 @@ class SubmissionsListScreenState extends BaseScreenState {
       List<TableRow> tableItems = [];
       for (final entry in _submissionEntries) {
         String id = '${entry.submissionId}';
-        String dateTime = formatDateTime(entry.timestamp.toInt());
-        String name = '${entry.sender.lastName} ${entry.sender.firstName} ${entry.sender.midName}'.trim();
+        String dateTime = formatDateTime(entry.timestamp);
+        String name = '${entry.sender.lastName} ${entry.sender.firstName}';
+        if (!aboutNarrow) {
+          name += ' ${entry.sender.midName.trim()}';
+        }
         String problemId = entry.problemId;
-        String status = entry.status.toString();
-        final makeClickableCellFromText = (String text) {
+        String status = statusMessageText(entry.status, narrow);
+        Color statusTextColor = statusMessageColor(context, entry.status);
+        final makeClickableCellFromText = (String text, [Color? color]) {
+          TextStyle textStyle = Theme.of(context).textTheme.bodyText1!;
+          if (narrow) {
+            textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
+          }
+          if (color != null) {
+            textStyle = textStyle.copyWith(color: color);
+          }
           return TableCell(
               child: MouseRegion(
                 cursor: SystemMouseCursors.click,
@@ -396,7 +404,7 @@ class SubmissionsListScreenState extends BaseScreenState {
                     height: 32,
                     padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
                     alignment: Alignment.centerLeft,
-                    child: Text(text),
+                    child: Text(text, style: textStyle),
                   ),
                   onTap: () => _navigateToSubmission(entry.submissionId, entry.problemId),
                 ),
@@ -409,7 +417,7 @@ class SubmissionsListScreenState extends BaseScreenState {
             makeClickableCellFromText(dateTime),
             makeClickableCellFromText(name),
             makeClickableCellFromText(problemId),
-            makeClickableCellFromText(status),
+            makeClickableCellFromText(status, statusTextColor),
           ]
         );
         tableItems.add(tableRow);
@@ -418,12 +426,16 @@ class SubmissionsListScreenState extends BaseScreenState {
           color: Theme.of(context).colorScheme.secondary.withAlpha(50)
       );
       final makeSimpleCellFromText = (String text) {
+        TextStyle textStyle = Theme.of(context).textTheme.bodyText1!.copyWith(fontWeight: FontWeight.bold);
+        if (narrow) {
+          textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
+        }
         return TableCell(
             child: Container(
               height: 32,
               padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
               alignment: Alignment.centerLeft,
-              child: Text(text),
+              child: Text(text, style: textStyle),
             )
         );
       };
@@ -434,9 +446,9 @@ class SubmissionsListScreenState extends BaseScreenState {
         children: [
           makeSimpleCellFromText('ID'),
           makeSimpleCellFromText('Время'),
-          makeSimpleCellFromText('Фамилия Имя Отчество'),
+          makeSimpleCellFromText(aboutNarrow? 'Фамилия Имя' : 'Фамилия Имя Отчество'),
           makeSimpleCellFromText('ID задачи'),
-          makeSimpleCellFromText('Статус выполнения'),
+          makeSimpleCellFromText(narrow? 'Статус' : 'Статус выполнения'),
         ]
       );
       final table = Table(
@@ -449,11 +461,11 @@ class SubmissionsListScreenState extends BaseScreenState {
         ),
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         columnWidths: {
-          0: FixedColumnWidth(50),
-          1: FixedColumnWidth(180),
+          0: FixedColumnWidth(narrow? 35 : 50),
+          1: FixedColumnWidth(narrow? 80 : (aboutNarrow? 100 : 180)),
           2: FlexColumnWidth(),
-          3: FixedColumnWidth(180),
-          4: FixedColumnWidth(150),
+          3: FixedColumnWidth(narrow? 150 : 180),
+          4: FixedColumnWidth(narrow? 50 : 180),
         },
         children: [headerRow] + tableItems,
       );
