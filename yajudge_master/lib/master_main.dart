@@ -38,8 +38,13 @@ Future<void> main(List<String> arguments) async {
 
   String pidFilePath = getPidFileName(parsedArguments);
   Logger.root.info('Using PID file $pidFilePath');
-  io.File(pidFilePath).writeAsStringSync('${io.pid}');
-  print('Using PID file $pidFilePath: written value ${io.pid}');
+  try {
+    io.File(pidFilePath).writeAsStringSync('${io.pid}');
+    print('Using PID file $pidFilePath: written value ${io.pid}');
+  }
+  catch (e) {
+    Logger.root.severe('Cant create PID file $pidFilePath: $e');
+  }
 
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
   if (rpcProperties.privateToken.isEmpty) {
