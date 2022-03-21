@@ -1,6 +1,7 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'screens/screen_course_progress.dart';
 import 'screens/screen_submission.dart';
 import 'screens/screen_course_problem.dart';
 import 'screens/screen_error.dart';
@@ -138,7 +139,20 @@ class AppState extends State<App> {
       final match = submissionsWithFilters.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
       final filterString = match.groupCount > 2 ? match.group(2) : '';
+      // TODO parse filter string
       return SubmissionsListScreen(
+        loggedUser: loggedUser,
+        courseUrlPrefix: courseUrlPrefix,
+      );
+    }
+
+    final RegExp progressWithFilters = RegExp(r'/progress/([a-z_-]+)(/filter:.+)?');
+    if (progressWithFilters.hasMatch(fullPath)) {
+      final match = progressWithFilters.matchAsPrefix(fullPath)!;
+      final courseUrlPrefix = match.group(1)!;
+      final filterString = match.groupCount > 2 ? match.group(2) : '';
+      // TODO parse filter string
+      return CourseProgressScreen(
         loggedUser: loggedUser,
         courseUrlPrefix: courseUrlPrefix,
       );
