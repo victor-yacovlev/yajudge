@@ -301,7 +301,7 @@ class CourseManagementService extends CourseManagementServiceBase {
   @override
   Future<CourseProgressResponse> getProgress(ServiceCall call, CourseProgressRequest request) async {
     int courseId = request.course.id.toInt();
-    final enrolledUsersRows = connection.query(
+    final enrolledUsersRows = await connection.query(
       '''
       select users_id from enrollments
       where courses_id=@course_id and role=@role_student
