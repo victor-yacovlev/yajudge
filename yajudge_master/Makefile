@@ -49,6 +49,7 @@ install: bin/yajudge-master yajudge-master@.service yajudge-envoy@.service conf/
 	touch $(ETC)/yajudge/database-password.txt
 	chown $(USER):$(USER) $(ETC)/yajudge/database-password.txt
 	chmod 0440 $(ETC)/yajudge/database-password.txt
+	if [ -f $(ETC)/nginx/sites-available/yajudge.conf ]; then $(INSTALL) -m 0644 -D conf/nginx.conf $(ETC)/nginx/sites-available/yajudge.conf.new; else $(INSTALL) -D -m 0644 conf/nginx.conf $(ETC)/nginx/sites-available/yajudge.conf; fi
 
 user:
 	if [ ! `id -u $(USER)` ]; then $(USERADD) -d /var/lib/$(USER) $(USER); fi

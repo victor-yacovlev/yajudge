@@ -10,10 +10,14 @@ endif
 ifeq ($(UNAME), Linux)
 	PLATFORM=linux
 endif
+PREFIX=/usr
+TARGET_DIR=${PREFIX}/share/yajudge
 
 first: all
 
-all: web-client native-client
+all: web-client
+
+install: web-install
 
 native-client: ${PLATFORM}
 	$(FLUTTER) build ${PLATFORM}
@@ -26,6 +30,10 @@ macos/Podfile.lock:
 web-client: deps
 	$(FLUTTER) build web --release
 	bash fix-issue-70101.sh
+
+web-install: build/web/main.dart.js
+	mkdir -p $(TARGET_DIR)/web
+	cp -R build/web $(TARGET_DIR)
 
 deps:
 	$(FLUTTER) pub get
