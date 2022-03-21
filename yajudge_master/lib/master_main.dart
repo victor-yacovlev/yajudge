@@ -8,28 +8,49 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'src/master_service.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yaml/yaml.dart';
+import 'src/database_initialization.dart' as dbInit;
 
 Future<void> main(List<String> arguments) async {
   print('Starting at pid ${io.pid} with arguments: $arguments');
 
   ArgResults parsedArguments = parseArguments(arguments);
 
+
   String configFileName = getConfigFileName(parsedArguments);
   print('Using config file $configFileName');
-  final config = parseYamlConfig(configFileName);
-  print('Successfully parsed config file');
+  dynamic config;
+  try {
+    config = parseYamlConfig(configFileName);
+    print('Successfully parsed config file');
+  }
+  catch (e) {
+    print('Cant parse config file $configFileName: $e');
+    io.exit(1);
+  }
 
   print('Configuring logger');
   final logFilePath = getLogFileName(parsedArguments);
   if (logFilePath.isNotEmpty && logFilePath!='stdout') {
     print('Using log file $logFilePath');
     final logFile = io.File(logFilePath);
+    try {
+      logFile.writeAsStringSync(
+        '=== Using this file for master service log ===',
+        mode: io.FileMode.append,
+        flush: true,
+      );
+    }
+    catch (e) {
+      print('Cant use $logFilePath as log file: $e');
+      io.exit(1);
+    }
     initializeLogger(logFile.openWrite(mode: io.FileMode.append));
     print('Logger initialized so next non-critical messages will be in $logFilePath');
 
     // duplicate initialization messages to log file
     Logger.root.info('Starting master daemon at PID = ${io.pid}');
     Logger.root.info('Using config file ${configFileName}');
+
   }
   else {
     print('Log file not set so will use stdout for logging');
@@ -46,7 +67,16 @@ Future<void> main(List<String> arguments) async {
     Logger.root.severe('Cant create PID file $pidFilePath: $e');
   }
 
-  final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
+  RpcProperties rpcProperties;
+  try {
+    rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
+  }
+  catch (e) {
+    final message = 'Cant get RPC properties from config: $e';
+    print(message);
+    Logger.root.shout(message);
+    io.exit(1);
+  }
   if (rpcProperties.privateToken.isEmpty) {
     final message = 'Fatal error: private rpc token is empty. Check your configuration';
     print(message);
@@ -55,7 +85,16 @@ Future<void> main(List<String> arguments) async {
   }
   final locationProperties = MasterLocationProperties.fromYamlConfig(config['locations']);
 
-  final databaseProperties = DatabaseProperties.fromYamlConfig(config['database']);
+  DatabaseProperties databaseProperties;
+  try {
+    databaseProperties = DatabaseProperties.fromYamlConfig(config['database']);
+  }
+  catch (e) {
+    final message = 'Cant get database properties from config: $e';
+    print(message);
+    Logger.root.shout(message);
+    io.exit(1);
+  }
   final postgreSQLConnection = PostgreSQLConnection(
     databaseProperties.host,
     databaseProperties.port,
@@ -65,7 +104,15 @@ Future<void> main(List<String> arguments) async {
   );
   final futureConnectionOpen = postgreSQLConnection.open();
   futureConnectionOpen.catchError((error) {
-    final message = 'Fatal error: no connection to database: $error';
+    final message = '''Fatal error: no connection to database: $error   
+    Maybe you have not created database or user/password matching configuration.
+    
+    Run the following:
+    > psql postgres  # might require root privileges
+    postgres=# create database ${databaseProperties.dbName};
+    postgres=# create user ${databaseProperties.user} with password 'password value stored in secret file';
+    postgres=# grant all privileges on database ${databaseProperties.dbName} to ${databaseProperties.user}; 
+    ''';
     print(message);
     Logger.root.shout(message);
     Future.delayed(Duration(seconds: 2), () {
@@ -73,7 +120,7 @@ Future<void> main(List<String> arguments) async {
     });
   });
 
-  futureConnectionOpen.then((_) {
+  futureConnectionOpen.then((_) async {
     Logger.root.fine('opened connection to database');
     Logger.root.info('starting master service on ${rpcProperties.host}:${rpcProperties.port}');
     try {
@@ -82,6 +129,30 @@ Future<void> main(List<String> arguments) async {
         rpcProperties: rpcProperties,
         locationProperties: locationProperties,
       );
+      ArgResults? command = parsedArguments.command;
+      bool initDbMode = command!=null && command.name=='initialize-database';
+      if (initDbMode) {
+        await dbInit.initializeDatabase(masterService);
+        io.exit(0);
+      }
+      bool databaseOk = await dbInit.checkTablesExists(masterService);
+      if (!databaseOk) {
+        final message = 'Database not initialized properly. Run yajudge-master with initialize-database subcommand';
+        print(message);
+        Logger.root.shout(message);
+        io.exit(1);
+      }
+      bool createAdminMode = command!=null && command.name=='create-admin';
+      if (createAdminMode) {
+        if (command.rest.length < 2) {
+          print('create-admin requires two additional arguments: email and password');
+          io.exit(1);
+        }
+        String email = command.rest[0];
+        String password = command.rest[1];
+        await dbInit.createAdministratorUser(masterService, email, password);
+        io.exit(0);
+      }
       Logger.root.info('master service ready');
       masterService.serveSupervised();
     } catch (error) {
@@ -166,6 +237,8 @@ ArgResults parseArguments(List<String> arguments) {
   mainParser.addCommand('daemon', daemonParser);
   mainParser.addCommand('start');
   mainParser.addCommand('stop');
+  mainParser.addCommand('initialize-database');
+  mainParser.addCommand('create-admin');
 
   final parsedArguments = mainParser.parse(arguments);
   return parsedArguments;

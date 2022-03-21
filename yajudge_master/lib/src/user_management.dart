@@ -137,7 +137,7 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<User> createOrUpdateUser(ServiceCall call, User user) async {
+  Future<User> createOrUpdateUser(ServiceCall? call, User user) async {
     if (user.id==0 && (user.firstName.isEmpty || user.lastName.isEmpty)) {
       throw GrpcError.invalidArgument('firstname and lastname required');
     }
