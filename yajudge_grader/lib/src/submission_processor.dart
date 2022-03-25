@@ -1198,7 +1198,7 @@ static void forbid(const char *name) {
     }
 
     if (resultCheckerMessage.isNotEmpty) {
-      String waMessage = '=== Checker ouput:\n$resultCheckerMessage\n';
+      String waMessage = '=== Checker output:\n$resultCheckerMessage\n';
       String args = arguments.join(' ');
       waMessage += '=== Arguments: ${args}\n';
       final maxInputSizeToShow = 50 * 1024;
@@ -1218,20 +1218,35 @@ static void forbid(const char *name) {
       resultCheckerMessage = waMessage;
       solutionStatus = SolutionStatus.WRONG_ANSWER;
     }
+    
+    final screenBadSymbols = (String s) {
+      String result = '';
+      for (int i=0; i<s.length; i++) {
+        final symb = s[i];
+        int code = symb.codeUnitAt(0);
+        if (code < 32 && code != 10) {
+          result += r'\' + code.toString();
+        }
+        else {
+          result += symb;
+        }
+      }
+      return result;
+    };
 
     return TestResult(
       testNumber: testNumber,
       target: runsDirPrefix,
       exitStatus: exitStatus,
       status: solutionStatus,
-      stderr: utf8.decode(stderr),
-      stdout: utf8.decode(stdout),
+      stderr: screenBadSymbols(utf8.decode(stderr)),
+      stdout: screenBadSymbols(utf8.decode(stdout)),
       killedByTimer: timeoutExceed,
       standardMatch: resultCheckerMessage.isEmpty,
-      checkerOutput: resultCheckerMessage,
+      checkerOutput: screenBadSymbols(resultCheckerMessage),
       signalKilled: signalKilled,
       valgrindErrors: valgrindErrors,
-      valgrindOutput: valgrindOutput
+      valgrindOutput: screenBadSymbols(valgrindOutput),
     );
   }
 
