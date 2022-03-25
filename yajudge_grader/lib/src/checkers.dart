@@ -64,7 +64,15 @@ class TextChecker extends AbstractChecker {
   @override
   String matchData(List<String> args, List<int> stdin, List<int> stdout, List<int> reference, String workDir, String root, String options) {
     final opts = options.split(' ');
-    final stdoutString = utf8.decode(stdout, allowMalformed: true).trimRight();
+    String stdoutString = '';
+    try {
+      stdoutString = utf8.decode(stdout, allowMalformed: false).trimRight();
+    }
+    catch (e) {
+      if (e is FormatException) {
+        return 'Invalid characters in output.\nExpected printable text, got binary data.';
+      }
+    }
     final referenceString = utf8.decode(reference, allowMalformed: true).trimRight();
     if (opts.contains('strict')) {
       if (stdoutString == referenceString) {

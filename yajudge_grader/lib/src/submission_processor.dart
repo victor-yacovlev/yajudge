@@ -1094,6 +1094,22 @@ static void forbid(const char *name) {
     int valgrindErrors = 0;
     String valgrindOutput = '';
     SolutionStatus solutionStatus = SolutionStatus.OK;
+
+    final screenBadSymbols = (String s) {
+      String result = '';
+      for (int i=0; i<s.length; i++) {
+        final symbol = s[i];
+        int code = symbol.codeUnitAt(0);
+        if (code < 32 && code != 10 || code == 0xFF) {
+          result += r'\' + code.toString();
+        }
+        else {
+          result += symbol;
+        }
+      }
+      return result;
+    };
+
     if (signalKilled==0 && !timeoutExceed && checkValgrindErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
       String runsPath = runner.submissionPrivateDirectory(submission)+'/runs';
@@ -1115,7 +1131,7 @@ static void forbid(const char *name) {
     }
     if (signalKilled==0 && !timeoutExceed && checkSanitizersErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for sanitizer errors');
-      String errOut = utf8.decode(stderr, allowMalformed: true);
+      String errOut = screenBadSymbols(utf8.decode(stderr, allowMalformed: true));
       final errLines = errOut.split('\n');
       List<String> patternParts = [];
       for (final solutionFile in submission.solutionFiles.files) {
@@ -1135,7 +1151,7 @@ static void forbid(const char *name) {
       }
     }
     if (signalKilled==0 && !timeoutExceed && exitStatus == 127) {
-      String errOut = utf8.decode(stderr, allowMalformed: true);
+      String errOut = screenBadSymbols(utf8.decode(stderr, allowMalformed: true));
       if (errOut.contains('yajudge_error:')) {
         checkAnswer = false;
         solutionStatus = SolutionStatus.RUNTIME_ERROR;
@@ -1208,9 +1224,21 @@ static void forbid(const char *name) {
       } else {
         stdinBytesToShow = stdinData;
       }
-      String inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: true);
+      String inputDataToShow = '';
+      bool inputIsBinary = false;
+      try {
+        inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: false);
+      }
+      catch (e) {
+        if (e is FormatException) {
+          inputIsBinary = true;
+        }
+      }
       if (stdinData.length > maxInputSizeToShow) {
         inputDataToShow += '  \n(input is too big, truncated to $maxInputSizeToShow bytes)\n';
+      }
+      else if (inputIsBinary) {
+        inputDataToShow = '(input is binary file)\n';
       }
       if (inputDataToShow.isNotEmpty) {
         waMessage += '=== Input data: $inputDataToShow';
@@ -1218,29 +1246,14 @@ static void forbid(const char *name) {
       resultCheckerMessage = waMessage;
       solutionStatus = SolutionStatus.WRONG_ANSWER;
     }
-    
-    final screenBadSymbols = (String s) {
-      String result = '';
-      for (int i=0; i<s.length; i++) {
-        final symb = s[i];
-        int code = symb.codeUnitAt(0);
-        if (code < 32 && code != 10) {
-          result += r'\' + code.toString();
-        }
-        else {
-          result += symb;
-        }
-      }
-      return result;
-    };
 
     return TestResult(
       testNumber: testNumber,
       target: runsDirPrefix,
       exitStatus: exitStatus,
       status: solutionStatus,
-      stderr: screenBadSymbols(utf8.decode(stderr)),
-      stdout: screenBadSymbols(utf8.decode(stdout)),
+      stderr: screenBadSymbols(utf8.decode(stderr, allowMalformed: true)),
+      stdout: screenBadSymbols(utf8.decode(stdout, allowMalformed: true)),
       killedByTimer: timeoutExceed,
       standardMatch: resultCheckerMessage.isEmpty,
       checkerOutput: screenBadSymbols(resultCheckerMessage),

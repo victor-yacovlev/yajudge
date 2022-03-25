@@ -69,8 +69,13 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   if (usePidFile) {
     pidFilePath = getPidFileName(parsedArguments, graderInstanceName);
     Logger.root.info('Using PID file $pidFilePath');
-    io.File(pidFilePath).writeAsStringSync('${io.pid}');
-    print('Using PID file $pidFilePath: written value ${io.pid}');
+    try {
+      io.File(pidFilePath).writeAsStringSync('${io.pid}');
+      print('Using PID file $pidFilePath: written value ${io.pid}');
+    }
+    catch (e) {
+      print('Cant create PID file $pidFilePath: $e');
+    }
   }
 
   GradingLimits defaultLimits;
