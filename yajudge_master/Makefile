@@ -13,7 +13,7 @@ first: all
 
 all: master
 
-master: .packages bin/yajudge-master lib/src/generated/assets.gen.dart
+master: .packages gen bin/yajudge-master
 bin/yajudge-master: bin/yajudge-master.dart lib/master_main.dart $(wildcard lib/src/*.dart)
 	$(DART) compile exe -o bin/yajudge-master bin/yajudge-master.dart
 
