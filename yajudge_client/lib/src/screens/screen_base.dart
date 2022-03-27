@@ -343,7 +343,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         }
         if (isTabLabel && tabData.id.isNotEmpty) {
           currentPath.removeLast();
-          currentPath.add(tabData.id)
+          currentPath.add(tabData.id);
           String newPath = currentPath.join('/');
           // secondLevelNavigationKey.currentState!.pushReplacementNamed(tabData.id);
           setState(() {
