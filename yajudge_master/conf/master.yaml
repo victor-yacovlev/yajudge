@@ -1,7 +1,7 @@
 service:
   # NOTE: service configuration has less priority than command-line arguments
-  log_file: '$LOGS_DIRECTORY/master.log'     # /var/log/yajudge/grader.log
-  pid_file: '$RUNTIME_DIRECTORY/master.pid'  # /run/yajudge/grader.pid
+  log_file: '$LOGS_DIRECTORY/master.log'     # /var/log/yajudge/master.log
+  pid_file: '$RUNTIME_DIRECTORY/master.pid'  # /run/yajudge/master.pid
 
 database:
   host: localhost
