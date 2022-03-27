@@ -27,7 +27,8 @@ macos: macos/Podfile.lock
 macos/Podfile.lock:
 	cd macos && pod install
 
-web-client: deps
+web-client: deps build/web/main.dart.js
+build/web/main.dart.js:
 	$(FLUTTER) build web --release
 	bash fix-issue-70101.sh
 
@@ -35,7 +36,8 @@ web-install: build/web/main.dart.js
 	mkdir -p $(TARGET_DIR)/web
 	cp -R build/web $(TARGET_DIR)
 
-deps:
+deps: .packages
+.packages:
 	$(FLUTTER) pub get
 
 
