@@ -1,7 +1,7 @@
 service:
   # NOTE: service configuration has less priority than command-line arguments
-  log_file: '@LOGS_DIRECTORY/master.log'     # /var/log/yajudge/master.log
-  pid_file: '@RUNTIME_DIRECTORY/master.pid'  # /run/yajudge/master.pid
+  log_file: '@LOGS_DIRECTORY/master.log'     # /var/log/yajudge/master.log or /opt/yajudge/log/master.log
+  pid_file: '@RUNTIME_DIRECTORY/master.pid'  # /run/yajudge/master.pid or /opt/yajudge/pid/master.pid
 
 database:
   host: localhost
@@ -19,5 +19,6 @@ rpc:
   private_token_file: '@CONFIGURATION_DIRECTORY/private-token.txt'  # /etc/yajudge/private-token.txt
 
 locations:
-  courses_root: '@STATE_DIRECTORY/courses'   # /srv/yajudge/courses
-  problems_root: '@STATE_DIRECTORY/problems' # /srv/yajudge/problems
+  courses_root: '@COURSES_DIR'   # /var/lib/yajudge/courses or /opt/yajudge/courses
+  problems_root: '@PROBLEMS_DIR' # /var/lib/yajudge/problems or /opt/yajudge/problems
+
