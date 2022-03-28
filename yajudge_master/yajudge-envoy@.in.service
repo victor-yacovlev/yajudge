@@ -1,0 +1,20 @@
+[Unit]
+Description=Envoy instance service for Yajudge
+
+[Service]
+Type=exec
+ExecStartPre=mkdir -p @LOGS_DIRECTORY @RUNTIME_DIRECTORY && chown @YAJUDGE_USER:@YAJUDGE_USER @LOGS_DIRECTORY @RUNTIME_DIRECTORY && chmod 0770 @LOGS_DIRECTORY @RUNTIME_DIRECTORY
+ExecStart=bash -c '/usr/bin/envoy --config-path @CONFIGURATION_DIRECTORY/envoy-%i.yaml --log-path @LOGS_DIRECTORY/envoy-%i.log | tee'
+ExecStopPost=/bin/rm -f @RUNTIME_DIRECTORY/envoy-%i.pid
+PIDFile=@RUNTIME_DIRECTORY/envoy-%i.pid
+
+User=@YAJUDGE_USER
+Group=@YAJUDGE_USER
+Slice=yajudge.slice
+
+Restart=on-failure
+RestartSec=5
+
+
+[Install]
+WantedBy=multi-user.target

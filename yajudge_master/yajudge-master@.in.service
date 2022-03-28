@@ -1,0 +1,26 @@
+[Unit]
+Description=Yajudge master instance service
+Requires=postgresql.service yajudge-envoy@%i.service
+
+[Service]
+Type=exec
+ExecStartPre=mkdir -p @LOGS_DIRECTORY @RUNTIME_DIRECTORY @STATE_DIRECTORY && chown @YAJUDGE_USER:@YAJUDGE_USER @LOGS_DIRECTORY @RUNTIME_DIRECTORY @STATE_DIRECTORY && chmod 0770 @LOGS_DIRECTORY @RUNTIME_DIRECTORY @STATE_DIRECTORY
+ExecStart=@BIN_DIR/yajudge-master -C @CONFIGURATION_DIRECTORY/master-%i.yaml -P @RUNTIME_DIRECTORY/master-%i.pid -L @LOGS_DIRECTORY/master-%i.log daemon
+ExecStopPost=/bin/rm -f @RUNTIME_DIRECTORY/master-%i.pid
+PIDFile=@RUNTIME_DIRECTORY/master-%i.pid
+
+MemoryAccounting=yes
+MemoryMax=1G
+
+TasksAccounting=yes
+TasksMax=100
+
+User=@YAJUDGE_USER
+Group=@YAJUDGE_USER
+Slice=yajudge.slice
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 service:
   # NOTE: service configuration has less priority than command-line arguments
-  log_file: '$LOGS_DIRECTORY/grader-$NAME.log'     # /var/log/yajudge/grader-default.log
-  pid_file: '$RUNTIME_DIRECTORY/grader-$NAME.pid'  # /run/yajudge/grader-default.pid
+  log_file: '@LOGS_DIRECTORY/grader-$NAME.log'     # /var/log/yajudge/grader-default.log
+  pid_file: '@RUNTIME_DIRECTORY/grader-$NAME.pid'  # /run/yajudge/grader-default.pid
   systemd_slice: 'yajudge-grader'  # has effect only while starting via 'yajudge-grader start' command
 
 rpc:
@@ -9,12 +9,12 @@ rpc:
   port: 9095
 
   # private token must be stored in separate file not readable by random user
-  private_token_file: '$CONFIGURATION_DIRECTORY/private-token.txt'  # /etc/yajudge/private-token.txt
+  private_token_file: '@CONFIGURATION_DIRECTORY/private-token.txt'  # /etc/yajudge/private-token.txt
 
 locations:
-  system_environment: '$STATE_DIRECTORY/system'        # /var/lib/yajudge/system
-  working_directory: '$STATE_DIRECTORY/work/$NAME'     # /var/lib/yajudge/work/default
-  cache_directory: '$CACHE_DIRECTORY/$NAME'            # /var/cache/yajudge/default
+  system_environment: '@STATE_DIRECTORY/system'        # /var/lib/yajudge/system
+  working_directory: '@STATE_DIRECTORY/work/$NAME'     # /var/lib/yajudge/work/default
+  cache_directory: '@CACHE_DIRECTORY/$NAME'            # /var/cache/yajudge/default
 
 compilers:
   enable_sanitizers: undefined address  # unset in case of using Alpine Linux: it lacks support of sanitizers
