@@ -2,7 +2,7 @@ RELEASE_VER=$(shell date '+%y.%m.%d')
 ARCH=$(shell uname -m)
 OS=$(shell uname -s | tr '[:upper:]' '[:lower:]')
 TGZ_DIR=yajudge-$(OS)-$(ARCH)
-TGZ_FILE=yajudge-$(RELEASE_VER)-$(OS)-$(ARCH)
+TGZ_FILE=yajudge-$(RELEASE_VER)-$(OS)-$(ARCH).tgz
 
 first: servers
 
