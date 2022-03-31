@@ -58,6 +58,38 @@ class WebPlatformUtils extends PlatformsUtils {
   }
 
   Uri getWebApiUri(List<String>? arguments) {
+    String scheme = Uri.base.scheme;
+    String host = Uri.base.host;
+    int port = Uri.base.port;
+    String path = '/';
+
+    bool overridden = false;
+
+    final params = Uri.base.queryParameters;
+    if (params.containsKey('api_scheme')) {
+      scheme = params['api_scheme']!;
+      overridden = true;
+    }
+    if (params.containsKey('api_host')) {
+      host = params['api_host']!;
+      overridden = true;
+    }
+    if (params.containsKey('api_port')) {
+      port = int.parse(params['api_port']!);
+      overridden = true;
+    }
+    if (params.containsKey('api_path')) {
+      path = params['path']!;
+      if (!path.startsWith('/')) {
+        path = '/' + path;
+      }
+      overridden = true;
+    }
+
+    if (overridden) {
+      return Uri(scheme: scheme, host: host, port: port, path: path);
+    }
+
     String? savedLocation = loadSettingsValue('api_url');
     if (savedLocation == null) {
       saveSettingsValue('api_url', '');
@@ -65,30 +97,7 @@ class WebPlatformUtils extends PlatformsUtils {
     if (savedLocation != null && savedLocation.isNotEmpty) {
       return Uri.parse(savedLocation);
     }
-    String scheme = Uri.base.scheme;
-    String host = Uri.base.host;
-    int port = Uri.base.port;
-    String path = '/';
-    if (host == 'localhost' && port > 10000) {
-      // debug run
-      return Uri.http('localhost:9081', '/');
-    }
-    final params = Uri.base.queryParameters;
-    if (params.containsKey('api_scheme')) {
-      scheme = params['api_scheme']!;
-    }
-    if (params.containsKey('api_host')) {
-      host = params['api_host']!;
-    }
-    if (params.containsKey('api_port')) {
-      port = int.parse(params['api_port']!);
-    }
-    if (params.containsKey('api_path')) {
-      path = params['path']!;
-      if (!path.startsWith('/')) {
-        path = '/' + path;
-      }
-    }
+
     return Uri(scheme: scheme, host: host, port: port, path: path);
   }
 
