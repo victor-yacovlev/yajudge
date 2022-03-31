@@ -7,6 +7,22 @@ import 'dart:io' as io;
 const CourseReloadInterval = Duration(seconds: 10);
 const ProblemReloadInterval = Duration(seconds: 10);
 
+class CourseLoadError extends Error {
+  final String message;
+  final String relatedFileName;
+  dynamic underlyingError;
+  CourseLoadError(this.message, this.relatedFileName, [this.underlyingError]);
+
+  @override
+  String toString() {
+    String msg = "while processing $relatedFileName: $message";
+    if (underlyingError != null) {
+      msg += " [" + underlyingError.toString() + "]";
+    }
+    return msg;
+  }
+}
+
 class CourseLoader {
   final String coursesRootPath;
   final String separateProblemsRootPath;
@@ -196,8 +212,16 @@ class CourseLoader {
     YamlList lessons = _sectionMap['lessons'];
     for (String entry in lessons) {
       final lessonFile = io.File(rootPath+'/${_section.id}/$entry/lesson.yaml');
+      if (!lessonFile.existsSync()) {
+        throw CourseLoadError('file not found', lessonFile.path);
+      }
       updateCourseLastModified(lessonFile);
-      _lessonMap = loadYaml(lessonFile.readAsStringSync());
+      try {
+        _lessonMap = loadYaml(lessonFile.readAsStringSync());
+      }
+      catch (error) {
+        throw CourseLoadError('cant parse yaml', lessonFile.path, error);
+      }
       _lesson = Lesson(id: entry);
       _loadCourseLesson();
       lessonsList.add(_lesson);
