@@ -687,11 +687,11 @@ class CourseLoader {
     if (courseCache.lastModified == null)
       return;
     DateTime fileLastModified;
-    if (customFileDateTimePicker != null) {
-      fileLastModified = customFileDateTimePicker!(file);
-    } else {
-      fileLastModified = file.lastModifiedSync();
-    }
+    // if (customFileDateTimePicker != null) {
+    //   fileLastModified = customFileDateTimePicker!(file);
+    // } else {
+    fileLastModified = file.lastModifiedSync();
+    // }
     DateTime cacheLastModified = courseCache.lastModified!;
     if (file.lastModifiedSync().millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       courseCache.lastModified = file.lastModifiedSync();
@@ -701,11 +701,11 @@ class CourseLoader {
   void updateProblemLastModified(String problemId, io.File file) {
     // workaround on Dart bug at dart:io.File.lastModifiedSync()
     DateTime fileLastModified;
-    if (customFileDateTimePicker != null) {
-      fileLastModified = customFileDateTimePicker!(file);
-    } else {
-      fileLastModified = file.lastModifiedSync();
-    }
+    // if (customFileDateTimePicker != null) {
+    //   fileLastModified = customFileDateTimePicker!(file);
+    // } else {
+    fileLastModified = file.lastModifiedSync();
+    // }
     DateTime cacheLastModified = problemsCache[problemId]!.lastModified!;
     if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       problemsCache[problemId]!.lastModified = fileLastModified;
