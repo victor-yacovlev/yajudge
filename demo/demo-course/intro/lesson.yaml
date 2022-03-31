@@ -1,0 +1,11 @@
+title: Курсы и задачи
+
+# Если параметр readings отсутствует, то подразумевается ровно один
+# текст на урок в файле README.md
+readings:
+  - about_files.md
+  - courses.md
+  - problems.md
+
+problems:
+  - hello-world-in-c-language

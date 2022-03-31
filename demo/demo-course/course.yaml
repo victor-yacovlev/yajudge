@@ -1,0 +1,9 @@
+# Поле description предназначено для описания курса
+description: Демонстрация возможностей yajudge
+
+# lessons содержит упорядоченный список уроков
+# Каждый урок - это подкаталог, содержащий файл lesson.yaml
+lessons:
+  - intro
+  - simple-c-program
+  - several-files

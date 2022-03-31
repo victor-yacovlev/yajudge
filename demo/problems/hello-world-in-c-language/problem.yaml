@@ -1,0 +1,7 @@
+title: Пример задачи на языке Си
+
+# Если параметр statement отстутствует, то по умолчанию файл должен называться statement.md
+statement: statement.md
+
+# Файлы решения, которые должен загрузить студент
+solution_files: hello-world-in-c-language.c
