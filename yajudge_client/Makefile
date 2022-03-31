@@ -17,7 +17,6 @@ first: all
 
 all: web-client
 
-install: web-install
 
 native-client: ${PLATFORM}
 	$(FLUTTER) build ${PLATFORM}
@@ -32,14 +31,10 @@ build/web/main.dart.js:
 	$(FLUTTER) build web --release
 	bash fix-issue-70101.sh
 
-web-install: build/web/main.dart.js
-	mkdir -p $(TARGET_DIR)/web
-	cp -R build/web $(TARGET_DIR)
 
 deps: .packages
 .packages:
 	$(FLUTTER) pub get
-
 
 clean:
 	$(RM) .dart_tool || true
