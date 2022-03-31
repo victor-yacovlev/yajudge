@@ -173,6 +173,7 @@ sed -E "$repl" conf/nginx.in.conf > $NGINX_CONF
 
 # Preprocess and create systemd files
 
+cat systemd/yajudge-grader.slice > $SYSTEMD_DIR/yajudge-grader.slice
 sed -E "$repl" systemd/yajudge-grader-prepare.in.service > $SYSTEMD_DIR/yajudge-grader-prepare.service
 sed -E "$repl" systemd/yajudge-grader@.in.service > $SYSTEMD_DIR/yajudge-grader@.service
 sed -E "$repl" systemd/yajudge-master@.in.service > $SYSTEMD_DIR/yajudge-master@.service
@@ -181,7 +182,7 @@ sed -E "$repl" systemd/yajudge-envoy@.in.service > $SYSTEMD_DIR/yajudge-envoy@.s
 
 # Create systemd instance links
 
-ln -f -s -T yajudge-master@.service $SYSTEMD_DIR/yajudge-master@$CONFIG_NAME.servic
+ln -f -s -T yajudge-master@.service $SYSTEMD_DIR/yajudge-master@$CONFIG_NAME.service
 ln -f -s -T yajudge-envoy@.service $SYSTEMD_DIR/yajudge-envoy@$CONFIG_NAME.service
 ln -f -s -T yajudge-grader@.service $SYSTEMD_DIR/yajudge-grader@$CONFIG_NAME.service
 
