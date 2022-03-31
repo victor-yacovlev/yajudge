@@ -34,6 +34,7 @@ tgz_bundle: servers
 	cp yajudge_master/yajudge-master@.in.service $(TGZ_DIR)/systemd
 	cp yajudge_grader/yajudge-grader@.in.service $(TGZ_DIR)/systemd
 	cp yajudge_grader/yajudge-grader-prepare.in.service $(TGZ_DIR)/systemd
+	cp yajudge_grader/yajudge-grader.slice $(TGZ_DIR)/systemd
 	cp bundle_README.md $(TGZ_DIR)/README.md
 	cp bundle_post_install.sh $(TGZ_DIR)/post_install.sh
 	cp LICENSE $(TGZ_DIR)
