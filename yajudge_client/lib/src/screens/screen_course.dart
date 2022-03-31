@@ -380,7 +380,7 @@ class CourseScreenState extends BaseScreenState {
       addText(line);
     }
     
-    if (_status != null) {
+    if (_status != null && _status!.problemsTotal > 0) {
       addText('Всего в курсе ${_status!.problemsTotal} задач, ${_status!.problemsRequired} из которых являются обязательными.');
       addText('Каждая задача оценивается в баллах, в зависимости от сложности. Максимальный балл за курс равен ${_status!.scoreMax.toInt()}.');
 
