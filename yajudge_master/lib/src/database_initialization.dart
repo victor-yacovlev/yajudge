@@ -33,29 +33,33 @@ Future<bool> checkTablesExists(MasterService masterService) async {
 Future initializeDatabase(MasterService masterService) async {
   final db = masterService.connection;
   final dbName = '${db.host}:${db.port}/${db.databaseName}';
-  final message = 'creating tables into database $dbName';
-  Logger.root.info(message);
-  print(message);
+  print('This will create new empty database $dbName');
+  print('WARNING: if database exists it will be dropped!');
+  print('Type "yes" to confirm this action: ');
+  final answer = io.stdin.readLineSync()!.trim().toLowerCase();
+  if (answer != 'yes') {
+    print('Dangerous operation not approved by user. Exiting');
+    io.exit(1);
+  }
 
   // Drop all tables if exists
   for (final tableName in tablesRequired) {
     await db.execute('drop table if exists $tableName cascade');
+    print('Dropped table $tableName in $dbName');
   }
 
   // Create tables
   final sqlStatements = assetsLoader.fileAsString('yajudge-db-schema.sql');
+  assert (sqlStatements.trim().isNotEmpty);
   try {
     await db.execute(sqlStatements);
+    print('Created new database schema in $dbName');
   }
   catch (e) {
-    final message = 'cant initialize $dbName: $e';
+    final message = 'Cant initialize $dbName: $e';
     print(message);
-    Logger.root.shout(message);
     io.exit(1);
   }
-  final okMessage = 'initialized database $dbName';
-  print(okMessage);
-  Logger.root.info(okMessage);
 }
 
 Future createAdministratorUser(MasterService masterService, String email, String password) async {
