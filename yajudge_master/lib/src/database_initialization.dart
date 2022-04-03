@@ -94,3 +94,35 @@ Future createAdministratorUser(MasterService masterService, String email, String
     );
   }
 }
+
+Future createCourseEntry(
+    MasterService masterService,
+    String courseTitle, String courseData, String courseUrl,
+    [bool noTeacherMode = true,
+    bool mustSolveAllProblemsToComplete = false])
+{
+  final db = masterService.connection;
+  final coursesRoot = masterService.courseManagementService.locationProperties.coursesRoot;
+  final coursePath = '$coursesRoot/$courseData';
+
+  if (!io.Directory(coursePath).existsSync()) {
+    final message = 'course directory not exists:  $coursePath';
+    print(message);
+    Logger.root.shout(message);
+    io.exit(1);
+  }
+
+  return db.execute(
+    '''
+    insert into courses(name,course_data,url_prefix,no_teacher_mode,must_solve_all_required_problems_to_complete)
+    values(@name,@data,@url,@no_teacher,@must_solve)
+    ''',
+    substitutionValues: {
+      'name': courseTitle,
+      'data': courseData,
+      'url': courseUrl,
+      'no_teacher': noTeacherMode,
+      'must_solve': mustSolveAllProblemsToComplete,
+    },
+  );
+}

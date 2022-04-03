@@ -160,6 +160,19 @@ Future<void> main(List<String> arguments) async {
         await dbInit.createAdministratorUser(masterService, email, password);
         io.exit(0);
       }
+      bool startCourseMode = command!= null && command.name=='start-course';
+      if (startCourseMode) {
+        String courseTitle = command['title'];
+        String courseData = command['data'];
+        String courseUrl = command['url'];
+        bool noTeacherMode = true;
+        bool mustSolveAllProblemsToComplete = false;
+        await dbInit.createCourseEntry(masterService,
+            courseTitle, courseData, courseUrl,
+            noTeacherMode,
+            mustSolveAllProblemsToComplete);
+        io.exit(0);
+      }
       Logger.root.info('master service ready');
       masterService.serveSupervised();
     } catch (error) {
@@ -238,14 +251,19 @@ ArgResults parseArguments(List<String> arguments) {
   mainParser.addOption('log', abbr: 'L', help: 'log file name');
   mainParser.addOption('pid', abbr: 'P', help: 'pid file name');
 
-  final runParser = ArgParser();
   final daemonParser = ArgParser();
-
   mainParser.addCommand('daemon', daemonParser);
+
   mainParser.addCommand('start');
   mainParser.addCommand('stop');
   mainParser.addCommand('initialize-database');
   mainParser.addCommand('create-admin');
+
+  final startCourseParser = ArgParser();
+  startCourseParser.addOption('title', abbr: 't', help: 'course title');
+  startCourseParser.addOption('data', abbr: 'd', help: 'course data subdirectory');
+  startCourseParser.addOption('url', abbr: 'u', help: 'course URL prefix');
+  mainParser.addCommand('start-course', startCourseParser);
 
   final parsedArguments = mainParser.parse(arguments);
   return parsedArguments;

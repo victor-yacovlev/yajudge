@@ -34,6 +34,7 @@ This sofware requires these third-party components to run:
    - /etc/systemd/system/yajudge-envoy@.service
    - /etc/systemd/system/yajudge-envoy@default.service
    - /etc/systemd/system/yajudge-grader-prepare.service
+   - /etc/systemd/system/yajudge-grader.slice
    - /etc/systemd/system/yajudge-grader@.service
    - /etc/systemd/system/yajudge-grader@default.service
 
@@ -61,6 +62,9 @@ This sofware requires these third-party components to run:
  into directories specified by 'master-default.yaml' ('courses' and 'problems'
  subdirectories by default)
 
- 6. Prepare system root to be in use within isolated runs. The most convient way is
+ 6. Create course iteration entry by command
+ `bin/yajudge-master start-course --title COURSE_TITLE --data COURSE_DATA_SUBDIR --url URL_PREFIX`
+
+ 7. Prepare system root to be in use within isolated runs. The most convient way is
  to use `debootstrap` command for most Linux distributions.
  
