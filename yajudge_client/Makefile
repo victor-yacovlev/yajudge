@@ -44,6 +44,6 @@ clean:
 	$(RM) macos/Podfile.lock || true
 	$(RM) lib/src/generated || true
 	$(RM) bin/*.exe || true
-	$(RM) build/ || true
+	$(RM) -rf build/ || true
 
 
