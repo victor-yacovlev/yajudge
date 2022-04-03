@@ -86,7 +86,7 @@ class AppState extends State<App> {
       future: futureSession,
       builder: (BuildContext context, AsyncSnapshot<StartSessionResponse> snapshot) {
         if (redirectToLogin) {
-          return buildLoginScreen(context);
+          return buildLoginScreen(context, returnPath: fullPath);
         }
         if (snapshot.connectionState != ConnectionState.done) {
           return loadingWaitWidget(context);

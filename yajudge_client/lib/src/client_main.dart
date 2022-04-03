@@ -20,6 +20,9 @@ void main(List<String>? arguments) async {
   CoursesController.initialize();
 
   String initialRoute = await getInitialRoute();
+  if (initialRoute.isEmpty) {
+    initialRoute = '/';
+  }
 
   App app = App(initialRoute: initialRoute);
   runApp(app);
