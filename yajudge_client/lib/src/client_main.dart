@@ -1,4 +1,5 @@
 import 'package:logging/logging.dart';
+import 'package:yajudge_common/yajudge_common.dart';
 
 import 'controllers/courses_controller.dart';
 import 'controllers/connection_controller.dart';
@@ -6,7 +7,7 @@ import 'client_app.dart';
 import 'package:flutter/material.dart';
 
 
-void main(List<String>? arguments) {
+void main(List<String>? arguments) async {
   List<String> args = arguments!=null? arguments : [];
 
   bool verboseLogging = args.contains('--verbose') || args.contains('-v');
@@ -18,7 +19,20 @@ void main(List<String>? arguments) {
   ConnectionController.initialize(args);
   CoursesController.initialize();
 
-  App app = App();
-  runApp(app);
+  String initialRoute = await getInitialRoute();
 
+  App app = App(initialRoute: initialRoute);
+  runApp(app);
+}
+
+Future<String> getInitialRoute() async {
+  final usersService = ConnectionController.instance!.usersService;
+  final sessionId = ConnectionController.instance!.sessionCookie;
+  try {
+    final session = await usersService.startSession(Session(cookie: sessionId));
+    return session.redirectUrl;
+  }
+  catch (e) {
+    return "/login";
+  }
 }

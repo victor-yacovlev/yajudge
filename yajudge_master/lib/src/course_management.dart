@@ -283,16 +283,19 @@ class CourseManagementService extends CourseManagementServiceBase {
     assert(user.id > 0);
     List<Enrollment> enrollments = List.empty(growable: true);
     List<dynamic> rows = await connection.query(
-        'select courses_id, role from enrollments where users_id=@id',
+        '''
+        select courses_id, role, name, url_prefix
+        from enrollments, courses
+        where users_id=@id and courses_id=courses.id;
+        ''',
         substitutionValues: {'id': user.id.toInt()});
     for (List<dynamic> fields in rows) {
-      Course course = Course();
       int courseId = fields[0];
       int role = fields[1];
-      course.id = Int64(courseId);
-      Enrollment enrollment = Enrollment();
-      enrollment.course = course;
-      enrollment.role = Role.valueOf(role)!;
+      String name = fields[2];
+      String urlPrefix = fields[3];
+      Course course = Course(id: Int64(courseId), name: name, urlPrefix: urlPrefix);
+      Enrollment enrollment = Enrollment(course: course, role: Role.valueOf(role)!);
       enrollments.add(enrollment);
     }
     return enrollments;

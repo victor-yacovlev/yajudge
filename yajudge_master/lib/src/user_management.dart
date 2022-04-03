@@ -7,12 +7,15 @@ import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:math';
 
+import 'master_service.dart';
+
 class UserManagementService extends UserManagementServiceBase {
 
   final PostgreSQLConnection connection;
   final Logger log = Logger('UsersManager');
+  final MasterService parent;
 
-  UserManagementService({required this.connection}): super();
+  UserManagementService({required this.connection, required this.parent}): super();
 
   @override
   Future<Session> authorize(ServiceCall call, User user) async {
@@ -59,18 +62,23 @@ class UserManagementService extends UserManagementServiceBase {
       log.warning('user ${user.id} / ${user.email} tried to authorize with wrong password');
       throw GrpcError.permissionDenied('wrong password');
     }
+    final session = await createSessionForAuthenticatedUser(user);
+    log.fine('user ${user.id} / ${user.email} successfully authorized');
+    return session;
+  }
+
+  Future<Session> createSessionForAuthenticatedUser(User user) async {
     DateTime timestamp = DateTime.now();
-    String sessionKey = '$userId $userEmail ${timestamp.millisecondsSinceEpoch}';
+    String sessionKey = '${user.id} ${user.email} ${timestamp.millisecondsSinceEpoch}';
     sessionKey = sha256.convert(utf8.encode(sessionKey)).toString();
     Session session = Session();
     session.cookie = sessionKey;
     session.start = Int64(timestamp.millisecondsSinceEpoch ~/ 1000);
-    session.userId = Int64(userId);
+    session.userId = user.id;
     String storeSessionQuery = 'insert into sessions(cookie, users_id, start) values (@c, @id, @st)';
     await connection.query(storeSessionQuery, substitutionValues: {
-      'c': sessionKey, 'id': userId, 'st': timestamp
+      'c': sessionKey, 'id': user.id.toInt(), 'st': timestamp
     });
-    log.fine('user ${user.id} / ${user.email} successfully authorized');
     return session;
   }
 
@@ -138,9 +146,6 @@ class UserManagementService extends UserManagementServiceBase {
 
   @override
   Future<User> createOrUpdateUser(ServiceCall? call, User user) async {
-    if (user.id==0 && (user.firstName.isEmpty || user.lastName.isEmpty)) {
-      throw GrpcError.invalidArgument('firstname and lastname required');
-    }
     User res;
     if (user.id > 0) {
       res = await getUserById(user.id);
@@ -402,6 +407,78 @@ class UserManagementService extends UserManagementServiceBase {
       throw GrpcError.unauthenticated('session data is empty');
     }
     return getUserBySession(Session(cookie: sessionId));
+  }
+
+  @override
+  Future<StartSessionResponse> startSession(ServiceCall call, Session request) async {
+    User user = User();
+    Session resultSession = Session();
+    dynamic getUserSessionError;
+    String redirectUrl = '';
+    try {
+      user = await getUserBySession(request);
+      resultSession = request;
+      if (user.defaultRole != Role.ROLE_ADMINISTRATOR) {
+        final enrollments = await parent.courseManagementService
+            .getUserEnrollments(user);
+        if (enrollments.length == 1) {
+          final singleEnrollment = enrollments.single;
+          final course = singleEnrollment.course;
+          final courseUrlPrefix = course.urlPrefix;
+          redirectUrl = '/' + courseUrlPrefix;
+        }
+      }
+    }
+    catch (e) {
+      getUserSessionError = e;
+    }
+
+    bool allowLogout = true;
+
+    if (getUserSessionError != null && parent.demoModeProperties == null) {
+      throw getUserSessionError;
+    }
+    else if (getUserSessionError != null && parent.demoModeProperties != null) {
+      // create temporary user for demo mode session
+      User newUser = User(firstName: 'A', lastName: 'Demo', email: '@', defaultRole: Role.ROLE_STUDENT, password: 'not_set');
+      newUser = await createOrUpdateUser(call, newUser); // to assign real user id
+      final newUserName = parent.demoModeProperties!.userNamePattern.replaceAll('%id', '${newUser.id}');
+      final newUserEmail = newUserName + '@localhost';
+      newUser = newUser.copyWith((s) {
+        s.firstName = newUserName;
+        s.email = newUserEmail;
+      });
+      user = await createOrUpdateUser(call, newUser);
+      allowLogout = false;
+      final courses = await parent.courseManagementService.getCourses(call, CoursesFilter());
+      Course? course;
+      final publicCourseUrlPrefix = parent.demoModeProperties!.publicCourse;
+      for (final c in courses.courses) {
+        if (c.course.urlPrefix == publicCourseUrlPrefix) {
+          course = c.course;
+          break;
+        }
+      }
+      if (course != null) {
+        final enroll = Enroll(
+          course: course,
+          user: user,
+          role: Role.ROLE_STUDENT,
+        );
+        await parent.courseManagementService.enrollUser(call, enroll);
+        redirectUrl = '/' + parent.demoModeProperties!.publicCourse;
+      }
+      resultSession = await createSessionForAuthenticatedUser(user);
+    }
+
+    final response = StartSessionResponse(
+      user: user,
+      session: resultSession,
+      redirectUrl: redirectUrl,
+      allowLogout: allowLogout,
+    );
+
+    return response;
   }
 
 

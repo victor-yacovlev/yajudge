@@ -347,9 +347,16 @@ message UserRole {
   Role        role        = 2;
 }
 
+message StartSessionResponse {
+  User        user = 1;
+  Session     session = 2;
+  string      redirect_url = 3;
+  bool        allow_logout = 4;
+}
 
 
 service UserManagement {
+  rpc StartSession(Session) returns (StartSessionResponse) {}
   rpc Authorize(User) returns (Session) {}
   rpc GetProfile(Session) returns (User) {}
   rpc GetUsers(UsersFilter) returns (UsersList) {}

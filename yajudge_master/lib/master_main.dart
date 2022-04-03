@@ -84,6 +84,12 @@ Future<void> main(List<String> arguments) async {
     io.exit(1);
   }
   final locationProperties = MasterLocationProperties.fromYamlConfig(config['locations']);
+  
+  DemoModeProperties? demoModeProperties;
+  if (config['demo_mode'] is YamlMap) {
+    demoModeProperties = DemoModeProperties.fromYamlConfig(config['demo_mode']);
+    Logger.root.info('Will run in demo mode using course ${demoModeProperties.publicCourse}');
+  }
 
   DatabaseProperties databaseProperties;
   try {
@@ -128,6 +134,7 @@ Future<void> main(List<String> arguments) async {
         connection: postgreSQLConnection,
         rpcProperties: rpcProperties,
         locationProperties: locationProperties,
+        demoModeProperties: demoModeProperties,
       );
       ArgResults? command = parsedArguments.command;
       bool initDbMode = command!=null && command.name=='initialize-database';

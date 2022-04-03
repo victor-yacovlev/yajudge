@@ -5,6 +5,7 @@ export 'src/conf/database_conf.dart';
 export 'src/conf/grader_identity_conf.dart';
 export 'src/conf/grader_locations_conf.dart';
 export 'src/conf/master_location_conf.dart';
+export 'src/conf/demo_mode_conf.dart';
 export 'src/conf/rpc_conf.dart';
 export 'src/conf/service_conf.dart';
 export 'src/conf/config_file.dart';

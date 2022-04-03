@@ -12,7 +12,7 @@ import './course_management.dart';
 import './submission_management.dart';
 import './user_management.dart';
 
-const NotLoggedMethods = ['Authorize'];
+const NotLoggedMethods = ['StartSession', 'Authorize'];
 const PrivateMethods = [
   'TakeSubmissionToGrade', 'GetProblemFullContent', 'UpdateGraderOutput',
 ];
@@ -40,17 +40,19 @@ class MasterService {
   late final CourseManagementService courseManagementService;
   late final SubmissionManagementService submissionManagementService;
   late final Server grpcServer;
+  final DemoModeProperties? demoModeProperties;
 
   MasterService({
     required this.connection,
     required this.rpcProperties,
     required this.locationProperties,
+    this.demoModeProperties,
   })
   {
     _errorsResetTimer = Timer.periodic(Duration(minutes: 1), (timer) {
       _errorsLastMinute = 0;
     });
-    userManagementService = UserManagementService(connection: connection);
+    userManagementService = UserManagementService(parent: this, connection: connection);
     String coursesRoot = normalize(absolute(this.locationProperties.coursesRoot));
     String problemsRoot = normalize(absolute(this.locationProperties.problemsRoot));
     log.info('using courses root $coursesRoot');

@@ -25,7 +25,9 @@ import 'screens/screen_users_import_csv.dart';
 
 class App extends StatefulWidget {
 
-  App() : super();
+  final String initialRoute;
+
+  App({required this.initialRoute}) : super();
 
   @override
   State<StatefulWidget> createState() {
@@ -63,16 +65,12 @@ class AppState extends State<App> {
 
     log.info('generate widget for route $fullPath and session $sessionId');
 
-    if (sessionId.isEmpty) {
-      return buildLoginScreen(context);
-    }
-
-    final futureLoggedUser = ConnectionController.instance!.usersService
-        .getProfile(Session(cookie: sessionId));
+    final usersService = ConnectionController.instance!.usersService;
+    final futureSession = usersService.startSession(Session(cookie: sessionId));
 
     bool redirectToLogin = false;
 
-    futureLoggedUser.onError((error, stackTrace) {
+    futureSession.onError((error, stackTrace) {
       print('Caught error on futureLoggerUser: $error');
       if (error is grpc.GrpcError) {
         print('-- Code name: ${error.codeName}');
@@ -81,19 +79,24 @@ class AppState extends State<App> {
           redirectToLogin = true;
         }
       }
-      return User();
+      return StartSessionResponse();
     });
 
     return FutureBuilder(
-      future: futureLoggedUser,
-      builder: (BuildContext context, AsyncSnapshot<User> snapshot) {
+      future: futureSession,
+      builder: (BuildContext context, AsyncSnapshot<StartSessionResponse> snapshot) {
         if (redirectToLogin) {
           return buildLoginScreen(context);
         }
         if (snapshot.connectionState != ConnectionState.done) {
           return loadingWaitWidget(context);
         }
-        final loggedUser = snapshot.requireData;
+        final response = snapshot.requireData;
+        final loggedUser = response.user;
+        final sessionCookie = response.session.cookie;
+        if (sessionId != sessionCookie) {
+          ConnectionController.instance!.sessionCookie = sessionCookie;
+        }
         return generateWidgetForPathAndLoggedUser(context, fullPath, loggedUser);
       },
     );
@@ -391,7 +394,7 @@ class AppState extends State<App> {
       theme: buildThemeData(),
       // home: LoadingScreen('', 'Загрузка данных'),
       onGenerateRoute: onGenerateRoute,
-      // initialRoute: appState.initialRoot,
+      initialRoute: widget.initialRoute,
     );
     return app;
   }
