@@ -240,7 +240,9 @@ void initializeLogger(io.IOSink? target) {
   });
   if (target != null) {
     Timer.periodic(Duration(milliseconds: 250), (timer) {
-      target.flush();
+      try {
+        target.flush();
+      } catch (e) {}
     });
   }
 }
