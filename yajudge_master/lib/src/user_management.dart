@@ -47,9 +47,10 @@ class UserManagementService extends UserManagementServiceBase {
       log.warning('not existing user ${user.id} / ${user.email} tried to authorize');
       throw GrpcError.notFound('user not found');
     }
-    int userId = usersRows.first[0];
-    String userEmail = usersRows.first[1];
-    String userPassword = usersRows.first[2];
+    List<dynamic> singleUserRow = usersRows.single;
+    int userId = singleUserRow[0];
+    String userEmail = singleUserRow[1];
+    String userPassword = singleUserRow[2];
     bool passwordMatch;
     if (userPassword.startsWith('=')) {
       // plain text password
@@ -62,7 +63,9 @@ class UserManagementService extends UserManagementServiceBase {
       log.warning('user ${user.id} / ${user.email} tried to authorize with wrong password');
       throw GrpcError.permissionDenied('wrong password');
     }
-    final session = await createSessionForAuthenticatedUser(user);
+    final session = await createSessionForAuthenticatedUser(user.copyWith((u) {
+      u.id = Int64(userId);
+    }));
     log.fine('user ${user.id} / ${user.email} successfully authorized');
     return session;
   }
@@ -75,10 +78,18 @@ class UserManagementService extends UserManagementServiceBase {
     session.cookie = sessionKey;
     session.start = Int64(timestamp.millisecondsSinceEpoch ~/ 1000);
     session.userId = user.id;
-    String storeSessionQuery = 'insert into sessions(cookie, users_id, start) values (@c, @id, @st)';
-    await connection.query(storeSessionQuery, substitutionValues: {
-      'c': sessionKey, 'id': user.id.toInt(), 'st': timestamp
-    });
+    // try to find existing session first
+    List<dynamic> existingSessionsRows = await connection.query(
+      'select cookie from sessions where cookie=@c',
+      substitutionValues: { 'c': sessionKey },
+    );
+    if (existingSessionsRows.isEmpty) {
+      // create new session if not found
+      String storeSessionQuery = 'insert into sessions(cookie, users_id, start) values (@c, @id, @st)';
+      await connection.query(storeSessionQuery, substitutionValues: {
+        'c': sessionKey, 'id': user.id.toInt(), 'st': timestamp
+      });
+    }
     return session;
   }
 
