@@ -14,7 +14,7 @@
 поток вывода, то этот текст будет доступен студенту при ошибке "Неправильный ответ".
 
 ```
-def match(args: List[str], stdin: bytes, reference: bytes) -> bool
+def match(args: List[str], stdin: bytes, stdout: bytes, reference: bytes) -> bool
 ```
 
 Параметры метода:
