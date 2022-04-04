@@ -1,7 +1,7 @@
 service:
   # NOTE: service configuration has less priority than command-line arguments
-  log_file: '@LOGS_DIRECTORY/master.log'     # /var/log/yajudge/master.log or /opt/yajudge/log/master.log
-  pid_file: '@RUNTIME_DIRECTORY/master.pid'  # /run/yajudge/master.pid or /opt/yajudge/pid/master.pid
+  log_file: '@LOGS_DIRECTORY/master-@CONFIG_NAME.log'     # /var/log/yajudge/master.log or /opt/yajudge/log/master.log
+  pid_file: '@RUNTIME_DIRECTORY/master-@CONFIG_NAME.pid'  # /run/yajudge/master.pid or /opt/yajudge/pid/master.pid
 
 database:
   host: localhost
@@ -22,3 +22,13 @@ locations:
   courses_root: '@COURSES_DIR'   # /var/lib/yajudge/courses or /opt/yajudge/courses
   problems_root: '@PROBLEMS_DIR' # /var/lib/yajudge/problems or /opt/yajudge/problems
 
+web_rpc:
+  # engines:
+  #  - none - disable Web API or configure proxy server manually out of master service
+  #  - envoy - use PATH-provided envoy proxy [https://www.envoyproxy.io]
+  #  - grpcwebproxy - use PATH-provided proxy from [https://github.com/improbable-eng/grpc-web]
+  #  - bundled-grpcwebproxy - use grpcwebproxy (like above) binary from the same location as master server binary
+  engine: 'bundled-grpcwebproxy'
+  host: 'localhost'
+  port: 9080
+  log_file: '@LOGS_DIRECTORY/grpcwebproxy-@CONFIG_NAME.log'

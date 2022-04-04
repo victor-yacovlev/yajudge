@@ -1,6 +1,6 @@
 [Unit]
 Description=Yajudge master instance service
-Requires=postgresql.service yajudge-envoy@%i.service
+Requires=postgresql.service
 
 [Service]
 Type=exec

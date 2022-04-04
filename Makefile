@@ -3,6 +3,8 @@ ARCH=$(shell uname -m)
 OS=$(shell uname -s | tr '[:upper:]' '[:lower:]')
 TGZ_DIR=yajudge-$(OS)-$(ARCH)
 TGZ_FILE=yajudge-$(RELEASE_VER)-$(OS)-$(ARCH).tgz
+GOPATH=$(HOME)/go
+GRPCWEBPROXY=$(GOPATH)/bin/grpcwebproxy
 
 first: servers
 
@@ -25,6 +27,7 @@ tgz_bundle: servers
 	mkdir -p $(TGZ_DIR)/systemd
 	cp yajudge_master/bin/yajudge-master $(TGZ_DIR)/bin
 	cp yajudge_grader/bin/yajudge-grader $(TGZ_DIR)/bin
+	cp $(GRPCWEBPROXY) $(TGZ_DIR)/bin
 	cp -R yajudge_client/build/web $(TGZ_DIR)
 	cp yajudge_master/conf/master.in.yaml $(TGZ_DIR)/conf
 	cp yajudge_master/conf/envoy.in.yaml $(TGZ_DIR)/conf
