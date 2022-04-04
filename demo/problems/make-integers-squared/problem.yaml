@@ -1,0 +1,5 @@
+title: Пример задачи с генерацией тестов
+
+
+tests_generator: generator.py
+custom_checker: checker.py

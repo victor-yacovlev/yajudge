@@ -1,0 +1,3 @@
+title: Пример задачи с использованием файлов
+
+checker_options: stdout=file.txt

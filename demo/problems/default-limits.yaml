@@ -1,0 +1,9 @@
+stack_size_limit_mb: 1
+memory_max_limit_mb: 8
+cpu_time_limit_sec: 1
+real_time_limit_sec: 3
+proc_count_limit: 10
+fd_count_limit: 10
+stdout_size_limit_mb: 1
+stderr_size_limit_mb: 1
+allow_network: false

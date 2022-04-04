@@ -1,0 +1,5 @@
+title: Пример задачи с вводом и выводом
+
+
+checker: text
+checker_options: strict

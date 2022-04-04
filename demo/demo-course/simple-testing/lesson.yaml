@@ -1,0 +1,15 @@
+title: Подготовка тестов
+readings:
+  - tests-format.md
+  - test-generators.md
+  - custom-checker.md
+
+problems:
+  # Задача на простой ввод-вывод
+  - make-text-uppercase-c
+  # Задача с использованием аргументов командной строки
+  - print-command-line-arguments-c
+  # Задача в которой ответом является файл, а не вывод на стандартный поток
+  - create-hello-world-file-c
+  # Задача в которой ответом являются целые числа, а тесты генерируются рандомно
+  - make-integers-squared

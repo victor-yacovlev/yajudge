@@ -1,9 +1,13 @@
 # Поле description предназначено для описания курса
-description: Демонстрация возможностей yajudge
+description: >
+  Демонстрация возможностей yajudge.
+  Исходные тесты этого курса, включая конфигурационные файлы задач, находятся в подкаталоге 'demo' 
+  проекта 'github.com/victor-yacovlev/yajudge'.
+  
 
 # lessons содержит упорядоченный список уроков
 # Каждый урок - это подкаталог, содержащий файл lesson.yaml
 lessons:
   - intro
-  - simple-c-program
+  - simple-testing
   - several-files

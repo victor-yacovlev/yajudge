@@ -1,0 +1,3 @@
+c: .clang-format
+cxx: .clang-format
+cpp: .clang-format
