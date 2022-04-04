@@ -894,7 +894,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     // send empty message now and periodically to prevent NGINX to close
     // connection by timeout
     controller.add(ProblemStatus());
-    Timer.periodic(Duration(seconds: 30), (timer) {
+    Timer.periodic(Duration(seconds: 15), (timer) {
       bool active =
         _problemStatusStreamControllers.containsKey(key) &&
         _problemStatusStreamControllers[key]!.contains(controller);
@@ -937,7 +937,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     // send empty message now and periodically to prevent NGINX to close
     // connection by timeout
     controller.add(CourseStatus());
-    Timer.periodic(Duration(seconds: 30), (timer) {
+    Timer.periodic(Duration(seconds: 15), (timer) {
       bool active =
           _courseStatusStreamControllers.containsKey(key) &&
               _courseStatusStreamControllers[key]!.contains(controller);
