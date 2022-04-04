@@ -48,6 +48,7 @@ class SubmissionScreenState extends BaseScreenState {
   Course? _course;
   Role? _role;
   grpc.ResponseStream<Submission>? _statusStream;
+  Timer? _statusCheckTimer;
 
   SubmissionScreenState(this.screen)
       : super(title: 'Посылка ${screen.submissionId}');
@@ -59,7 +60,7 @@ class SubmissionScreenState extends BaseScreenState {
       _courseData = screen.courseData;
       _course = screen.course;
       _role = screen.role;
-      _loadSubmission();
+      _loadSubmission(true);
     }
     else {
       _loadCourse();
@@ -92,17 +93,19 @@ class SubmissionScreenState extends BaseScreenState {
           setState(() {
             _courseData = courseData;
           });
-          _loadSubmission();
+          _loadSubmission(true);
         })
         .onError(_handleLoadError);
   }
 
-  void _loadSubmission() {
+  void _loadSubmission(bool subscribe) {
     final service = ConnectionController.instance!.submissionsService;
     service.getSubmissionResult(Submission(id: screen.submissionId, course: _course, user: screen.loggedUser))
         .then((submission) {
           _updateSubmission(submission);
-          _subscribeToNotifications();
+          if (subscribe) {
+            _subscribeToNotifications();
+          }
         })
         .onError(_handleLoadError);
   }
@@ -120,10 +123,18 @@ class SubmissionScreenState extends BaseScreenState {
 
   @override
   void dispose() {
-    if (_statusStream != null) {
-      _statusStream!.cancel();
-    }
+    _statusCheckTimer?.cancel();
+    _statusStream?.cancel();
     super.dispose();
+  }
+
+  void _startLongPollSubscriptions() {
+    if (_statusCheckTimer != null) {
+      return;
+    }
+    _statusCheckTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+      _loadSubmission(false);
+    });
   }
 
   void _subscribeToNotifications() {
@@ -145,6 +156,8 @@ class SubmissionScreenState extends BaseScreenState {
         setState(() {
           _statusStream = null;
         });
+        log.info('falling back to long-poll mode');
+        _startLongPollSubscriptions();
       },
       cancelOnError: true,
     );
