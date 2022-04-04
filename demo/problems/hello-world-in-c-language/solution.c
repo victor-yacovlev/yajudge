@@ -2,5 +2,5 @@
 
 int main()
 {
-    // Your code goes here
+    puts("Hello, World!");
 }

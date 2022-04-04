@@ -1,0 +1,14 @@
+forbidden_functions:
+  - fork
+  - clone
+  - unlink
+  - kill
+  - chroot
+  - execlp
+  - execvp
+  - execl
+  - execv
+  - execve
+  - execle
+  - syscall
+  
