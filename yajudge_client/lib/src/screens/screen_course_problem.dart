@@ -43,6 +43,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   ProblemStatus _problemStatus = ProblemStatus();
   List<File> _submissionFiles = [];
   grpc.ResponseStream<ProblemStatus>? _statusStream;
+  Timer? _statusCheckTimer;
 
   CourseProblemScreenOnePageState(this.screen) : super(title: '');
 
@@ -51,6 +52,13 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     super.initState();
     statusMessage = 'Загрузка задачи';
     _loadProblemData();
+  }
+
+  @override
+  void dispose() {
+    _statusStream?.cancel();
+    _statusCheckTimer?.cancel();
+    super.dispose();
   }
 
   void _loadProblemData() {
@@ -90,6 +98,15 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     });
   }
 
+  void _startLongPollSubscriptions() {
+    if (_statusCheckTimer != null) {
+      return;
+    }
+    _statusCheckTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+      _checkStatus();
+    });
+  }
+
   void _checkStatus() {
     final submissionsService = ConnectionController.instance!.submissionsService;
     final request = ProblemStatusRequest(
@@ -103,17 +120,11 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         errorMessage = '';
       });
       _updateProblemStatus(status);
-      if (_statusStream == null) {
-        // do timer-based polling in case of streaming not supported
-        // by server or some reverse-proxy in http chain
-        Future.delayed(Duration(seconds: 5), _checkStatus);
-      }
     })
     .onError((error, _) {
       setState(() {
         errorMessage = error;
       });
-      Future.delayed(Duration(seconds: 5), _checkStatus);
     });
 
   }
@@ -147,7 +158,8 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         setState(() {
           _statusStream = null;
         });
-        _checkStatus();  // switch to polling mode
+        log.info('switching to fallback problem status checking using long poll');
+        _startLongPollSubscriptions();  // switch to polling mode
       },
       onDone: () {
         log.info('problem status subscription done');
@@ -172,14 +184,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         submissions: newSubmissions,
       );
     });
-  }
-
-  @override
-  void dispose() {
-    if (_statusStream != null) {
-      _statusStream!.cancel();
-    }
-    super.dispose();
   }
 
   void _saveStatementFile(File file) {
