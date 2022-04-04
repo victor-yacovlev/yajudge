@@ -200,6 +200,11 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(8),
       ),
     );
+    if (widget.loggedUser.firstName.startsWith('User') && widget.loggedUser.lastName=='Demo') {
+      // Demonstration mode with temporary user profile
+      // Do not allow actions like profile or logout
+      return box;
+    }
     // MouseRegion pointable = MouseRegion(
     //   child: box, cursor: SystemMouseCursors.click,
     // );
