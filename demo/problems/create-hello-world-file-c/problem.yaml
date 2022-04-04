@@ -1,3 +1,5 @@
 title: Пример задачи с использованием файлов
 
+solution_files: create-hello-world-file-c.c
+
 checker_options: stdout=file.txt

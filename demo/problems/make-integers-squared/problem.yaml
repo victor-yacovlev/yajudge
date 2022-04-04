@@ -1,5 +1,6 @@
 title: Пример задачи с генерацией тестов
 
+solution_files: make-integers-squared.c
 
 tests_generator: generator.py
 custom_checker: checker.py
