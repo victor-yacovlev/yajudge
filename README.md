@@ -12,6 +12,13 @@ server-side components and
 also [Flutter SDK](https://flutter.dev) >= 2.8 to 
 build client-side app.
 
+## Usage and Documentation
+
+Documentation on content preparation explained in Russian using Demo course
+matching this repository [demo](./demo) subdirectory.
+
+Demo course in Russian available at [demo.yajudge.ru](https://demo.yajudge.ru). 
+
 ## Build
 
  1. Make sure you have `dart`, `flutter` and `protobuf-compiler`
