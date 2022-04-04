@@ -11,6 +11,7 @@ import 'package:path/path.dart';
 import './course_management.dart';
 import './submission_management.dart';
 import './user_management.dart';
+import 'grpc_web_proxy.dart';
 
 const NotLoggedMethods = ['StartSession', 'Authorize'];
 const PrivateMethods = [
@@ -41,12 +42,14 @@ class MasterService {
   late final SubmissionManagementService submissionManagementService;
   late final Server grpcServer;
   final DemoModeProperties? demoModeProperties;
+  final AbstractGrpcWebProxyService? grpcWebProxyService;
 
   MasterService({
     required this.connection,
     required this.rpcProperties,
     required this.locationProperties,
     this.demoModeProperties,
+    this.grpcWebProxyService,
   })
   {
     _errorsResetTimer = Timer.periodic(Duration(minutes: 1), (timer) {
@@ -75,6 +78,7 @@ class MasterService {
     );
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
+    grpcWebProxyService?.start();
   }
 
   FutureOr<GrpcError?> checkAuth(ServiceCall call, ServiceMethod method) async {
@@ -152,6 +156,7 @@ class MasterService {
 
   void shutdown(String reason, [bool error = false]) async {
     log.info('shutting down due to $reason');
+    grpcWebProxyService?.stop();
     grpcServer.shutdown();
     io.sleep(Duration(seconds: 2));
     log.info('shutdown');

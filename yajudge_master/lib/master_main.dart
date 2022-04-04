@@ -5,6 +5,7 @@ import 'package:args/args.dart';
 import 'package:logging/logging.dart';
 import 'dart:io' as io;
 import 'package:yajudge_common/yajudge_common.dart';
+import 'src/grpc_web_proxy.dart';
 import 'src/master_service.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yaml/yaml.dart';
@@ -12,6 +13,7 @@ import 'src/database_initialization.dart' as dbInit;
 
 Future<void> main(List<String> arguments) async {
   print('Starting at pid ${io.pid} with arguments: $arguments');
+  print('Program executable is ${io.Platform.script.path}');
 
   ArgResults parsedArguments = parseArguments(arguments);
 
@@ -126,6 +128,12 @@ Future<void> main(List<String> arguments) async {
     });
   });
 
+  AbstractGrpcWebProxyService? grpcWebProxyService;
+  if (config['web_rpc'] is YamlMap) {
+    final webRpcProperties = WebRpcProperties.fromYamlConfig(config['web_rpc']);
+    grpcWebProxyService = AbstractGrpcWebProxyService.create(webRpcProperties: webRpcProperties, rpcProperties: rpcProperties);
+  }
+
   futureConnectionOpen.then((_) async {
     Logger.root.fine('opened connection to database');
     Logger.root.info('starting master service on ${rpcProperties.host}:${rpcProperties.port}');
@@ -135,6 +143,7 @@ Future<void> main(List<String> arguments) async {
         rpcProperties: rpcProperties,
         locationProperties: locationProperties,
         demoModeProperties: demoModeProperties,
+        grpcWebProxyService: grpcWebProxyService,
       );
       ArgResults? command = parsedArguments.command;
       bool initDbMode = command!=null && command.name=='initialize-database';
