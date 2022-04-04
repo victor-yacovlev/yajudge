@@ -50,7 +50,7 @@ CREATE TABLE public.sessions (
 
 CREATE TABLE public.submission_files (
     id integer NOT NULL,
-    file_name character varying(30) NOT NULL,
+    file_name character varying(80) NOT NULL,
     content character varying NOT NULL,
     submissions_id integer NOT NULL
 );
