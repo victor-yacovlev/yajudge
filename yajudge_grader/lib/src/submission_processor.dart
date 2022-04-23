@@ -1095,9 +1095,15 @@ static void forbid(const char *name) {
     String valgrindOutput = '';
     SolutionStatus solutionStatus = SolutionStatus.OK;
 
+    final maxDataSizeToShow = 50 * 1024;
+
     final screenBadSymbols = (String s) {
       String result = '';
-      for (int i=0; i<s.length; i++) {
+      int outLength = s.length;
+      if (outLength > maxDataSizeToShow) {
+        outLength = maxDataSizeToShow;
+      }
+      for (int i=0; i<outLength; i++) {
         final symbol = s[i];
         int code = symbol.codeUnitAt(0);
         if (code < 32 && code != 10 || code == 0xFF) {
@@ -1217,10 +1223,9 @@ static void forbid(const char *name) {
       String waMessage = '=== Checker output:\n$resultCheckerMessage\n';
       String args = arguments.join(' ');
       waMessage += '=== Arguments: ${args}\n';
-      final maxInputSizeToShow = 50 * 1024;
       List<int> stdinBytesToShow = [];
-      if (stdinData.length > maxInputSizeToShow) {
-        stdinBytesToShow = stdinData.sublist(0, maxInputSizeToShow);
+      if (stdinData.length > maxDataSizeToShow) {
+        stdinBytesToShow = stdinData.sublist(0, maxDataSizeToShow);
       } else {
         stdinBytesToShow = stdinData;
       }
@@ -1234,8 +1239,8 @@ static void forbid(const char *name) {
           inputIsBinary = true;
         }
       }
-      if (stdinData.length > maxInputSizeToShow) {
-        inputDataToShow += '  \n(input is too big, truncated to $maxInputSizeToShow bytes)\n';
+      if (stdinData.length > maxDataSizeToShow) {
+        inputDataToShow += '  \n(input is too big, truncated to $maxDataSizeToShow bytes)\n';
       }
       else if (inputIsBinary) {
         inputDataToShow = '(input is binary file)\n';
