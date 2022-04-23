@@ -40,13 +40,11 @@ class NativePlatformUtils extends PlatformsUtils {
     List<String> parts = key.split('/');
     String filePath = userSettingsFilePath('client');
     io.File file = io.File(filePath);
-    Map<String,dynamic> root;
-    if (file.existsSync()) {
+    Map<String,dynamic> root = {};
+    try {
       YamlNode document = loadYaml(file.readAsStringSync(), sourceUrl: Uri.file(filePath));
       root = convertYamlNodeToNativeStructures(document);
-    } else {
-      root = {};
-    }
+    } catch (_) {}
     Map? parent = root;
     for (int i=0; i<parts.length-1; i++) {
       String part = parts[i];
@@ -116,6 +114,20 @@ class NativePlatformUtils extends PlatformsUtils {
       }
     }
     return result + '\n';
+  }
+
+  @override
+  Uri getWebApiUri(List<String>? arguments) {
+    String? savedLocation = loadSettingsValue('api_url');
+    if (savedLocation == null) {
+      saveSettingsValue('api_url', '');
+    }
+    if (savedLocation != null && savedLocation.isNotEmpty) {
+      return Uri.parse(savedLocation);
+    }
+    else {
+      return Uri();
+    }
   }
 
   @override

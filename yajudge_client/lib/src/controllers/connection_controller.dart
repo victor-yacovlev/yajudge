@@ -37,12 +37,20 @@ class ConnectionController {
   late final UserManagementClient usersService;
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
+  late final String _serverApiUrl; // for error logging purposes
+
+  Session _session = Session();
 
   ConnectionController(List<String> arguments) {
 
     PlatformsUtils platformsSettings = PlatformsUtils.getInstance();
     Uri grpcApiLocation = platformsSettings.getGrpcApiUri(arguments);
     Uri webApiLocation = platformsSettings.getWebApiUri(arguments);
+
+    if (webApiLocation.host.isNotEmpty) {
+      // force using http provided link instead of default
+      grpcApiLocation = Uri();
+    }
 
     String host = grpcApiLocation.host.isEmpty? webApiLocation.host : grpcApiLocation.host;
 
@@ -78,9 +86,30 @@ class ConnectionController {
     log.fine('set initial sessionId = $sessionId');
   }
 
+  String get serverApiUrl => _serverApiUrl;
+
   static void initialize(List<String> arguments) {
     assert(instance == null);
     instance = ConnectionController(arguments);
+  }
+
+  Future<Session> getSession() async {
+    if (_session.cookie.isNotEmpty && _session.user.id!=0) {
+      return _session;
+    }
+    try {
+      _session = await usersService.startSession(Session(cookie: sessionCookie));
+      sessionCookie = _session.cookie;
+      return _session;
+    }
+    catch (e) {
+      return Session();
+    }
+  }
+
+  void setSession(Session session) {
+    _session = session;
+    sessionCookie = session.cookie;
   }
 
   String get sessionCookie {

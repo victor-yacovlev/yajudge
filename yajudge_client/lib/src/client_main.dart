@@ -18,24 +18,12 @@ void main(List<String>? arguments) async {
   Logger.root.info('log level set to ${Logger.root.level.name}');
   ConnectionController.initialize(args);
   CoursesController.initialize();
+  Future<Session> futureSession = ConnectionController.instance!.getSession();
 
-  String initialRoute = await getInitialRoute();
-  if (initialRoute.isEmpty) {
-    initialRoute = '/';
-  }
-
-  App app = App(initialRoute: initialRoute);
-  runApp(app);
+  futureSession.then((session) {
+    Logger.root.info('starting app with session id ${session.cookie} user id ${session.user.id} (login: ${session.user.login})');
+    App app = App(initialSession: session);
+    runApp(app);
+  });
 }
 
-Future<String> getInitialRoute() async {
-  final usersService = ConnectionController.instance!.usersService;
-  final sessionId = ConnectionController.instance!.sessionCookie;
-  try {
-    final session = await usersService.startSession(Session(cookie: sessionId));
-    return session.redirectUrl;
-  }
-  catch (e) {
-    return "/login";
-  }
-}

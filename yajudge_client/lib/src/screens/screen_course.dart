@@ -187,7 +187,7 @@ class CourseScreenState extends BaseScreenState {
     final service = ConnectionController.instance!.submissionsService;
     final futureCourseStatus = service.checkCourseStatus(request);
     futureCourseStatus.then((CourseStatus status) {
-      setState(() {
+      if (mounted) setState(() {
         errorMessage = '';
       });
       _updateCourseStatus(status);
@@ -197,7 +197,7 @@ class CourseScreenState extends BaseScreenState {
         Future.delayed(Duration(seconds: 5), _checkStatus);
       }
     }).onError((error, stackTrace) {
-      setState(() {
+      if (mounted) setState(() {
         errorMessage = error;
       });
       Future.delayed(Duration(seconds: 5), _checkStatus);
@@ -207,7 +207,7 @@ class CourseScreenState extends BaseScreenState {
   void _subscribeToNotifications() {
     log.info('subscribing to course status notifications');
     if (errorMessage.isNotEmpty) {
-      setState(() {
+      if (mounted) setState(() {
         errorMessage = '';
       });
     }
@@ -220,14 +220,14 @@ class CourseScreenState extends BaseScreenState {
     _statusStream!.listen(
       (CourseStatus event) {
         log.info('got course status event with course.id=${event.course.id}');
-        setState(() {
+        if (mounted) setState(() {
           errorMessage = '';
         });
         _updateCourseStatus(event);
       },
       onError: (error) {
         log.info('course status subscription error: $error');
-        setState(() {
+        if (mounted) setState(() {
           _statusStream = null;
         });
         _checkStatus();  // switch to polling mode
@@ -249,7 +249,7 @@ class CourseScreenState extends BaseScreenState {
     if (empty) {
       return; // might be just ping empty message
     }
-    setState(() {
+    if (mounted) setState(() {
       _status = status;
       courseStatusIsDirty = true;
     });

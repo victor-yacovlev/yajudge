@@ -109,6 +109,7 @@ class UserEditScreenState extends BaseScreenState {
   }
 
   TextEditingController _userIdController = TextEditingController();
+  TextEditingController _loginController = TextEditingController();
   TextEditingController _lastNameController = TextEditingController();
   TextEditingController _firstNameController = TextEditingController();
   TextEditingController _midNameController = TextEditingController();
@@ -303,6 +304,7 @@ class UserEditScreenState extends BaseScreenState {
     if (_user.id > 0) {
       items.add(_buildTextFieldItem(context, 'ID пользователя', _userIdController, _user.id.toString(), false));
     }
+    items.add(_buildTextFieldItem(context, 'Login для входа', _loginController, _user.login, isAdministrator));
     items.add(_buildTextFieldItem(context, 'Фамилия', _lastNameController, _user.lastName, isAdministrator));
     items.add(_buildTextFieldItem(context, 'Имя', _firstNameController, _user.firstName, isAdministrator));
     items.add(_buildTextFieldItem(context, 'Отчество', _midNameController, _user.midName, isAdministrator));
@@ -398,7 +400,8 @@ class UserEditScreenState extends BaseScreenState {
     User user = User();
     if (_user.id > 0) {
       user = _user;
-    } 
+    }
+    user.login = _loginController.text.trim();
     user.firstName = _firstNameController.text.trim();
     user.lastName = _lastNameController.text.trim();
     user.midName = _midNameController.text.trim();
@@ -446,17 +449,18 @@ class UserEditScreenState extends BaseScreenState {
     }
     else {
       Role newRole = _roleByName(_roleController.text.trim());
+      bool loginChanged = _user.login != _loginController.text.trim();
       bool firstNameChanged = _user.firstName != _firstNameController.text.trim();
       bool lastNameChanged = _user.lastName != _lastNameController.text.trim();
       bool midNameChanged = _user.midName != _midNameController.text.trim();
       bool groupNameChanged = _user.groupName != _groupNameController.text.trim();
       bool emailChanged = _user.email != _emailController.text.trim();
       bool roleChanged = _user.defaultRole != newRole;
-      bool changed =
+      bool changed = loginChanged ||
           firstNameChanged || lastNameChanged || midNameChanged ||
               groupNameChanged || emailChanged || roleChanged
       ;
-      canSubmit = firstNameSet && lastNameSet && passwordSet && changed;
+      canSubmit = passwordSet && changed;
     }
     _canSubmit = canSubmit;
   }

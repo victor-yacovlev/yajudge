@@ -1,4 +1,6 @@
 import 'package:fixnum/fixnum.dart';
+import 'package:grpc/grpc.dart';
+import 'package:logging/logging.dart';
 import '../client_app.dart';
 import '../controllers/connection_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -33,47 +35,73 @@ class LoginScreenState extends State<LoginScreen> {
 
   LoginScreenState() : super();
 
+  final logger = Logger('LoginScreen');
+
   void setError(Object errorObj) {
     _errorText = errorObj.toString();
   }
 
   void processLogin() {
     ConnectionController.instance!.usersService.authorize(_candidate).then((Session session) {
-      ConnectionController.instance!.sessionCookie = session.cookie;
+      logger.info('logger user ${session.user}');
+      ConnectionController.instance!.setSession(session);
       setState(() {
-        print('Successfully logger user(id=${session.userId})');
-        Navigator.pushReplacementNamed(context, '/');
+        String initialRoute = session.user.initialRoute;
+        if (initialRoute.isEmpty) {
+          initialRoute = '/';
+        }
+        Navigator.pushReplacementNamed(context, initialRoute);
       });
     }).catchError((Object error) {
+      logger.warning('cant login user: $error}');
       setState(() {
         _buttonDisabled = false;
-        setError(error);
+        if (error is GrpcError) {
+          setLoginErrorText(error);
+        }
+        else {
+          setError(error);
+        }
       });
     });
+  }
+
+  void setLoginErrorText(GrpcError error) {
+    int code = error.code;
+    if (code == StatusCode.unavailable) {
+      final url = ConnectionController.instance!.serverApiUrl;
+      setError('сервер ${url} не доступен');
+    }
+    else if (code == StatusCode.notFound) {
+      setError('такой пользователь не существует');
+    }
+    else if (code == StatusCode.permissionDenied) {
+      setError('неверный пароль или пользователь заблокирован');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     String greetingMessage =
-        'Для продолжения работы необходимо войти с использованием '
-        'целочисленного ID пользователя или EMail при регистрации.'
+        'Для продолжения работы необходимо войти в систему'
     ;
     String? Function(String? value) loginValidator = (String? value) {
       if (value == null || value.isEmpty) {
         return 'Необходимо указать ID или EMail';
-      }
-      if (!_emailRegExp.hasMatch(value) &&
-          !_idRegExp.hasMatch(value)) {
-        return 'Неправильный формат ID или EMail';
       }
     };
     void Function(String? value) loginSaver = (String? value) {
       if (_emailRegExp.hasMatch(value!)) {
         _candidate.email = value;
         _candidate.id = Int64(0);
+        _candidate.login = '';
       } else if (_idRegExp.hasMatch(value)) {
         _candidate.id = Int64.parseInt(value);
         _candidate.email = '';
+      } else if (value.trim().isNotEmpty) {
+        _candidate.login = value.trim();
+        _candidate.email = '';
+        _candidate.id = Int64(0);
       }
     };
     String? Function(String? value) passwordValidator = (String? value) {

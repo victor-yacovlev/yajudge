@@ -19,7 +19,7 @@ class UserManagementService extends UserManagementServiceBase {
 
   @override
   Future<Session> authorize(ServiceCall call, User user) async {
-    if (user.id==0 && user.email.isEmpty) {
+    if (user.id==0 && user.email.isEmpty && user.login.isEmpty) {
       log.warning('empty user id tried to authorize');
       throw GrpcError.invalidArgument('id or email not provided');
     }
@@ -31,16 +31,21 @@ class UserManagementService extends UserManagementServiceBase {
       log.warning('disabled user ${user.id} / ${user.email} tried to authorize');
       throw GrpcError.permissionDenied('user disabled');
     }
-    String findByIdQuery = 'select id, email, password from users where id=@id';
-    String findByEmailQuery = 'select id, email, password from users where email=@email';
+    String findByIdQuery = 'select id, password from users where id=@id';
+    String findByEmailQuery = 'select id, password from users where email=@email';
+    String findByLoginQuery = 'select id, password from users where login=@login';
     List<List<dynamic>> usersRows;
     if (user.id > 0) {
       usersRows = await connection.query(
           findByIdQuery, substitutionValues: {'id': user.id}
       );
-    } else {
+    } else if (user.email.isNotEmpty) {
       usersRows = await connection.query(
           findByEmailQuery, substitutionValues: {'email': user.email}
+      );
+    } else {
+      usersRows = await connection.query(
+          findByLoginQuery, substitutionValues: {'login': user.login}
       );
     }
     if (usersRows.isEmpty) {
@@ -49,8 +54,7 @@ class UserManagementService extends UserManagementServiceBase {
     }
     List<dynamic> singleUserRow = usersRows.single;
     int userId = singleUserRow[0];
-    String userEmail = singleUserRow[1];
-    String userPassword = singleUserRow[2];
+    String userPassword = singleUserRow[1];
     bool passwordMatch;
     if (userPassword.startsWith('=')) {
       // plain text password
@@ -74,10 +78,11 @@ class UserManagementService extends UserManagementServiceBase {
     DateTime timestamp = DateTime.now();
     String sessionKey = '${user.id} ${user.email} ${timestamp.millisecondsSinceEpoch}';
     sessionKey = sha256.convert(utf8.encode(sessionKey)).toString();
-    Session session = Session();
-    session.cookie = sessionKey;
-    session.start = Int64(timestamp.millisecondsSinceEpoch ~/ 1000);
-    session.userId = user.id;
+    Session session = Session(
+      cookie: sessionKey,
+      start: Int64(timestamp.millisecondsSinceEpoch ~/ 1000),
+      user: user,
+    );
     // try to find existing session first
     List<dynamic> existingSessionsRows = await connection.query(
       'select cookie from sessions where cookie=@c',
@@ -170,6 +175,10 @@ class UserManagementService extends UserManagementServiceBase {
       values['password'] = '='+user.password;
       res.password = user.password;
     }
+    if (user.login.isNotEmpty) {
+      values['login'] = user.login;
+      res.login = user.login;
+    }
     if (user.firstName.isNotEmpty) {
       values['first_name'] = user.firstName;
       res.firstName = user.firstName;
@@ -243,7 +252,7 @@ class UserManagementService extends UserManagementServiceBase {
     // todo find users enrolled to specific course
     String query = '''
     select 
-      id,first_name,last_name,mid_name,group_name,email,default_role,disabled 
+      id,first_name,last_name,mid_name,group_name,email,default_role,disabled,login 
     from 
       users 
     order by 
@@ -260,11 +269,13 @@ class UserManagementService extends UserManagementServiceBase {
       String email = row[5] is String? row[5] : '';
       Role role = Role.valueOf(row[6])!;
       bool disabled = row[7];
+      String login = row[8] is String? row[8] : '';
       User user = User(
         id: Int64(id),
         firstName: firstName, lastName: lastName, midName: midName,
         groupName: groupName, password: '', email: email, disabled: disabled,
-        defaultRole: role
+        defaultRole: role,
+        login: login,
       );
       if (filter.role != Role.ROLE_ANY) {
         if (user.defaultRole != filter.role)
@@ -280,6 +291,8 @@ class UserManagementService extends UserManagementServiceBase {
       if (!partialStringMatch(partial, user.email, filter.user.email))
         continue;
       if (!partialStringMatch(partial, user.groupName, filter.user.groupName))
+        continue;
+      if (!partialStringMatch(partial, user.login, filter.user.login))
         continue;
       if (!filter.includeDisabled && user.disabled)
         continue;
@@ -303,7 +316,7 @@ class UserManagementService extends UserManagementServiceBase {
   Future<User> getUserById(Int64 id) async {
     String query = '''
     select 
-      first_name, last_name, mid_name, password, email, group_name, default_role 
+      first_name, last_name, mid_name, password, email, group_name, default_role, login 
     from users 
     where id=@id
     ''';
@@ -314,32 +327,27 @@ class UserManagementService extends UserManagementServiceBase {
       throw GrpcError.unauthenticated('user not found');
     }
     List<dynamic> fields = rows.first;
-    String firstName = fields[0];
-    String lastName = fields[1];
-    String midName = '';
-    if (fields[2] is String) {
-      midName = fields[2];
-    }
+    String firstName = fields[0] is String ? fields[0] : '';
+    String lastName = fields[1] is String ? fields[1] : '';
+    String midName = fields[2] is String ? fields[2] : '';
     String password = fields[3];
     if (password.startsWith('=')) {
       password = password.substring(1);
     } else {
       password = '';
     }
-    String email = '';
-    if (fields[4] is String) {
-      email = fields[4];
-    }
-    String groupName = '';
-    if (fields[5] is String) {
-      groupName = fields[5];
-    }
+    String email = fields[4] is String ? fields[4] : '';
+    String groupName = fields[5] is String ? fields[5] : '';
     int roleI = fields[6];
+    if (roleI == 0) {
+      throw GrpcError.internal('User $id has no associated default role}');
+    }
     Role role = Role.valueOf(roleI)!;
+    String login = fields[7] is String ? fields[7] : '';
     return User(
       id: id,
       firstName: firstName, lastName: lastName, midName: midName,
-      password: password, email: email, groupName: groupName,
+      password: password, email: email, groupName: groupName, login: login,
       defaultRole: role,
     );
   }
@@ -388,17 +396,17 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   Future<User> getUserBySession(Session session) async {
-    if (session.userId == 0) {
+    Int64 userId = session.user.id;
+    if (userId == 0) {
       List<dynamic> rows = await connection.query('select users_id from sessions where cookie=@cookie',
           substitutionValues: {'cookie': session.cookie});
       if (rows.isEmpty) {
         throw GrpcError.unauthenticated('session not found');
       }
       List<dynamic> firstRow = rows.first;
-      int userId = firstRow.first;
-      session.userId = Int64(userId);
+      userId = Int64(firstRow.first);
     }
-    return getUserById(session.userId);
+    return getUserById(userId);
   }
 
   Future<Role> getDefaultRole(User user) async {
@@ -421,14 +429,13 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<StartSessionResponse> startSession(ServiceCall call, Session request) async {
-    User user = User();
-    Session resultSession = Session();
+  Future<Session> startSession(ServiceCall call, Session request) async {
+    User user = request.user;
+    Session resultSession = request;
     dynamic getUserSessionError;
-    String redirectUrl = '';
+    String initialRoute = '/';
     try {
       user = await getUserBySession(request);
-      resultSession = request;
       if (user.defaultRole != Role.ROLE_ADMINISTRATOR) {
         final enrollments = await parent.courseManagementService
             .getUserEnrollments(user);
@@ -436,31 +443,37 @@ class UserManagementService extends UserManagementServiceBase {
           final singleEnrollment = enrollments.single;
           final course = singleEnrollment.course;
           final courseUrlPrefix = course.urlPrefix;
-          redirectUrl = '/' + courseUrlPrefix;
+          initialRoute = '/' + courseUrlPrefix;
         }
+        user = user.copyWith((u) { u.initialRoute = initialRoute; });
       }
+      resultSession = resultSession.copyWith((s) {
+        s.user = user;
+      });
     }
     catch (e) {
       getUserSessionError = e;
     }
 
-    bool allowLogout = true;
+    bool forbidLogout = parent.demoModeProperties!=null && user.defaultRole!=Role.ROLE_ADMINISTRATOR;
+    resultSession = resultSession.copyWith((s) {
+      s.user = resultSession.user.copyWith((u) {
+        u.forbidLogout = forbidLogout;
+      });
+    });
 
     if (getUserSessionError != null && parent.demoModeProperties == null) {
       throw getUserSessionError;
     }
     else if (getUserSessionError != null && parent.demoModeProperties != null) {
       // create temporary user for demo mode session
-      User newUser = User(firstName: 'A', lastName: 'Demo', email: '@', defaultRole: Role.ROLE_STUDENT, password: 'not_set');
+      User newUser = User(defaultRole: Role.ROLE_STUDENT, password: 'not_set');
       newUser = await createOrUpdateUser(call, newUser); // to assign real user id
       final newUserName = parent.demoModeProperties!.userNamePattern.replaceAll('%id', '${newUser.id}');
-      final newUserEmail = newUserName + '@localhost';
       newUser = newUser.copyWith((s) {
-        s.firstName = newUserName;
-        s.email = newUserEmail;
+        s.login = newUserName;
       });
       user = await createOrUpdateUser(call, newUser);
-      allowLogout = false;
       final courses = await parent.courseManagementService.getCourses(call, CoursesFilter());
       Course? course;
       final publicCourseUrlPrefix = parent.demoModeProperties!.publicCourse;
@@ -477,19 +490,17 @@ class UserManagementService extends UserManagementServiceBase {
           role: Role.ROLE_STUDENT,
         );
         await parent.courseManagementService.enrollUser(call, enroll);
-        redirectUrl = '/' + parent.demoModeProperties!.publicCourse;
+        initialRoute = '/' + parent.demoModeProperties!.publicCourse;
       }
+      user = user.copyWith((u) {
+        u.initialRoute = initialRoute;
+        u.forbidLogout = false;
+      });
       resultSession = await createSessionForAuthenticatedUser(user);
+      log.fine('successfully created new demo user ${user.login} with session ${resultSession.cookie}');
     }
 
-    final response = StartSessionResponse(
-      user: user,
-      session: resultSession,
-      redirectUrl: redirectUrl,
-      allowLogout: allowLogout,
-    );
-
-    return response;
+    return resultSession;
   }
 
 

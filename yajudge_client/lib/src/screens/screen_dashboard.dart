@@ -80,7 +80,11 @@ class DashboardScreenState extends BaseScreenState {
         Navigator.pushNamed(context, link);
       };
       YCardLikeButton button = YCardLikeButton(title, action, subtitle: roleTitle, subactions: subactions);
-      result.add(button);
+      final buttonWrapper = Padding(
+        child: button,
+        padding: EdgeInsets.fromLTRB(0, 0, 0, 16),
+      );
+      result.add(buttonWrapper);
     }
     return result;
   }

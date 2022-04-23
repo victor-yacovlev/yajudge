@@ -9,8 +9,6 @@ import 'controllers/connection_controller.dart';
 import 'controllers/courses_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart' as path;
-import 'package:tuple/tuple.dart';
-import 'package:grpc/grpc.dart' as grpc;
 
 import 'screens/screen_loading.dart';
 import 'screens/screen_course.dart';
@@ -25,9 +23,9 @@ import 'screens/screen_users_import_csv.dart';
 
 class App extends StatefulWidget {
 
-  final String initialRoute;
+  final Session initialSession;
 
-  App({required this.initialRoute}) : super();
+  App({required this.initialSession}) : super();
 
   @override
   State<StatefulWidget> createState() {
@@ -61,44 +59,23 @@ class AppState extends State<App> {
 
   Widget generateWidgetForRoute(BuildContext context, RouteSettings settings) {
     String fullPath = path.normalize(settings.name!);
-    String sessionId = ConnectionController.instance!.sessionCookie;
-
-    log.info('generate widget for route $fullPath and session $sessionId');
-
-    final usersService = ConnectionController.instance!.usersService;
-    final futureSession = usersService.startSession(Session(cookie: sessionId));
-
-    bool redirectToLogin = false;
-
-    futureSession.onError((error, stackTrace) {
-      print('Caught error on futureLoggerUser: $error');
-      if (error is grpc.GrpcError) {
-        print('-- Code name: ${error.codeName}');
-        print('-- Code: ${error.code}');
-        if (error.code == grpc.StatusCode.unauthenticated) {
-          redirectToLogin = true;
-        }
-      }
-      return StartSessionResponse();
-    });
-
+    log.info('generate widget for route $fullPath');
+    final futureSession = ConnectionController.instance!.getSession();
     return FutureBuilder(
       future: futureSession,
-      builder: (BuildContext context, AsyncSnapshot<StartSessionResponse> snapshot) {
-        if (redirectToLogin) {
-          return buildLoginScreen(context, returnPath: fullPath);
-        }
+      builder: (BuildContext context, AsyncSnapshot<Session> snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return loadingWaitWidget(context);
         }
-        final response = snapshot.requireData;
-        final loggedUser = response.user;
-        final sessionCookie = response.session.cookie;
-        if (sessionId != sessionCookie) {
-          ConnectionController.instance!.sessionCookie = sessionCookie;
+        Session session = snapshot.requireData;
+        if (session.cookie.isEmpty || session.user.id==0) {
+          return buildLoginScreen(context, returnPath: fullPath);
         }
-        return generateWidgetForPathAndLoggedUser(context, fullPath, loggedUser);
+        else {
+          return generateWidgetForPathAndLoggedUser(context, fullPath, session.user);
+        }
       },
+
     );
   }
 
@@ -389,12 +366,15 @@ class AppState extends State<App> {
           }
       );
     };
+    String initialRoute = widget.initialSession.user.initialRoute;
+    if (initialRoute.isEmpty) {
+      initialRoute = '/';
+    }
     MaterialApp app =  MaterialApp(
       title: title,
       theme: buildThemeData(),
-      // home: LoadingScreen('', 'Загрузка данных'),
       onGenerateRoute: onGenerateRoute,
-      initialRoute: widget.initialRoute,
+      initialRoute: initialRoute,
     );
     return app;
   }

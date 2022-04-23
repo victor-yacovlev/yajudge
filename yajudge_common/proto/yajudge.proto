@@ -24,11 +24,14 @@ message User {
   string      group_name  = 7;
   Role        default_role= 8;
   bool        disabled    = 9;
+  string      login       = 10;   // alternate way to log in instead of id and email
+  bool        forbid_logout = 11; // user might be fixed by server configuration in case of demo mode
+  string      initial_route = 12; // entry navigation point after login
 }
 
 message Session {
   string      cookie      = 1;
-  int64       user_id     = 2;
+  User        user        = 2;
   int64       start       = 3;
 }
 
@@ -347,16 +350,8 @@ message UserRole {
   Role        role        = 2;
 }
 
-message StartSessionResponse {
-  User        user = 1;
-  Session     session = 2;
-  string      redirect_url = 3;
-  bool        allow_logout = 4;
-}
-
-
 service UserManagement {
-  rpc StartSession(Session) returns (StartSessionResponse) {}
+  rpc StartSession(Session) returns (Session) {}
   rpc Authorize(User) returns (Session) {}
   rpc GetProfile(Session) returns (User) {}
   rpc GetUsers(UsersFilter) returns (UsersList) {}

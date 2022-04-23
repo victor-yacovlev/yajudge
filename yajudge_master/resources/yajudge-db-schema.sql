@@ -119,9 +119,10 @@ ALTER SEQUENCE public.submissions_id_seq OWNED BY public.submissions.id;
 
 CREATE TABLE public.users (
     id integer NOT NULL,
+    login character varying(30),
     password character varying(128) NOT NULL,
-    first_name character varying(50) NOT NULL,
-    last_name character varying(50) NOT NULL,
+    first_name character varying(50),
+    last_name character varying(50),
     mid_name character varying(50),
     email character varying(50),
     group_name character varying(30),

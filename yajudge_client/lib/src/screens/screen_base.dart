@@ -145,7 +145,10 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         visibleName = user.firstName + ' ' + user.lastName;
       }
     } else {
-      if (screenWidth < shortProfileNameWidthThreshold) {
+      if (user.login.isNotEmpty) {
+        visibleName = user.login;
+      }
+      else if (screenWidth < shortProfileNameWidthThreshold) {
         visibleName = user.id.toString();
       } else {
         visibleName = 'ID (' + user.id.toString() + ')';
@@ -200,7 +203,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(8),
       ),
     );
-    if (widget.loggedUser.firstName.startsWith('User') && widget.loggedUser.lastName=='Demo') {
+    if (widget.loggedUser.forbidLogout) {
       // Demonstration mode with temporary user profile
       // Do not allow actions like profile or logout
       return box;
