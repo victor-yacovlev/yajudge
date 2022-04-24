@@ -81,7 +81,7 @@ class UserManagementService extends UserManagementServiceBase {
     Session session = Session(
       cookie: sessionKey,
       start: Int64(timestamp.millisecondsSinceEpoch ~/ 1000),
-      user: user,
+      user: await getUserById(user.id),
     );
     // try to find existing session first
     List<dynamic> existingSessionsRows = await connection.query(
