@@ -47,10 +47,10 @@ class ConnectionController {
     Uri grpcApiLocation = platformsSettings.getGrpcApiUri(arguments);
     Uri webApiLocation = platformsSettings.getWebApiUri(arguments);
 
-    if (webApiLocation.host.isNotEmpty) {
-      // force using http provided link instead of default
-      grpcApiLocation = Uri();
-    }
+    // if (webApiLocation.host.isNotEmpty) {
+    //   // force using http provided link instead of default
+    //   grpcApiLocation = Uri();
+    // }
 
     String host = grpcApiLocation.host.isEmpty? webApiLocation.host : grpcApiLocation.host;
 
