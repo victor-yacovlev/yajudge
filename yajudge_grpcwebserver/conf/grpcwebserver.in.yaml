@@ -1,0 +1,6 @@
+listen:
+  http_port: 80
+  https_port: 443
+  bind_address: any
+
+sites_conf_directory: '@CONFIGURATION_DIRECTORY/sites-enabled'

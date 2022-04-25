@@ -1,0 +1,22 @@
+[Unit]
+Description=Web server to handle static files and proxy both gRPC and gRPC-Web
+
+[Service]
+Type=exec
+ExecStartPre=bash -c 'mkdir -p @LOGS_DIRECTORY @RUNTIME_DIRECTORY && chown @YAJUDGE_USER:@YAJUDGE_USER @LOGS_DIRECTORY @RUNTIME_DIRECTORY && chmod 0770 @LOGS_DIRECTORY @RUNTIME_DIRECTORY'
+ExecStart=@BIN_DIR/yajudge-grpcwebserver -C @CONFIGURATION_DIRECTORY/grpcwebserver.yaml -P @RUNTIME_DIRECTORY/grpcwebserver.pid -L @LOGS_DIRECTORY/grpcwebserver.log
+ExecStopPost=/bin/rm -f @RUNTIME_DIRECTORY/grpcwebserver.pid
+PIDFile=@RUNTIME_DIRECTORY/grpcwebserver.pid
+
+MemoryAccounting=yes
+MemoryMax=1G
+
+User=@YAJUDGE_USER
+Group=@YAJUDGE_USER
+Slice=yajudge.slice
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

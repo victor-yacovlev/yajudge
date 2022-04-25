@@ -36,17 +36,13 @@ func main() {
 	}
 	initializeLogger(config.Service.LogFile)
 	createPIDFile(config.Service.PidFile)
-	httpListener, httpsListener, err := createListeners(config.Hosts, config.Web)
+	httpListener, httpsListener, err := createListeners(config.Sites, config.Listen)
 	if err != nil {
 		log.Fatalf("cant create network listeners: %v", err)
 	}
-	yajudgeStaticWebHandler, err := NewStaticHandler(config.Web)
-	if err != nil {
-		log.Fatalf("cant create static handler: %v", err)
-	}
 	handler := NewServerHandler()
-	for name, hostConfig := range config.Hosts {
-		handler.Hosts[name] = NewHostInstance(name, hostConfig, yajudgeStaticWebHandler, config.Web.HttpsPort)
+	for name, hostConfig := range config.Sites {
+		handler.Sites[name], err = NewHostInstance(name, hostConfig, config.Listen.HttpsPort)
 	}
 	http2Server := &http2.Server{
 		IdleTimeout: 15 * time.Minute,
@@ -115,7 +111,7 @@ func removePIDFile(pidFileName string) {
 	}
 }
 
-func createListeners(hosts map[string]HostConfig, webConfig WebConfig) (net.Listener, net.Listener, error) {
+func createListeners(hosts map[string]*SiteConfig, webConfig ListenConfig) (net.Listener, net.Listener, error) {
 	tlsConfig, err := createTlsConfig(hosts)
 	if err != nil {
 		return nil, nil, err
@@ -134,7 +130,7 @@ func createListeners(hosts map[string]HostConfig, webConfig WebConfig) (net.List
 	return httpListener, httpsListener, nil
 }
 
-func createTlsConfig(hosts map[string]HostConfig) (*tls.Config, error) {
+func createTlsConfig(hosts map[string]*SiteConfig) (*tls.Config, error) {
 	result := &tls.Config{
 		NextProtos:   []string{"h2"},
 		Certificates: make([]tls.Certificate, 0),

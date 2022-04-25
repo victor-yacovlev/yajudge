@@ -15,9 +15,9 @@ import (
 	"strings"
 )
 
-type HostInstance struct {
+type Site struct {
 	name              string
-	config            HostConfig
+	config            *SiteConfig
 	staticHandler     *StaticHandler
 	httpsRedirectBase string
 	proxyPassURL      *url.URL
@@ -27,13 +27,13 @@ type HostInstance struct {
 }
 
 type ServerHandler struct {
-	Hosts map[string]*HostInstance
+	Sites map[string]*Site
 }
 
 func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(request.Host, ":")
 	hostName := parts[0]
-	host, found := s.Hosts[hostName]
+	host, found := s.Sites[hostName]
 	if !found {
 		http.Error(writer, fmt.Sprintf("no host %s configured", hostName), 404)
 		return
@@ -43,11 +43,11 @@ func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 
 func NewServerHandler() *ServerHandler {
 	return &ServerHandler{
-		Hosts: make(map[string]*HostInstance, 0),
+		Sites: make(map[string]*Site, 0),
 	}
 }
 
-func NewHostInstance(name string, config HostConfig, static *StaticHandler, httpsPort int) *HostInstance {
+func NewHostInstance(name string, config *SiteConfig, httpsPort int) (*Site, error) {
 	httpsRedirectHost := ""
 	if httpsPort != 0 && config.SslCertificate != "" && config.SslCertificateKey != "" {
 		httpsRedirectHost = name
@@ -59,20 +59,28 @@ func NewHostInstance(name string, config HostConfig, static *StaticHandler, http
 	if config.ProxyPass != "" {
 		proxyPassURL, _ = url.Parse(config.ProxyPass)
 	}
-	result := &HostInstance{
+	var staticHandler *StaticHandler
+	if config.WebAppStaticRoot != "" {
+		var err error
+		staticHandler, err = NewStaticHandler(config)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result := &Site{
 		name:              name,
 		config:            config,
-		staticHandler:     static,
+		staticHandler:     staticHandler,
 		httpsRedirectBase: httpsRedirectHost,
 		proxyPassURL:      proxyPassURL,
 	}
-	if config.MasterHost != "" && config.MasterPort > 0 {
+	if config.GrpcBackendHost != "" && config.GrpcBackendPort > 0 {
 		result.CreateGrpcChannels()
 	}
-	return result
+	return result, nil
 }
 
-func (host *HostInstance) Serve(wr http.ResponseWriter, req *http.Request) {
+func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 	isGrpcWeb := strings.HasPrefix(req.Header.Get("Content-Type"), "application/grpc-web")
 	isGrpc := !isGrpcWeb && strings.HasPrefix(req.Header.Get("Content-Type"), "application/grpc")
 	if req.TLS == nil && host.httpsRedirectBase != "" && !isGrpc && !isGrpcWeb {
@@ -83,6 +91,38 @@ func (host *HostInstance) Serve(wr http.ResponseWriter, req *http.Request) {
 		redirectUrl.Host = host.httpsRedirectBase
 		redirectString := redirectUrl.Redacted()
 		http.Redirect(wr, req, redirectString, 302)
+		return
+	}
+	if req.Method == "POST" && isGrpcWeb {
+		// use gRPC-Listen to gGRP package to proxy
+		if host.grpcWebServer == nil {
+			errorMessage := fmt.Sprintf("no connection to %s:%d", host.config.GrpcBackendHost, host.config.GrpcBackendPort)
+			http.Error(wr, errorMessage, 503)
+			return
+		}
+		log.Printf("%s requested %v using gRPC-Listen protocol, proxied to %s:%d",
+			req.RemoteAddr,
+			req.URL,
+			host.config.GrpcBackendHost,
+			host.config.GrpcBackendPort,
+		)
+		host.grpcWebServer.ServeHTTP(wr, req)
+		return
+	}
+	if req.Method == "POST" && isGrpc {
+		// just proxy to gRPC server
+		if host.grpcServer == nil {
+			errorMessage := fmt.Sprintf("no connection to %s:%d", host.config.GrpcBackendHost, host.config.GrpcBackendPort)
+			http.Error(wr, errorMessage, 503)
+			return
+		}
+		log.Printf("%s requested %v using gRPC protocol, proxied to %s:%d",
+			req.RemoteAddr,
+			req.URL,
+			host.config.GrpcBackendHost,
+			host.config.GrpcBackendPort,
+		)
+		host.grpcServer.ServeHTTP(wr, req)
 		return
 	}
 	if host.proxyPassURL != nil {
@@ -128,46 +168,14 @@ func (host *HostInstance) Serve(wr http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
-	if req.Method == "POST" && isGrpcWeb {
-		// use gRPC-Web to gGRP package to proxy
-		if host.grpcWebServer == nil {
-			errorMessage := fmt.Sprintf("no connection to %s:%d", host.config.MasterHost, host.config.MasterPort)
-			http.Error(wr, errorMessage, 503)
-			return
-		}
-		log.Printf("%s requested %v using gRPC-Web protocol, proxied to %s:%d",
-			req.RemoteAddr,
-			req.URL,
-			host.config.MasterHost,
-			host.config.MasterPort,
-		)
-		host.grpcWebServer.ServeHTTP(wr, req)
-		return
-	}
-	if req.Method == "POST" && isGrpc {
-		// just proxy to gRPC server
-		if host.grpcServer == nil {
-			errorMessage := fmt.Sprintf("no connection to %s:%d", host.config.MasterHost, host.config.MasterPort)
-			http.Error(wr, errorMessage, 503)
-			return
-		}
-		log.Printf("%s requested %v using gRPC protocol, proxied to %s:%d",
-			req.RemoteAddr,
-			req.URL,
-			host.config.MasterHost,
-			host.config.MasterPort,
-		)
-		host.grpcServer.ServeHTTP(wr, req)
-		return
-	}
-	if req.Method == "GET" {
-		// return Web Application static files
+	if req.Method == "GET" && host.staticHandler != nil {
+		// return Listen Application static files
 		host.staticHandler.Handle(wr, req)
 		return
 	}
 }
 
-func (host *HostInstance) CreateGrpcChannels() {
+func (host *Site) CreateGrpcChannels() {
 	grpcRedirector := func(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
 		md, _ := metadata.FromIncomingContext(ctx)
 		proxyMd := md.Copy()
@@ -177,7 +185,7 @@ func (host *HostInstance) CreateGrpcChannels() {
 		proxyCtx = metadata.NewOutgoingContext(proxyCtx, proxyMd)
 		var err error
 		if host.grpcClient == nil {
-			grpcTarget := host.config.MasterHost + ":" + strconv.Itoa(host.config.MasterPort)
+			grpcTarget := host.config.GrpcBackendHost + ":" + strconv.Itoa(host.config.GrpcBackendPort)
 			host.grpcClient, err = grpc.Dial(
 				grpcTarget,
 				grpc.WithInsecure(),

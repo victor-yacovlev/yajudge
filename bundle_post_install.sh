@@ -117,7 +117,11 @@ fi
 
 echo "Yajudge web-exposed content located in $WEB_DIR"
 
-dirs=("$LOG_DIR" "$PID_DIR" "$CACHE_DIR" "$COURSES_DIR" "$PROBLEMS_DIR" "$WORK_DIR" "$SYSTEM_DIR" "$CONF_DIR")
+mkdir -p $CONF_DIR
+mkdir -p $CONF_DIR/sites-available
+mkdir -p $CONF_DIR/sites-enabled
+
+dirs=("$LOG_DIR" "$PID_DIR" "$CACHE_DIR" "$COURSES_DIR" "$PROBLEMS_DIR" "$WORK_DIR" "$SYSTEM_DIR")
 for d in ${dirs[*]}
 do
     mkdir -p $d
@@ -170,26 +174,26 @@ fi
 
 echo "Grader configuration will be created in $GRADER_CONF"
 
-if [ -f $CONF_DIR/envoy-$CONFIG_NAME.yaml ]
+if [ -f $CONF_DIR/grpcwebserver.yaml ]
 then
-    ENVOY_CONF=$CONF_DIR/envoy-$CONFIG_NAME.new.yaml
-    echo "Found existing envoy configuration"
+  WEB_SERVER_CONF=$CONF_DIR/grpcwebserver.yaml.new
+  echo "Found existing grpcwebserver configuration"
 else
-    ENVOY_CONF=$CONF_DIR/envoy-$CONFIG_NAME.yaml
+  WEB_SERVER_CONF=$CONF_DIR/grpcwebserver.yaml
 fi
 
-echo "Envoy configuration will be created in $ENVOY_CONF"
+echo "GrpcWebServer configuration will be created in $WEB_SERVER_CONF"
 
-if [ -f /etc/nginx/sites-available/yajudge ]
+if [ -f $CONF_DIR/sites-available/$CONFIG_NAME.yaml ]
 then
-    NGINX_CONF=/etc/nginx/sites-available/yajudge.new
-    echo "Found existing nginx configuration"
+  WEB_SITE_CONF=$CONF_DIR/sites-available/$CONFIG_NAME.yaml.new
+  echo "Found existing grpcwebserver site configuration"
 else
-    NGINX_CONF=/etc/nginx/sites-available/yajudge
+  WEB_SITE_CONF=$CONF_DIR/sites-available/$CONFIG_NAME.yaml
+  WEB_SITE_LINK=$CONF_DIR/sites-enabled/$CONFIG_NAME.yaml
 fi
 
-echo "Nginx configuration will be created in $NGINX_CONF"
-
+echo "GrpcWebServer site configuration will be created in $WEB_SITE_CONF"
 
 # Create default database password file if not exists
 
@@ -223,10 +227,21 @@ sed -E "$repl" conf/grader.in.yaml > $GRADER_CONF
 echo "Created file $GRADER_CONF"
 sed -E "$repl" conf/master.in.yaml > $MASTER_CONF
 echo "Created file $MASTER_CONF"
-sed -E "$repl" conf/envoy.in.yaml > $ENVOY_CONF
-echo "Created file $ENVOY_CONF"
-sed -E "$repl" conf/nginx.in.conf > $NGINX_CONF
-echo "Created file $NGINX_CONF"
+sed -E "$repl" conf/grpcwebserver.in.yaml > $WEB_SERVER_CONF
+echo "Created file $WEB_SERVER_CONF"
+sed -E "$repl" conf/site@.in.yaml > $WEB_SITE_CONF
+echo "Created file $WEB_SITE_CONF"
+
+# Enable web config
+
+if [ "$WEB_SITE_LINK" ]
+then
+  if [ ! -L "$WEB_SITE_LINK" ]
+  then
+    ln -f -s -T "../sites-available/$CONFIG_NAME.yaml" $WEB_SITE_LINK
+    echo "$WEB_SITE_CONF symlinked to $WEB_SITE_LINK"
+  fi
+fi
 
 
 # Preprocess and create systemd files
@@ -243,17 +258,14 @@ echo "Created file $SYSTEMD_DIR/yajudge-grader@.service"
 sed -E "$repl" systemd/yajudge-master@.in.service > $SYSTEMD_DIR/yajudge-master@.service
 echo "Created file $SYSTEMD_DIR/yajudge-master@.service"
 
-sed -E "$repl" systemd/yajudge-envoy@.in.service > $SYSTEMD_DIR/yajudge-envoy@.service
-echo "Created file $SYSTEMD_DIR/yajudge-envoy@.service"
+sed -E "$repl" systemd/yajudge-grpcwebserver.in.service > $SYSTEMD_DIR/yajudge-grpcwebserver.service
+echo "Created file $SYSTEMD_DIR/yajudge-grpcwebserver.service"
 
 
 # Create systemd instance links
 
 ln -f -s -T yajudge-master@.service $SYSTEMD_DIR/yajudge-master@$CONFIG_NAME.service
 echo "$SYSTEMD_DIR/yajudge-master@.service symlinked to $SYSTEMD_DIR/yajudge-master@$CONFIG_NAME.service"
-
-ln -f -s -T yajudge-envoy@.service $SYSTEMD_DIR/yajudge-envoy@$CONFIG_NAME.service
-echo "$SYSTEMD_DIR/yajudge-envoy@.service symlinked to $SYSTEMD_DIR/yajudge-envoy@$CONFIG_NAME.service"
 
 ln -f -s -T yajudge-grader@.service $SYSTEMD_DIR/yajudge-grader@$CONFIG_NAME.service
 echo "$SYSTEMD_DIR/yajudge-grader@.service symlinked to $SYSTEMD_DIR/yajudge-grader@$CONFIG_NAME.service"

@@ -33,17 +33,19 @@ type fileCacheEntry struct {
 }
 
 type StaticHandler struct {
-	files map[string]fileCacheEntry
+	config *SiteConfig
+	files  map[string]fileCacheEntry
 }
 
-func NewStaticHandler(config WebConfig) (*StaticHandler, error) {
+func NewStaticHandler(config *SiteConfig) (*StaticHandler, error) {
 	result := &StaticHandler{
-		files: map[string]fileCacheEntry{},
+		files:  map[string]fileCacheEntry{},
+		config: config,
 	}
-	if config.YajudgeWebRoot == "" {
-		return nil, fmt.Errorf("web root not set in configuration")
+	if config.WebAppStaticRoot == "" {
+		log.Panicf("web root not set in configuration")
 	}
-	if err := result.loadDirectoryContent(config.YajudgeWebRoot, ""); err != nil {
+	if err := result.loadDirectoryContent(config.WebAppStaticRoot, ""); err != nil {
 		return nil, err
 	}
 	return result, nil
