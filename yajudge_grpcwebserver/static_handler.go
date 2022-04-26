@@ -88,7 +88,7 @@ func (handler *StaticHandler) loadDirectoryContent(dirPath, prefix string) error
 
 func (handler *StaticHandler) Handle(w http.ResponseWriter, req *http.Request) {
 	reqPath := req.URL.Path
-	log.Printf("%s requested %s", req.RemoteAddr, reqPath)
+	log.Debugf("%s requested %s", req.RemoteAddr, reqPath)
 	if reqPath == "/" {
 		reqPath = "/index.html"
 	}
@@ -96,6 +96,7 @@ func (handler *StaticHandler) Handle(w http.ResponseWriter, req *http.Request) {
 	if !exists && strings.HasPrefix(reqPath, "/favicon.") {
 		http.Error(w, "", 404)
 	} else if !exists {
+		// TODO check for blacklisted resources and make fail2ban notification
 		// might be SPA-based nagivation, so return index.html
 		entry = handler.files["/index.html"]
 		reqPath = "/index.html"
@@ -118,7 +119,7 @@ func (handler *StaticHandler) pushHttp2Resources(w http.ResponseWriter) {
 		if name != "/index.html" {
 			err := pusher.Push(name, nil)
 			if err != nil {
-				log.Warningf("failed to push %s via HTTP/2.0: %v", name, err)
+				log.Debugf("failed to push %s via HTTP/2.0: %v", name, err)
 			}
 		}
 	}

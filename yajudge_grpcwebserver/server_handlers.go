@@ -94,7 +94,7 @@ func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 	isGrpcWeb := strings.HasPrefix(req.Header.Get("Content-Type"), "application/grpc-web")
 	isGrpc := !isGrpcWeb && strings.HasPrefix(req.Header.Get("Content-Type"), "application/grpc")
 	if req.TLS == nil && host.httpsRedirectBase != "" && !isGrpc && !isGrpcWeb {
-		log.Printf("%s requested %s via http, redirecting to https", req.RemoteAddr, req.URL.Path)
+		log.Debugf("%s requested %s via http, redirecting to https", req.RemoteAddr, req.URL.Path)
 		// force using https instead of http in case if http supported by host instance
 		redirectUrl := req.URL
 		redirectUrl.Scheme = "https"
@@ -147,7 +147,7 @@ func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 			Body:     req.Body,
 			Header:   req.Header,
 		}
-		log.Printf("%s requested %v, will proxy to %v", req.RemoteAddr, req.URL, *host.proxyPassURL)
+		log.Debugf("%s requested %v, will proxy to %v", req.RemoteAddr, req.URL, *host.proxyPassURL)
 		client := http.DefaultClient
 		proxyResponse, err := client.Do(proxyRequest)
 		if err != nil {
