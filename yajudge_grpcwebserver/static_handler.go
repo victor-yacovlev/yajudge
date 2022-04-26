@@ -24,10 +24,13 @@ var contentTypes = map[string]string{
 	".wasm": "application/wasm",
 }
 
+var rarelyChangedTypes = []string{".png", ".css", ".ttf", ".otf", ".wasm"}
+
 type fileCacheEntry struct {
-	ContentType  string
-	LastModified string
-	ETag         string
+	ContentType   string
+	LastModified  string
+	ETag          string
+	RarelyChanged bool
 
 	Data []byte
 }
@@ -76,10 +79,11 @@ func (handler *StaticHandler) loadDirectoryContent(dirPath, prefix string) error
 			hasher.Write(content)
 			etag := fmt.Sprintf("\"%x\"", hasher.Sum(nil))
 			handler.files[entryRelativePath] = fileCacheEntry{
-				Data:         content,
-				ContentType:  guessContentType(entry.Name()),
-				LastModified: lastModifiedHeader,
-				ETag:         etag,
+				Data:          content,
+				ContentType:   guessContentType(entry.Name()),
+				LastModified:  lastModifiedHeader,
+				ETag:          etag,
+				RarelyChanged: isRarelyChangedType(entry.Name()),
 			}
 		}
 	}
@@ -96,7 +100,6 @@ func (handler *StaticHandler) Handle(w http.ResponseWriter, req *http.Request) {
 	if !exists && strings.HasPrefix(reqPath, "/favicon.") {
 		http.Error(w, "", 404)
 	} else if !exists {
-		// TODO check for blacklisted resources and make fail2ban notification
 		// might be SPA-based nagivation, so return index.html
 		entry = handler.files["/index.html"]
 		reqPath = "/index.html"
@@ -108,7 +111,13 @@ func (handler *StaticHandler) Handle(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(entry.Data)))
 	w.Header().Set("Last-Modified", entry.LastModified)
 	w.Header().Set("ETag", entry.ETag)
-	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	var maxAge int
+	if entry.RarelyChanged {
+		maxAge = 31536000
+	} else {
+		maxAge = 60 * 60 * 24 // force update SPA content every day
+	}
+	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(maxAge))
 	w.WriteHeader(200)
 	w.Write(entry.Data)
 }
@@ -136,4 +145,16 @@ func guessContentType(fileBaseName string) string {
 		return "application/binary"
 	}
 	return value
+}
+
+func isRarelyChangedType(fileBaseName string) bool {
+	suffix := path.Ext(fileBaseName)
+	result := false
+	for _, candidate := range rarelyChangedTypes {
+		if candidate == suffix {
+			result = true
+			break
+		}
+	}
+	return result
 }
