@@ -33,9 +33,19 @@ type ServerHandler struct {
 func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(request.Host, ":")
 	hostName := parts[0]
+	if hostName == "localhost" {
+		// might be proxied so check for Origin header
+		origin := request.Header.Get("Origin")
+		originUrl, _ := url.Parse(origin)
+		if originUrl != nil && originUrl.Host != "" {
+			hostName = originUrl.Host
+		}
+	}
 	host, found := s.Sites[hostName]
 	if !found {
-		http.Error(writer, fmt.Sprintf("no host %s configured", hostName), 404)
+		msg := fmt.Sprintf("no host %s configured", hostName)
+		log.Warningf("%s", msg)
+		http.Error(writer, msg, 404)
 		return
 	}
 	host.Serve(writer, request)
