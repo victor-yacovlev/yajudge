@@ -107,6 +107,7 @@ func (handler *StaticHandler) Handle(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(entry.Data)))
 	w.Header().Set("Last-Modified", entry.LastModified)
 	w.Header().Set("ETag", entry.ETag)
+	w.Header().Set("Cache-Control", "public, max-age=31536000")
 	w.WriteHeader(200)
 	w.Write(entry.Data)
 }
