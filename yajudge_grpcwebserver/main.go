@@ -45,7 +45,8 @@ func main() {
 		handler.Sites[name], err = NewHostInstance(name, hostConfig, config.Listen.HttpsPort)
 	}
 	http2Server := &http2.Server{
-		IdleTimeout: 15 * time.Minute,
+		IdleTimeout:          15 * time.Minute,
+		MaxConcurrentStreams: 500,
 	}
 	http1Server := &http.Server{
 		Handler: h2c.NewHandler(handler, http2Server),
