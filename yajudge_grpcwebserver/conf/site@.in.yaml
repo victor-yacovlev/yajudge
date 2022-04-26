@@ -5,6 +5,7 @@ host_name: 'my-host.my-domain.ru'
 # It is HIGHLY recommended to use SSL
 # You can obtain certificates using 'certbot' tool
 # Or just comment out these two lines
+# IMPORTANT: make sure these two files is accessible by yajudge user
 ssl_certificate: '/etc/letsencrypt/live/YOUR-HOST-NAME/cert.pem'
 ssl_certificate_key: '/etc/letsencrypt/live/YOUR-HOST-NAME/privkey.pem'
 
