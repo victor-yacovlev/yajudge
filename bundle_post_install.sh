@@ -195,6 +195,15 @@ fi
 
 echo "GrpcWebServer site configuration will be created in $WEB_SITE_CONF"
 
+if [ -f $CONF_DIR/nginx/sites-available/yajudge-$CONFIG_NAME.conf ]
+then
+  NGINX_CONF=$CONF_DIR/nginx/sites-available/yajudge-$CONFIG_NAME.conf.new
+else
+  NGINX_CONF=$CONF_DIR/nginx/sites-available/yajudge-$CONFIG_NAME.conf
+fi
+
+echo "Nginx configuration will be created in $NGINX_CONF"
+
 # Create default database password file if not exists
 
 if [ ! -f $CONF_DIR/database-password.txt ]
@@ -231,6 +240,8 @@ sed -E "$repl" conf/grpcwebserver.in.yaml > $WEB_SERVER_CONF
 echo "Created file $WEB_SERVER_CONF"
 sed -E "$repl" conf/site@.in.yaml > $WEB_SITE_CONF
 echo "Created file $WEB_SITE_CONF"
+sed -E "$repl" conf/nginx@.in.conf > $NGINX_CONF
+echo "Created file $NGINX_CONF"
 
 # Enable web config
 

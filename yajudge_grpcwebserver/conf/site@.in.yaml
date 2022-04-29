@@ -1,14 +1,6 @@
 # Fully-qualified host name
 host_name: 'my-host.my-domain.ru'
 
-# Paths to SSL certificate and key for your domain
-# It is HIGHLY recommended to use SSL
-# You can obtain certificates using 'certbot' tool
-# Or just comment out these two lines
-# IMPORTANT: make sure these two files is accessible by yajudge user
-ssl_certificate: '/etc/letsencrypt/live/YOUR-HOST-NAME/cert.pem'
-ssl_certificate_key: '/etc/letsencrypt/live/YOUR-HOST-NAME/privkey.pem'
-
 # Must match corresponding master server configuration for this site
 grpc_backend_host: 'localhost'
 grpc_backend_port: 9095
@@ -16,9 +8,3 @@ grpc_backend_port: 9095
 # Common Web-application configuration
 web_app_static_root: '@WEB_DIRECTORY'
 web_app_index_file: '/index.html'
-web_app_disable_spa_navigation: false
-
-# For use in case if you want to run some non-yajudge site on the same machine
-# Set 'proxy_pass' pointing to another webserver URL and
-# set 'web_app_static_root' above to empty string
-proxy_pass: ''
