@@ -1,4 +1,5 @@
 import 'package:fixnum/fixnum.dart';
+import 'package:flutter/foundation.dart';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import '../client_app.dart';
@@ -6,6 +7,8 @@ import '../controllers/connection_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
 import 'package:flutter/material.dart';
+
+import '../utils/utils.dart';
 
 class LoginScreen extends StatefulWidget {
 
@@ -29,6 +32,7 @@ class LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   User _candidate = User();
+  Uri _serverUri = Uri();
 
   String? _errorText;
   bool _buttonDisabled = false;
@@ -37,11 +41,30 @@ class LoginScreenState extends State<LoginScreen> {
 
   final logger = Logger('LoginScreen');
 
+  late FocusNode _loginFocusNode;
+  late FocusNode _passwordFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _loginFocusNode = FocusNode();
+    _passwordFocusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _loginFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
   void setError(Object errorObj) {
     _errorText = errorObj.toString();
   }
 
   void processLogin() {
+    PlatformsUtils.getInstance().saveSettingsValue('api_url', _serverUri.toString());
+    ConnectionController.initialize(_serverUri);
     ConnectionController.instance!.usersService.authorize(_candidate).then((Session session) {
       logger.info('logger user ${session.user}');
       ConnectionController.instance!.setSession(session);
@@ -69,7 +92,7 @@ class LoginScreenState extends State<LoginScreen> {
   void setLoginErrorText(GrpcError error) {
     int code = error.code;
     if (code == StatusCode.unavailable) {
-      final url = ConnectionController.instance!.serverApiUrl;
+      final url = ConnectionController.instance!.connectionUri;
       setError('сервер ${url} не доступен');
     }
     else if (code == StatusCode.notFound) {
@@ -82,15 +105,26 @@ class LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String greetingMessage =
+    final greetingMessage =
         'Для продолжения работы необходимо войти в систему'
     ;
-    String? Function(String? value) loginValidator = (String? value) {
-      if (value == null || value.isEmpty) {
-        return 'Необходимо указать ID или EMail';
+    final serverValidator = (String? value) {
+      if (value == null || value.trim().isEmpty) {
+        return 'Необходимо указать сервер для подключения';
+      }
+      if (null == Uri.tryParse(value)) {
+        return 'Некорректный адрес сервера';
       }
     };
-    void Function(String? value) loginSaver = (String? value) {
+    final serverSaver = (String? value) {
+      _serverUri = Uri.parse(value!);
+    };
+    final loginValidator = (String? value) {
+      if (value == null || value.trim().isEmpty) {
+        return 'Необходимо указать ID, логин или EMail';
+      }
+    };
+    final loginSaver = (String? value) {
       if (_emailRegExp.hasMatch(value!)) {
         _candidate.email = value;
         _candidate.id = Int64(0);
@@ -104,12 +138,12 @@ class LoginScreenState extends State<LoginScreen> {
         _candidate.id = Int64(0);
       }
     };
-    String? Function(String? value) passwordValidator = (String? value) {
-      if (value == null || value.isEmpty) {
+    final passwordValidator = (String? value) {
+      if (value == null || value.trim().isEmpty) {
         return 'Пароль не бывает пустым';
       }
     };
-    void Function(String? value) passwordSaver = (String? value) {
+    final passwordSaver = (String? value) {
       _candidate.password = value!;
     };
     Widget errorItem = Padding(
@@ -118,7 +152,7 @@ class LoginScreenState extends State<LoginScreen> {
         style: TextStyle(color: Theme.of(context).errorColor),
       ),
     );
-    void Function() buttonHandler = () {
+    final buttonHandler = () {
       if (_formKey.currentState!.validate()) {
         setState(() {
           _errorText = null;
@@ -128,32 +162,81 @@ class LoginScreenState extends State<LoginScreen> {
         processLogin();
       }
     };
-    String loginHint = 'ID пользователя или EMail';
-    String passwordHint = 'Пароль';
-    String buttonText = 'Войти';
-    Widget loginField, passwordField, loginButton;
+    final serverHint = 'Сервер для подключения';
+    final loginHint = 'ID пользователя или EMail';
+    final passwordHint = 'Пароль';
+    final buttonText = 'Войти';
+    Widget? serverField;
+    Widget loginField;
+    Widget passwordField;
+    Widget loginButton;
     Form form;
+    List<Widget> formItems = [];
+
+    String initialServerValue = '';
+    if (ConnectionController.instance != null) {
+      initialServerValue = ConnectionController.instance!.connectionUri.toString();
+    }
+    bool showServerField = true;
+    if (kIsWeb) {
+      if (initialServerValue.isEmpty) {
+        initialServerValue = Uri.base.scheme + '://' + Uri.base.host;
+        if (Uri.base.host == 'localhost') {
+          initialServerValue += ":9095";
+        }
+      }
+      if (Uri.base.host != 'localhost') {
+        bool showServerField = false;
+      }
+    }
+    if (showServerField) {
+      serverField = TextFormField(
+        autofocus: true,
+        initialValue: initialServerValue.isEmpty ? null : initialServerValue,
+        decoration: InputDecoration(hintText: serverHint),
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        validator: serverValidator,
+        onSaved: serverSaver,
+        onEditingComplete: () { _loginFocusNode.requestFocus(); },
+      );
+      formItems.add(serverField);
+    }
+
     loginField = TextFormField(
+      autofocus: serverField==null,
+      focusNode: _loginFocusNode,
       decoration: InputDecoration(hintText: loginHint),
       autovalidateMode: AutovalidateMode.onUserInteraction,
       validator: loginValidator,
       onSaved: loginSaver,
+      autofillHints: [AutofillHints.name],
+      onEditingComplete: () { _passwordFocusNode.requestFocus(); },
     );
+    formItems.add(loginField);
+
     passwordField = TextFormField(
       obscureText: true,
+      focusNode: _passwordFocusNode,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       decoration: InputDecoration(hintText: passwordHint),
       validator: passwordValidator,
       onSaved: passwordSaver,
+      autofillHints: [AutofillHints.password],
+      onEditingComplete: () { buttonHandler(); },
     );
+    formItems.add(passwordField);
+
     loginButton = TextButton(
       child: Text(buttonText.toUpperCase()),
       onPressed: _buttonDisabled ? null : buttonHandler,
     );
+
+    formItems.add(errorItem);
     form = Form(
         key: _formKey,
-        child: Column(children: [loginField, passwordField, errorItem,])
+        child: Column(children: formItems)
     );
+
     return Column(children: [
       // greetingItem,
       // const SizedBox(height: 8,),

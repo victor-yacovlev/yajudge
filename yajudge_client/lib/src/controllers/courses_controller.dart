@@ -11,7 +11,6 @@ class CoursesController {
   List<CoursesList_CourseListEntry> _coursesList = [];
 
   static void initialize() {
-    assert(instance == null);
     instance = CoursesController();
   }
 

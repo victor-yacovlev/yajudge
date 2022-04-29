@@ -1,10 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_connection_interface.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import '../utils/utils.dart';
+import 'courses_controller.dart';
 
 class AuthGrpcInterceptor implements ClientInterceptor {
   String sessionCookie = '';
@@ -32,52 +32,49 @@ class ConnectionController {
   static ConnectionController? instance;
   final log = Logger('ConnectionController');
 
-  late final ClientChannelBase _clientChannel;
+  ClientChannelBase? _clientChannel;
   final _authGrpcInterceptor = AuthGrpcInterceptor();
-  late final UserManagementClient usersService;
-  late final CourseManagementClient coursesService;
-  late final SubmissionManagementClient submissionsService;
-  late final String _serverApiUrl; // for error logging purposes
+  late UserManagementClient usersService;
+  late CourseManagementClient coursesService;
+  late SubmissionManagementClient submissionsService;
+  late Uri _connectionUri;
 
   Session _session = Session();
 
-  ConnectionController(List<String> arguments) {
+  ConnectionController(this._connectionUri) {
 
-    PlatformsUtils platformsSettings = PlatformsUtils.getInstance();
-    Uri grpcApiLocation = platformsSettings.getGrpcApiUri(arguments);
-    Uri webApiLocation = platformsSettings.getWebApiUri(arguments);
+    if (_clientChannel != null) {
+      _clientChannel!.shutdown();
+    }
+    final host = _connectionUri.host;
+    final secure = ['grpcs', 'https'].contains(_connectionUri.scheme);
+    int port = _connectionUri.port;
+    if (port == 0) {
+      port = secure ? 443 : 80;
+    }
 
-    // if (webApiLocation.host.isNotEmpty) {
-    //   // force using http provided link instead of default
-    //   grpcApiLocation = Uri();
-    // }
-
-    String host = grpcApiLocation.host.isEmpty? webApiLocation.host : grpcApiLocation.host;
-
-    _clientChannel = GrpcOrGrpcWebClientChannel.toSeparatePorts(
-      host: host,
-      grpcPort: grpcApiLocation.port,
-      grpcWebPort: webApiLocation.port,
-      grpcTransportSecure: false,
-      grpcWebTransportSecure: webApiLocation.scheme=='https',
+    _clientChannel = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
+        host: host,
+        port: port,
+        transportSecure: secure,
     );
 
-    if (kIsWeb && (webApiLocation.port >= 9000)) {
+    if (host == 'localhost') {
       Logger.root.level = Level.ALL;
-      Logger.root.info('log level changed to ${Logger.root.level.name} due to running port number > 9000');
+      Logger.root.info('log level changed to ${Logger.root.level.name}');
     }
     log.fine('created client channel to host $host');
 
     usersService = UserManagementClient(
-        _clientChannel,
+        _clientChannel!,
         interceptors: [_authGrpcInterceptor]);
 
     coursesService = CourseManagementClient(
-        _clientChannel,
+        _clientChannel!,
         interceptors: [_authGrpcInterceptor]);
 
     submissionsService = SubmissionManagementClient(
-        _clientChannel,
+        _clientChannel!,
         interceptors: [_authGrpcInterceptor]);
 
     String sessionId = sessionCookie;
@@ -86,11 +83,13 @@ class ConnectionController {
     log.fine('set initial sessionId = $sessionId');
   }
 
-  String get serverApiUrl => _serverApiUrl;
+  Uri get connectionUri => _connectionUri;
 
-  static void initialize(List<String> arguments) {
-    assert(instance == null);
-    instance = ConnectionController(arguments);
+  static void initialize(Uri connectionUri) {
+    if (instance==null || instance!._connectionUri != connectionUri) {
+      instance = ConnectionController(connectionUri);
+      CoursesController.initialize();
+    }
   }
 
   Future<Session> getSession() async {
