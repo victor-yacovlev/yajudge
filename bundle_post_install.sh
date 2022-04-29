@@ -277,10 +277,6 @@ systemctl daemon-reload
 echo "Reloaded systemd configuration"
 
 
-# Allow grpcwebserver to listen ports <1024
-setcap 'cap_net_bind_service=+ep' "$BIN_DIR/yajudge-grpcwebserver"
-
-
 # Make message on configuration
 
 echo "Done. See README.md for next configuration stages"

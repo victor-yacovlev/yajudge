@@ -8,6 +8,8 @@ ExecStart=@BIN_DIR/yajudge-grpcwebserver -C @CONFIGURATION_DIRECTORY/grpcwebserv
 ExecStopPost=/bin/rm -f @RUNTIME_DIRECTORY/grpcwebserver.pid
 PIDFile=@RUNTIME_DIRECTORY/grpcwebserver.pid
 
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
 MemoryAccounting=yes
 MemoryMax=1G
 
