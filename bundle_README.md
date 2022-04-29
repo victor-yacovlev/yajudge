@@ -14,11 +14,7 @@ This sofware requires these third-party components to run:
  NGINX web server will serve web application static files and deal
  with SSL certificates.
  
- 3. Envoy proxy server [see project website](https://www.envoyproxy.io/)
-
- Envoy proxy server is required to translate web-based requests into
- master's server compatible requests.
-
+ 
 ## Installation
 
  1. Run install script 'post_install.sh' as root. This will create user
@@ -28,11 +24,13 @@ This sofware requires these third-party components to run:
    - /etc/yajudge/master-default.yaml
    - /etc/yajudge/envoy-default.yaml
    - /etc/yajudge/grader-default.yaml
-   - /etc/nginx/sites-available/yajudge
+   - /etc/yajudge/grpcwebserver.yaml
+   - /etc/yajudge/sites-available/default.yaml
+   - /etc/yajudge/sites-enabled/default.yaml
+   - /etc/nginx/sites-available/yajudge-default.conf
    - /etc/systemd/system/yajudge-master@.service
    - /etc/systemd/system/yajudge-master@default.service
-   - /etc/systemd/system/yajudge-envoy@.service
-   - /etc/systemd/system/yajudge-envoy@default.service
+   - /etc/systemd/system/yajudge-grpcwebserver.service
    - /etc/systemd/system/yajudge-grader-prepare.service
    - /etc/systemd/system/yajudge-grader.slice
    - /etc/systemd/system/yajudge-grader@.service

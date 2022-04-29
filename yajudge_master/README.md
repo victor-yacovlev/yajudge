@@ -6,18 +6,14 @@
  - PostgreSQL 10 or later
  - protoc compiler
 
-In order to use within Web interface target there are
-additional third-party components required:
+In order to use within Web interface target there are additional components required:
 
- - `nginx` web-server to serve static content exposed
-by `yajudge_client` and handle SSL connections
+ - bundled [yajudge_grpcwebserver](../yajudge_grpcwebserver) to serve static content
+and proxy gRPC-Web into gRPC-Native protocol
 
- - [envoy proxy-server](https://www.envoyproxy.io) to
-translate gRPC-web request from browsers into native
-gRPC requests to master server.
+ - [nginx](https://nginx.org) web-server which works 5x times faster than bundled server
+and in use for reverse-proxy of static content and handle SSL connections.
 
-Example configurations for nginx and envoy provided
-in `conf` subdirectory.
 
 ### Build
 Just type `make` from parent directory, or from this 
