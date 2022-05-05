@@ -29,8 +29,9 @@ class DashboardScreenState extends BaseScreenState {
       return [];
     }
     List<Widget> result = [];
+    bool isAdministrator = widget.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR;
     Text title = Text(
-      'Мои курсы',
+      isAdministrator ? 'Все курсы' : 'Мои курсы',
       style: Theme.of(context).textTheme.headline6,
     );
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
@@ -43,12 +44,15 @@ class DashboardScreenState extends BaseScreenState {
       final submissionsAction = () {
         Navigator.pushNamed(context, '/submissions/${e.course.urlPrefix}');
       };
+      final enrollmentsAction = () {
+        Navigator.pushNamed(context, '/enrollments/${e.course.urlPrefix}');
+      };
       final settingsAction = () {
         Navigator.pushNamed(context, '/courses/${e.course.urlPrefix}');
       };
       String? roleTitle;
       List<Widget> subactions = [];
-      if (e.role != Role.ROLE_STUDENT) {
+      if (e.role != Role.ROLE_STUDENT || isAdministrator) {
         roleTitle = 'Вид глазами студента';
         subactions.addAll([
           IconButton(
@@ -65,15 +69,23 @@ class DashboardScreenState extends BaseScreenState {
           ),
         ]);
       }
-      if (e.role == Role.ROLE_LECTUER || e.role == Role.ROLE_ADMINISTRATOR) {
+      if (e.role == Role.ROLE_LECTUER || e.role == Role.ROLE_ADMINISTRATOR || isAdministrator) {
         subactions.add(
-          IconButton(
-            icon: const Icon(Icons.settings),
-            color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
-            onPressed: settingsAction,
-            tooltip: 'Настройки курса',
-          )
+            IconButton(
+              icon: const Icon(Icons.people),
+              color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
+              onPressed: enrollmentsAction,
+              tooltip: 'Группы и студенты',
+            )
         );
+        // subactions.add(
+        //   IconButton(
+        //     icon: const Icon(Icons.settings),
+        //     color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
+        //     onPressed: settingsAction,
+        //     tooltip: 'Настройки курса',
+        //   )
+        // );
       }
       String link = '/' + e.course.urlPrefix + '/';
       final action = () {

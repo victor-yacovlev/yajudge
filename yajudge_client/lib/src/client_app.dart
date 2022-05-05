@@ -2,6 +2,8 @@ import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'screens/screen_course_progress.dart';
+import 'screens/screen_enrollments.dart';
+import 'screens/screen_enrollments_group.dart';
 import 'screens/screen_submission.dart';
 import 'screens/screen_course_problem.dart';
 import 'screens/screen_error.dart';
@@ -133,6 +135,28 @@ class AppState extends State<App> {
       final filterString = match.groupCount > 2 ? match.group(2) : '';
       // TODO parse filter string
       return CourseProgressScreen(
+        loggedUser: loggedUser,
+        courseUrlPrefix: courseUrlPrefix,
+      );
+    }
+
+    final RegExp enrollmentsWithGroup = RegExp(r'/enrollments/([a-z_-]+)/(.+)');
+    if (enrollmentsWithGroup.hasMatch(fullPath)) {
+      final match = enrollmentsWithGroup.matchAsPrefix(fullPath)!;
+      final courseUrlPrefix = match.group(1)!;
+      final groupName = match.group(2)!;
+      return EnrollmentsGroupScreen(
+        loggedUser: loggedUser,
+        courseUrlPrefix: courseUrlPrefix,
+        groupName: groupName,
+      );
+    }
+
+    final RegExp enrollments = RegExp(r'/enrollments/([a-z_-]+)');
+    if (enrollments.hasMatch(fullPath)) {
+      final match = enrollments.matchAsPrefix(fullPath)!;
+      final courseUrlPrefix = match.group(1)!;
+      return EnrollmentsScreen(
         loggedUser: loggedUser,
         courseUrlPrefix: courseUrlPrefix,
       );

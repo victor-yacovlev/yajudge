@@ -127,6 +127,9 @@ class UserManagementService extends UserManagementServiceBase {
     }
     await connection.transaction((connection) async {
       for (User user in usersList.users) {
+        await connection.query('delete from personal_enrollments where users_id=@id',
+          substitutionValues: {'id': user.id.toInt() }
+        );
         await connection.query('delete from users where id=@id',
             substitutionValues: {'id': user.id.toInt()});
       }
@@ -262,8 +265,8 @@ class UserManagementService extends UserManagementServiceBase {
     List<dynamic> rows = await connection.query(query);
     for (List<dynamic> row in rows) {
       int id = row[0];
-      String firstName = row[1];
-      String lastName = row[2];
+      String firstName = row[1] is String? row[1] : '';
+      String lastName = row[2] is String? row[2] : '';
       String midName = row[3] is String? row[3] : '';
       String groupName = row[4] is String? row[4] : '';
       String email = row[5] is String? row[5] : '';
@@ -437,8 +440,9 @@ class UserManagementService extends UserManagementServiceBase {
     try {
       user = await getUserBySession(request);
       if (user.defaultRole != Role.ROLE_ADMINISTRATOR) {
-        final enrollments = await parent.courseManagementService
-            .getUserEnrollments(user);
+        final enrollmentsService = parent.enrollmentManagementService;
+        final enrollmentsResponse = await enrollmentsService.getUserEnrollments(call, user);
+        final enrollments = enrollmentsResponse.enrollments;
         if (enrollments.length == 1) {
           final singleEnrollment = enrollments.single;
           final course = singleEnrollment.course;
@@ -484,12 +488,12 @@ class UserManagementService extends UserManagementServiceBase {
         }
       }
       if (course != null) {
-        final enroll = Enroll(
+        final enroll = EnrollUserRequest(
           course: course,
           user: user,
           role: Role.ROLE_STUDENT,
         );
-        await parent.courseManagementService.enrollUser(call, enroll);
+        await parent.enrollmentManagementService.enrollUser(call, enroll);
         initialRoute = '/' + parent.demoModeProperties!.publicCourse;
       }
       user = user.copyWith((u) {

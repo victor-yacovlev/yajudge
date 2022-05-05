@@ -5,7 +5,7 @@ import 'assets_loader.dart';
 import 'dart:io' as io;
 
 final tablesRequired = {
-  'enrollments', 'users', 'sessions', 'submission_files',
+  'personal_enrollments', 'group_enrollments', 'users', 'sessions', 'submission_files',
   'submission_results', 'submissions', 'courses'
 };
 

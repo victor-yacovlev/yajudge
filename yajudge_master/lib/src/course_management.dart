@@ -89,47 +89,6 @@ class CourseManagementService extends CourseManagementServiceBase {
     return Nothing();
   }
 
-  @override
-  Future<Course> enrollUser(ServiceCall call, Enroll request) async {
-    User user = request.user;
-    Course course = request.course;
-    Role role = request.role;
-    if (user.id == 0 && user.email.isEmpty) {
-      throw GrpcError.invalidArgument('user id or email required');
-    } else if (user.id == 0) {
-      List<dynamic> rows = await connection.query(
-          'select id from users where email=@email',
-          substitutionValues: {'email': user.email});
-      List<dynamic> row = rows.first;
-      user.id = Int64(row.first);
-    }
-    if (role == Role.ROLE_ANY) {
-      throw GrpcError.invalidArgument('exact role required');
-    }
-    if (course.id == 0 && course.name.isEmpty) {
-      throw GrpcError.invalidArgument('course id or name required');
-    } else if (course.id == 0) {
-      List<dynamic> rows = await connection.query(
-          'select id from courses where name=@name',
-          substitutionValues: {'name': course.name});
-      List<dynamic> row = rows.first;
-      course.id = Int64(row.first);
-    } else if (course.name.isEmpty) {
-      List<dynamic> rows = await connection.query(
-          'select name from courses where id=@id',
-          substitutionValues: {'id': course.id.toInt()});
-      List<dynamic> row = rows.first;
-      course.name = row.first;
-    }
-    await connection.query(
-        'insert into enrollments(courses_id, users_id, role) values (@c,@u,@r)',
-        substitutionValues: {
-          'c': course.id.toInt(),
-          'u': user.id.toInt(),
-          'r': role.value,
-        });
-    return course;
-  }
 
   @override
   Future<ProblemContentResponse> getProblemFullContent(ServiceCall? call, ProblemContentRequest request) async {
@@ -228,11 +187,70 @@ class CourseManagementService extends CourseManagementServiceBase {
     }
   }
 
+  Future<Course> getCourseInfo(Int64 id) async {
+    final query = '''
+    select 
+      name, course_data, url_prefix, no_teacher_mode
+    from courses
+    where id=@id
+    ''';
+    final rows = await connection.query(query, substitutionValues: {'id': id.toInt()});
+    if (rows.isEmpty) {
+      throw GrpcError.notFound('course with id=$id not found while getting course info');
+    }
+    final row = rows.single;
+    String name = row[0];
+    String dataId = row[1];
+    String urlPrefix = row[2];
+    bool no_teacher_mode = row[3];
+    return Course(
+      id: id,
+      name: name,
+      dataId: dataId,
+      urlPrefix: urlPrefix,
+      noTeacherMode: no_teacher_mode,
+    );
+  }
+
+  Future<Course> getCourseInfoByUrlPrefix(String urlPrefix) async {
+    final query = '''
+    select 
+      id, name, course_data, no_teacher_mode
+    from courses
+    where url_prefix=@url_prefix
+    ''';
+    final rows = await connection.query(query, substitutionValues: {'url_prefix': urlPrefix});
+    if (rows.isEmpty) {
+      throw GrpcError.notFound('course with url_prefix=$urlPrefix not found while getting course info');
+    }
+    final row = rows.single;
+    int id = row[0];
+    String name = row[1];
+    String dataId = row[2];
+    bool no_teacher_mode = row[3];
+    return Course(
+      id: Int64(id),
+      name: name,
+      dataId: dataId,
+      urlPrefix: urlPrefix,
+      noTeacherMode: no_teacher_mode,
+    );
+  }
+
   @override
   Future<CoursesList> getCourses(ServiceCall call, CoursesFilter filter) async {
-    List<Enrollment> enrollments = List.empty(growable: true);
+    List<Enrollment> enrollments = [];
+    final enrollmentsService = parent.enrollmentManagementService;
+    final usersService = parent.userManagementService;
+    bool userIsAdministrator = false;
     if (filter.user.id > 0) {
-      enrollments = await getUserEnrollments(filter.user);
+      enrollments = (await enrollmentsService.getUserEnrollments(call, filter.user)).enrollments;
+      // check if user is really administrator
+      if (filter.user.defaultRole == Role.ROLE_ADMINISTRATOR) {
+        User userProfile = await usersService.getUserById(filter.user.id);
+        userIsAdministrator =
+            userProfile.defaultRole == Role.ROLE_ADMINISTRATOR;
+      }
     }
     List<dynamic> allCourses = await connection
         .query('select id,name,course_data,url_prefix,no_teacher_mode from courses');
@@ -254,7 +272,7 @@ class CourseManagementService extends CourseManagementServiceBase {
             break;
           }
         }
-        if (!enrollmentFound) {
+        if (!enrollmentFound && !userIsAdministrator) {
           continue;
         }
       } else if (filter.user.id > 0) {
@@ -277,28 +295,6 @@ class CourseManagementService extends CourseManagementServiceBase {
     }
     CoursesList result = CoursesList(courses: res);
     return result;
-  }
-
-  Future<List<Enrollment>> getUserEnrollments(User user) async {
-    assert(user.id > 0);
-    List<Enrollment> enrollments = List.empty(growable: true);
-    List<dynamic> rows = await connection.query(
-        '''
-        select courses_id, role, name, url_prefix
-        from enrollments, courses
-        where users_id=@id and courses_id=courses.id;
-        ''',
-        substitutionValues: {'id': user.id.toInt()});
-    for (List<dynamic> fields in rows) {
-      int courseId = fields[0];
-      int role = fields[1];
-      String name = fields[2];
-      String urlPrefix = fields[3];
-      Course course = Course(id: Int64(courseId), name: name, urlPrefix: urlPrefix);
-      Enrollment enrollment = Enrollment(course: course, role: Role.valueOf(role)!);
-      enrollments.add(enrollment);
-    }
-    return enrollments;
   }
 
   @override

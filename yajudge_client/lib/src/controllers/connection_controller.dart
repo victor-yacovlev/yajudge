@@ -37,6 +37,7 @@ class ConnectionController {
   late UserManagementClient usersService;
   late CourseManagementClient coursesService;
   late SubmissionManagementClient submissionsService;
+  late EnrollmentsManagerClient enrollmentsService;
   late Uri _connectionUri;
 
   Session _session = Session();
@@ -66,16 +67,24 @@ class ConnectionController {
     log.fine('created client channel to host $host');
 
     usersService = UserManagementClient(
-        _clientChannel!,
-        interceptors: [_authGrpcInterceptor]);
+      _clientChannel!,
+      interceptors: [_authGrpcInterceptor]
+    );
 
     coursesService = CourseManagementClient(
-        _clientChannel!,
-        interceptors: [_authGrpcInterceptor]);
+      _clientChannel!,
+      interceptors: [_authGrpcInterceptor]
+    );
 
     submissionsService = SubmissionManagementClient(
-        _clientChannel!,
-        interceptors: [_authGrpcInterceptor]);
+      _clientChannel!,
+      interceptors: [_authGrpcInterceptor]
+    );
+
+    enrollmentsService = EnrollmentsManagerClient(
+      _clientChannel!,
+      interceptors: [_authGrpcInterceptor]
+    );
 
     String sessionId = sessionCookie;
     _authGrpcInterceptor.sessionCookie = sessionId;

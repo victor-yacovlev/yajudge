@@ -21,15 +21,16 @@ CREATE SEQUENCE public.courses_id_seq
 ALTER SEQUENCE public.courses_id_seq OWNED BY public.courses.id;
 
 
-CREATE TABLE public.enrollments (
+CREATE TABLE public.personal_enrollments (
     id integer NOT NULL,
     courses_id integer NOT NULL,
     users_id integer NOT NULL,
-    role integer NOT NULL
+    role integer NOT NULL,
+    group_pattern varchar(30) NOT NULL DEFAULT ''
 );
 
 
-CREATE SEQUENCE public.enrollments_id_seq
+CREATE SEQUENCE public.personal_enrollments_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -38,7 +39,26 @@ CREATE SEQUENCE public.enrollments_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.enrollments_id_seq OWNED BY public.enrollments.id;
+ALTER SEQUENCE public.personal_enrollments_id_seq OWNED BY public.personal_enrollments.id;
+
+
+CREATE TABLE public.group_enrollments (
+    id integer NOT NULL,
+    courses_id integer NOT NULL,
+    group_pattern varchar(30) NOT NULL
+);
+
+
+CREATE SEQUENCE public.group_enrollments_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.group_enrollments_id_seq OWNED BY public.group_enrollments.id;
 
 
 CREATE TABLE public.sessions (
@@ -175,13 +195,6 @@ ALTER TABLE ONLY public.users
 
 CREATE INDEX submission_results_target_index ON public.submission_results USING btree (submissions_id);
 
-
-ALTER TABLE ONLY public.enrollments
-    ADD CONSTRAINT enrollments_courses_id_fk FOREIGN KEY (courses_id) REFERENCES public.courses(id);
-
-
-ALTER TABLE ONLY public.enrollments
-    ADD CONSTRAINT enrollments_users_id_fk FOREIGN KEY (users_id) REFERENCES public.users(id);
 
 ALTER TABLE ONLY public.sessions
     ADD CONSTRAINT sessions_users_id_fk FOREIGN KEY (users_id) REFERENCES public.users(id) ON DELETE CASCADE;

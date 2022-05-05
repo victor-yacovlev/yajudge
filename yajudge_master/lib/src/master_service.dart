@@ -11,6 +11,7 @@ import 'package:path/path.dart';
 import './course_management.dart';
 import './submission_management.dart';
 import './user_management.dart';
+import 'enrollment_management.dart';
 import 'grpc_web_proxy.dart';
 
 const NotLoggedMethods = ['StartSession', 'Authorize'];
@@ -40,6 +41,7 @@ class MasterService {
   late final UserManagementService userManagementService;
   late final CourseManagementService courseManagementService;
   late final SubmissionManagementService submissionManagementService;
+  late final EnrollmentManagementService enrollmentManagementService;
   late final Server grpcServer;
   final DemoModeProperties? demoModeProperties;
   final AbstractGrpcWebProxyService? grpcWebProxyService;
@@ -72,8 +74,12 @@ class MasterService {
         parent: this,
         connection: connection
     );
+    enrollmentManagementService = EnrollmentManagementService(
+        parent: this,
+        connection: connection
+    );
     grpcServer = Server(
-        [userManagementService, courseManagementService, submissionManagementService],
+        [userManagementService, courseManagementService, submissionManagementService, enrollmentManagementService],
         [checkAuth]
     );
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));

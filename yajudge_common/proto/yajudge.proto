@@ -343,6 +343,7 @@ message Enrollment {
   Course      course      = 1;
   User        user        = 2;
   Role        role        = 3;
+  string      group_pattern = 4;
 }
 
 message UserRole {
@@ -364,11 +365,6 @@ service UserManagement {
   rpc ChangePassword(User) returns (User) {}
 }
 
-message Enroll {
-  Course        course  = 1;
-  User          user    = 2;
-  Role          role    = 3;
-}
 
 message CoursesFilter {
   User          user                  = 1;  // courses available to specified user, no filter in case of User.id==0
@@ -448,7 +444,6 @@ message CourseProgressResponse {
 
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
-  rpc EnrollUser(Enroll) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
   rpc DeleteCourse(Course) returns (Nothing) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
@@ -456,6 +451,50 @@ service CourseManagement {
   rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
 
   rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse) {}
+}
+
+message EnrollUserRequest {
+  Course        course  = 1;
+  User          user    = 2;
+  Role          role    = 3;
+  string        group_pattern = 4;
+}
+
+message EnrollGroupRequest {
+  Course        course = 1;
+  string        group_pattern = 2;
+}
+
+message GroupEnrollmentsRequest {
+  Course        course = 1;
+  string        group_pattern = 2;
+}
+
+message GroupEnrollmentsResponse {
+  int64         id = 1;
+  string        group_pattern = 2;
+  repeated User group_students = 3;
+  repeated User foreign_students = 4;
+  repeated User teachers = 5;
+  repeated User assistants = 6;
+}
+
+message AllGroupsEnrollmentsResponse {
+  Course course = 1;
+  repeated GroupEnrollmentsResponse groups = 2;
+}
+
+
+message UserEnrollmentsResponse {
+  repeated Enrollment enrollments = 1;
+}
+
+service EnrollmentsManager {
+  rpc EnrollUser(EnrollUserRequest) returns (EnrollUserRequest);
+  rpc EnrollGroup(EnrollGroupRequest) returns (EnrollGroupRequest);
+  rpc GetAllGroupsEnrollments(Course) returns (AllGroupsEnrollmentsResponse);
+  rpc GetGroupEnrollments(GroupEnrollmentsRequest) returns (GroupEnrollmentsResponse);
+  rpc GetUserEnrollments(User) returns (UserEnrollmentsResponse);
 }
 
 message GraderProperties {

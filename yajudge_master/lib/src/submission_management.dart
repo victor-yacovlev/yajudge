@@ -263,8 +263,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   }
 
   Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
-    User currentUser = await parent.userManagementService.getUserFromContext(call);
-    List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
+    final currentUser = await parent.userManagementService.getUserFromContext(call);
+    final enrollmentsService = parent.enrollmentManagementService;
+    final enrollmentsResponse = await enrollmentsService.getUserEnrollments(call, currentUser);
+    List<Enrollment> enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
       if (e.course.id == course.id) {
@@ -425,9 +427,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<Submission> getSubmissionResult(ServiceCall call, Submission request) async {
-    User currentUser = await parent.userManagementService.getUserFromContext(call);
+    final currentUser = await parent.userManagementService.getUserFromContext(call);
     int submissionId = request.id.toInt();
-    String query =
+    final query =
     '''
     select users_id, problem_id, timestamp, status, style_error_log, compile_error_log
     from submissions
@@ -451,7 +453,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       compileErrorLog = '';
     }
 
-    List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
+    final enrollmentsService = parent.enrollmentManagementService;
+    final enrollmentsResponse = await enrollmentsService.getUserEnrollments(call, currentUser);
+    final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
       if (e.course.id == request.course.id) {
@@ -553,8 +557,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<Submission> submitProblemSolution(ServiceCall call, Submission request) async {
-    User currentUser = await parent.userManagementService.getUserFromContext(call);
-    List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
+    final currentUser = await parent.userManagementService.getUserFromContext(call);
+    final enrollmentsService = parent.enrollmentManagementService;
+    final enrollmentsResponse = await enrollmentsService.getUserEnrollments(call, currentUser);
+    final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
       if (e.course.id == request.course.id) {
@@ -1027,8 +1033,10 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
   @override
   Future<RejudgeRequest> rejudge(ServiceCall call, RejudgeRequest request) async {
-    User currentUser = await parent.userManagementService.getUserFromContext(call);
-    List<Enrollment> enrollments = await parent.courseManagementService.getUserEnrollments(currentUser);
+    final currentUser = await parent.userManagementService.getUserFromContext(call);
+    final enrollmentsService = parent.enrollmentManagementService;
+    final enrollmentsResponse = await enrollmentsService.getUserEnrollments(call, currentUser);
+    final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
       if (e.course.id == request.course.id) {
