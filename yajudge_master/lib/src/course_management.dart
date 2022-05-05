@@ -299,21 +299,15 @@ class CourseManagementService extends CourseManagementServiceBase {
 
   @override
   Future<CourseProgressResponse> getProgress(ServiceCall call, CourseProgressRequest request) async {
-    int courseId = request.course.id.toInt();
-    final enrolledUsersRows = await connection.query(
-      '''
-      select users_id from enrollments
-      where courses_id=@course_id and role=@role_student
-      ''',
-      substitutionValues: {
-        'course_id': courseId,
-        'role_student': Role.ROLE_STUDENT.value
-      },
-    );
+    final enrollmentService = parent.enrollmentManagementService;
+    final enrollment = await enrollmentService.getAllGroupsEnrollments(call, request.course);
+    List<User> enrolledUsers = [];
+    for (final group in enrollment.groups) {
+      enrolledUsers.addAll(group.groupStudents);
+      enrolledUsers.addAll(group.foreignStudents);
+    }
     List<CourseStatus> statuses = [];
-    for (final userRow in enrolledUsersRows as List<dynamic>) {
-      int userId = (userRow as List<dynamic>).single;
-      final user = await parent.userManagementService.getUserById(Int64(userId));
+    for (final user in enrolledUsers) {
       if (request.nameFilter.isNotEmpty) {
         final filter = request.nameFilter.trim().toUpperCase();
         bool test1 = user.lastName.toUpperCase().contains(filter);
