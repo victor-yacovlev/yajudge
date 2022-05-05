@@ -148,6 +148,8 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
       and
       group_pattern<>@pattern
       and
+      strpos(group_name, @pattern)>0
+      and
       role=@role_student
     ''';
     final excludedStudentsRows = await connection.query(excludedStudentsQuery,
@@ -195,16 +197,31 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
         'courses_id': courseId,
       }
     );
-    final teachersRows = await connection.query(personalQuery,
+
+    final teacherQuery = '''
+    select
+      users_id
+    from
+      personal_enrollments
+    where
+      role=@role
+      and
+      courses_id=@courses_id
+      and
+      group_pattern=@pattern
+    ''';
+    final teachersRows = await connection.query(teacherQuery,
         substitutionValues: {
           'role': Role.ROLE_TEACHER.value,
           'courses_id': courseId,
+          'pattern': pattern,
         }
     );
-    final assistantsRows = await connection.query(personalQuery,
+    final assistantsRows = await connection.query(teacherQuery,
         substitutionValues: {
           'role': Role.ROLE_TEACHER_ASSISTANT.value,
           'courses_id': courseId,
+          'pattern': pattern,
         }
     );
 

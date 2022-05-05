@@ -263,31 +263,31 @@ class CourseManagementService extends CourseManagementServiceBase {
       candidate.urlPrefix = row[3];
       candidate.noTeacherMode = row[4];
       Role courseRole = Role.ROLE_STUDENT;
-      if (enrollments.isNotEmpty) {
-        bool enrollmentFound = false;
-        for (Enrollment enr in enrollments) {
-          if (enr.course.id == candidate.id) {
-            enrollmentFound = true;
-            courseRole = enr.role;
-            break;
-          }
+      bool enrollmentFound = false;
+      for (Enrollment enr in enrollments) {
+        if (enr.course.id == candidate.id) {
+          enrollmentFound = true;
+          courseRole = enr.role;
+          break;
         }
-        if (!enrollmentFound && !userIsAdministrator) {
-          continue;
-        }
-      } else if (filter.user.id > 0) {
-        courseRole =
-            await parent.userManagementService.getDefaultRole(filter.user);
       }
-      if (filter.course.id > 0 && filter.course.id != candidate.id) {
+      if (!enrollmentFound && !userIsAdministrator) {
         continue;
       }
-      if (filter.course.name.isNotEmpty) {
-        if (!UserManagementService.partialStringMatch(
-            filter.partialStringMatch, candidate.name, filter.course.name)) {
-          continue;
-        }
-      }
+      // if (enrollments.isNotEmpty) {
+      // } else if (filter.user.id > 0) {
+      //   courseRole =
+      //       await parent.userManagementService.getDefaultRole(filter.user);
+      // }
+      // if (filter.course.id > 0 && filter.course.id != candidate.id) {
+      //   continue;
+      // }
+      // if (filter.course.name.isNotEmpty) {
+      //   if (!UserManagementService.partialStringMatch(
+      //       filter.partialStringMatch, candidate.name, filter.course.name)) {
+      //     continue;
+      //   }
+      // }
       CoursesList_CourseListEntry entry = CoursesList_CourseListEntry();
       entry.course = candidate;
       entry.role = courseRole;

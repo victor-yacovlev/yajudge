@@ -37,7 +37,7 @@ class UserManagementService extends UserManagementServiceBase {
     List<List<dynamic>> usersRows;
     if (user.id > 0) {
       usersRows = await connection.query(
-          findByIdQuery, substitutionValues: {'id': user.id}
+          findByIdQuery, substitutionValues: {'id': user.id.toInt()}
       );
     } else if (user.email.isNotEmpty) {
       usersRows = await connection.query(
