@@ -113,7 +113,7 @@ class LoginScreenState extends State<LoginScreen> {
         'Для продолжения работы необходимо войти в систему'
     ;
     final serverValidator = (String? value) {
-      if (value == null || value.trim().isEmpty) {
+      if (value == null || value.trim().isEmpty && !kIsWeb) {
         return 'Необходимо указать сервер для подключения';
       }
       if (null == Uri.tryParse(value)) {
