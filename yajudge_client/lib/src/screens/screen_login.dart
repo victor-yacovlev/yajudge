@@ -69,6 +69,7 @@ class LoginScreenState extends State<LoginScreen> {
     }
     PlatformsUtils.getInstance().saveSettingsValue('api_url', _serverUri.toString());
     ConnectionController.initialize(_serverUri);
+    logger.info("Will use $_serverUri for API access");
     ConnectionController.instance!.usersService.authorize(_candidate).then((Session session) {
       logger.info('logger user ${session.user}');
       ConnectionController.instance!.setSession(session);
