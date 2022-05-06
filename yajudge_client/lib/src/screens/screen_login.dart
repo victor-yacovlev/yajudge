@@ -63,6 +63,9 @@ class LoginScreenState extends State<LoginScreen> {
   }
 
   void processLogin() {
+    if (_serverUri.host.isEmpty) {
+      _serverUri = Uri.base;
+    }
     PlatformsUtils.getInstance().saveSettingsValue('api_url', _serverUri.toString());
     ConnectionController.initialize(_serverUri);
     ConnectionController.instance!.usersService.authorize(_candidate).then((Session session) {
