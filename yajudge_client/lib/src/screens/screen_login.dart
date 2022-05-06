@@ -64,6 +64,7 @@ class LoginScreenState extends State<LoginScreen> {
 
   void processLogin() {
     if (_serverUri.host.isEmpty) {
+      logger.info('Server URI not set, using default base: ${Uri.base}');
       _serverUri = Uri.base;
     }
     PlatformsUtils.getInstance().saveSettingsValue('api_url', _serverUri.toString());
