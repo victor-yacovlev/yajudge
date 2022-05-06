@@ -186,7 +186,7 @@ class LoginScreenState extends State<LoginScreen> {
         }
       }
       if (Uri.base.host != 'localhost') {
-        bool showServerField = false;
+        showServerField = false;
       }
     }
     if (showServerField) {
