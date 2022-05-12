@@ -77,12 +77,10 @@ class GraderService {
     required this.compilersConfig,
     this.processLocalInboxOnly = false,
   }) {
-    masterServer = GrpcOrGrpcWebClientChannel.grpc(
-      rpcProperties.host,
-      port: rpcProperties.port,
-      options: ChannelOptions(
-        credentials: const ChannelCredentials.insecure(),
-      ),
+    masterServer = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
+        host: rpcProperties.host,
+        port: rpcProperties.port,
+        transportSecure: rpcProperties.useSsl,
     );
     final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
     coursesService =

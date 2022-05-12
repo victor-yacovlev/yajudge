@@ -9,12 +9,14 @@ class RpcProperties {
   late final String privateToken;
   late final String host;
   late final int port;
+  late final bool useSsl;
 
   RpcProperties({
     required this.publicToken,
     required this.privateToken,
     required this.host,
-    required this.port
+    required this.port,
+    required this.useSsl,
   });
 
   factory RpcProperties.fromYamlConfig(YamlMap conf) {
@@ -29,11 +31,16 @@ class RpcProperties {
     if (conf['private_token_file'] is String) {
       privateToken = readPrivateTokenFromFile(conf['private_token_file']);
     }
+    bool useSsl = false;
+    if (conf['use_ssl'] is bool) {
+      useSsl = conf['use_ssl'];
+    }
     return RpcProperties(
       publicToken: publicToken,
       privateToken: privateToken,
       host: conf['host'],
       port: conf['port'],
+      useSsl: useSsl,
     );
   }
 }
