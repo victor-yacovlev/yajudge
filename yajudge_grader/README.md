@@ -28,13 +28,27 @@ by default `cgroup` version 2 but not 1.
 
 Grader will not work in case of using legacy `cgroup` 
 Linux subsystem. To enable `cgroup v2` add the following
-parameters to GRUB command line into configuration
-file (usually located at `/etc/default/grub`):
-```shell
+parameters to the kernel command line:
+```
+systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all
+```
+
+On **x86(-64)** systems kernel parameters are set up by GRUB, so edit file `/etc/default/grub`:
+```
 GRUB_CMDLINE_LINUX="systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all"
 ```
 
 Then run `update-grub` and reboot your system to apply changes.
+
+On **ARM** systems with U-Boot loader (like Raspberry Pi) the same kernel parameters stored in file
+`/boot/cmdline.txt` (Raspbian) or `/boot/firmware/cmdline.txt` (Ubuntu).
+
+To check if your system configured to use `cgroup v2` examine the following command output:
+```shell
+mount | grep cgroup
+```
+
+You should see **exactly one** line of mounted file system of type `cgroup2` but not several `cgroup` file systems.
 
 ### Grader Configuration
 
