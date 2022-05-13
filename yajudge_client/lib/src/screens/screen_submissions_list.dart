@@ -386,7 +386,7 @@ class SubmissionsListScreenState extends BaseScreenState {
           name += ' ${entry.sender.midName.trim()}';
         }
         String problemId = entry.problemId;
-        String status = statusMessageText(entry.status, narrow);
+        String status = statusMessageText(entry.status, '', narrow);
         Color statusTextColor = statusMessageColor(context, entry.status);
         final makeClickableCellFromText = (String text, [Color? color]) {
           TextStyle textStyle = Theme.of(context).textTheme.bodyText1!;

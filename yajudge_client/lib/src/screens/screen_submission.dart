@@ -220,7 +220,7 @@ class SubmissionScreenState extends BaseScreenState {
         wrapIntoPadding(makeText(text, color))
       );
     };
-    String statusName = statusMessageText(_submission!.status, false);
+    String statusName = statusMessageText(_submission!.status, _submission!.graderName, false);
     Color statusColor = statusMessageColor(context, _submission!.status);
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
     final whoCanRejudge = [
@@ -504,7 +504,7 @@ const StatusesShort = {
   SolutionStatus.DEFENCE_FAILED: '!DEF',
 };
 
-String statusMessageText(SolutionStatus status, bool shortVariant) {
+String statusMessageText(SolutionStatus status, String graderName, bool shortVariant) {
   // TODO implement i18n for non-Russian languages
   String message = '';
 
@@ -523,6 +523,9 @@ String statusMessageText(SolutionStatus status, bool shortVariant) {
     else {
       message = status.name.substring(0, math.min(4, status.name.length)).toUpperCase();
     }
+  }
+  if (status == SolutionStatus.GRADER_ASSIGNED && graderName.isNotEmpty && !shortVariant) {
+    message += ' ($graderName)';
   }
   return message;
 }
