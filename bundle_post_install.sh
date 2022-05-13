@@ -96,6 +96,13 @@ fi
 
 echo "Will use $CONF_DIR to make configuration files"
 
+if [ -z "$NGINX_CONF_DIR" ]
+then
+    NGINX_CONF_DIR=/etc/nginx
+fi
+
+echo "Will use $NGINX_CONF_DIR to update nginx configurations"
+
 if [ -z "$SYSTEMD_DIR" ]
 then
     SYSTEMD_DIR=/etc/systemd/system
@@ -120,6 +127,7 @@ echo "Yajudge web-exposed content located in $WEB_DIR"
 mkdir -p $CONF_DIR
 mkdir -p $CONF_DIR/sites-available
 mkdir -p $CONF_DIR/sites-enabled
+mkdir -p $NGINX_CONF_DIR/sites-available
 
 dirs=("$LOG_DIR" "$PID_DIR" "$CACHE_DIR" "$COURSES_DIR" "$PROBLEMS_DIR" "$WORK_DIR" "$SYSTEM_DIR")
 for d in ${dirs[*]}
@@ -195,11 +203,12 @@ fi
 
 echo "GrpcWebServer site configuration will be created in $WEB_SITE_CONF"
 
-if [ -f $CONF_DIR/nginx/sites-available/yajudge-$CONFIG_NAME.conf ]
+
+if [ -f $NGINX_CONF_DIR/sites-available/yajudge-$CONFIG_NAME.conf ]
 then
-  NGINX_CONF=$CONF_DIR/nginx/sites-available/yajudge-$CONFIG_NAME.conf.new
+  NGINX_CONF=$NGINX_CONF_DIR/sites-available/yajudge-$CONFIG_NAME.conf.new
 else
-  NGINX_CONF=$CONF_DIR/nginx/sites-available/yajudge-$CONFIG_NAME.conf
+  NGINX_CONF=$NGINX_CONF_DIR/sites-available/yajudge-$CONFIG_NAME.conf
 fi
 
 echo "Nginx configuration will be created in $NGINX_CONF"
