@@ -52,9 +52,8 @@ class CourseScreenState extends BaseScreenState {
   late TreeViewController treeViewController;
   late ScrollController treeScrollController;
 
-  CourseScreenState(CourseScreen screen):
-        this.screen=screen, super(title: screen.course.name) {
-  }
+  CourseScreenState(this.screen):
+        super(title: screen.course.name);
 
   CourseStatus? get courseStatus => _status;
 
@@ -187,9 +186,11 @@ class CourseScreenState extends BaseScreenState {
     final service = ConnectionController.instance!.submissionsService;
     final futureCourseStatus = service.checkCourseStatus(request);
     futureCourseStatus.then((CourseStatus status) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         errorMessage = '';
       });
+      }
       _updateCourseStatus(status);
       if (_statusStream == null) {
         // do timer-based polling in case of streaming not supported
@@ -197,9 +198,11 @@ class CourseScreenState extends BaseScreenState {
         Future.delayed(Duration(seconds: 5), _checkStatus);
       }
     }).onError((error, stackTrace) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         errorMessage = error;
       });
+      }
       Future.delayed(Duration(seconds: 5), _checkStatus);
     });
   }
@@ -207,9 +210,11 @@ class CourseScreenState extends BaseScreenState {
   void _subscribeToNotifications() {
     log.info('subscribing to course status notifications');
     if (errorMessage.isNotEmpty) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         errorMessage = '';
       });
+      }
     }
     final request = CheckCourseStatusRequest(
       user: screen.loggedUser,
@@ -220,16 +225,20 @@ class CourseScreenState extends BaseScreenState {
     _statusStream!.listen(
       (CourseStatus event) {
         log.info('got course status event with course.id=${event.course.id}');
-        if (mounted) setState(() {
+        if (mounted) {
+          setState(() {
           errorMessage = '';
         });
+        }
         _updateCourseStatus(event);
       },
       onError: (error) {
         log.info('course status subscription error: $error');
-        if (mounted) setState(() {
+        if (mounted) {
+          setState(() {
           _statusStream = null;
         });
+        }
         _checkStatus();  // switch to polling mode
       },
       cancelOnError: true,
@@ -249,10 +258,12 @@ class CourseScreenState extends BaseScreenState {
     if (empty) {
       return; // might be just ping empty message
     }
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _status = status;
       courseStatusIsDirty = true;
     });
+    }
     _createTreeViewController(screen.selectedKey, _status);
   }
 
@@ -260,7 +271,7 @@ class CourseScreenState extends BaseScreenState {
     String url = screen.course.urlPrefix;
     String subroute = '';
     if (!key.startsWith('#')) {
-      subroute = path.normalize('$key');
+      subroute = path.normalize(key);
     }
     url += '/' + subroute;
     PageRouteBuilder routeBuilder = PageRouteBuilder(
@@ -360,7 +371,7 @@ class CourseScreenState extends BaseScreenState {
     );
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 0, 0, 20)));
 
-    final addText = (String text) {
+    addText(String text) {
       result.add(
         Padding(
           child: Text(text,
@@ -373,7 +384,7 @@ class CourseScreenState extends BaseScreenState {
           padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
         )
       );
-    };
+    }
 
     final descriptionLines = screen.courseData.description.split('\n');
     for (final line in descriptionLines) {
@@ -444,9 +455,9 @@ class CourseScreenState extends BaseScreenState {
     );
     result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
     for (TextReading reading in lesson.readings) {
-      VoidCallback action = () {
+      action() {
         _navigateToReading(reading);
-      };
+      }
       Icon leadingIcon = Icon(
         Icons.article_outlined,
         color: Colors.grey,
@@ -478,9 +489,9 @@ class CourseScreenState extends BaseScreenState {
       if (_status != null) {
         problemStatus = findProblemStatus(_status!, problem.id);
       }
-      VoidCallback action = () {
+      action() {
         _navigateToProblem(problem);
-      };
+      }
       bool problemIsRequired = metadata.blocksNextProblems;
       bool problemBlocked = problemStatus!=null && problemStatus.blockedByPrevious;
       IconData iconData;
