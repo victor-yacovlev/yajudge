@@ -231,7 +231,7 @@ class ChrootedRunner extends AbstractRunner {
     if (dir.existsSync()) {
       if (cgroupKill.existsSync()) {
         // Linux Kernel 5.14+ has cgroup.kill file to kill cgroup
-        cgroupKill.writeAsStringSync('1');
+        cgroupKill.writeAsStringSync('1', mode: io.FileMode.writeOnly);
       }
       else {
         // freeze process group to prevent spawning new processes
