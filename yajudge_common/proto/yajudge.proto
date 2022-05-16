@@ -81,7 +81,7 @@ enum Arch {
 }
 
 message GradingPlatform {
-  Arch            arch                 = 1; // ARCH_ANY for generic problems
+  Arch            arch                 = 1;  // ARCH_ANY for generic problems
 }
 
 message GradingLimits {
@@ -500,6 +500,7 @@ service EnrollmentsManager {
 message GraderProperties {
   string          name        = 1;
   GradingPlatform platform    = 2;
+  double          performance_rating = 3; // higher is better: 1_000_000/(time_in_ms_for_20000_primes_generation)
 }
 
 message SubmissionsCountLimit {
@@ -571,6 +572,20 @@ message SubmissionListResponse {
   repeated SubmissionListEntry entries = 1;
 }
 
+message Empty {}
+
+enum GraderStatus {
+  Unknown = 0;
+  Idle = 1;
+  Busy = 2;
+  ShuttingDown = 3;
+}
+
+message GraderStatusMessage {
+  GraderProperties properties = 1;
+  GraderStatus status = 2;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit) {}
   rpc SubmitProblemSolution(Submission) returns (Submission) {}
@@ -589,8 +604,10 @@ service SubmissionManagement {
   rpc CheckProblemStatus(ProblemStatusRequest) returns (ProblemStatus) {}
   rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus) {}
 
-  // anounce grader alive and receive stream of submissions to be graded
-//  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission) {}
+  // announce grader alive and receive stream of submissions to be graded
+  rpc SetGraderStatus(GraderStatusMessage) returns (Empty);
+  rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission);
+
   rpc TakeSubmissionToGrade(GraderProperties) returns (Submission) {}
   // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
   rpc UpdateGraderOutput(Submission) returns (Submission) {}

@@ -17,6 +17,7 @@ import 'grpc_web_proxy.dart';
 const NotLoggedMethods = ['StartSession', 'Authorize'];
 const PrivateMethods = [
   'TakeSubmissionToGrade', 'GetProblemFullContent', 'UpdateGraderOutput',
+  'ReceiveSubmissionsToGrade', 'SetGraderStatus',
 ];
 const StudentsMethods = [
   'GetProfile', 'ChangePassword',
@@ -58,8 +59,8 @@ class MasterService {
       _errorsLastMinute = 0;
     });
     userManagementService = UserManagementService(parent: this, connection: connection);
-    String coursesRoot = normalize(absolute(this.locationProperties.coursesRoot));
-    String problemsRoot = normalize(absolute(this.locationProperties.problemsRoot));
+    String coursesRoot = normalize(absolute(locationProperties.coursesRoot));
+    String problemsRoot = normalize(absolute(locationProperties.problemsRoot));
     log.info('using courses root $coursesRoot');
     log.info('using problems root $problemsRoot');
     if (!io.Directory(coursesRoot).existsSync()) {

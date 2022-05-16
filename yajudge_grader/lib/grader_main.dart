@@ -15,7 +15,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFile, bool usePidFile) async {
   String configFileName = getConfigFileName(parsedArguments);
-  print('Using config file ${configFileName}');
+  print('Using config file $configFileName');
 
   GradingLimits? overrideLimits;
   if (parsedArguments.command!.name=='run' && parsedArguments.command!['limits'] != null) {
@@ -24,6 +24,10 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     overrideLimits = limitsFromYaml(limitsConf);
   }
 
+  if (!io.File(configFileName).existsSync()) {
+    print('Config file not exists');
+    io.exit(1);
+  }
   final config = parseYamlConfig(configFileName);
   final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
 
@@ -57,7 +61,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
       // duplicate initialization messages to log file
       Logger.root.info('Starting grader daemon at PID = ${io.pid}');
-      Logger.root.info('Using config file ${configFileName}');
+      Logger.root.info('Using config file $configFileName');
     }
     else {
       print('Log file not set so will use stdout for logging');
@@ -153,9 +157,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
 String getConfigFileName(ArgResults parsedArguments) {
   String? configFileName = parsedArguments['config'];
-  if (configFileName == null) {
-    configFileName = findConfigFile('grader');
-  }
+  configFileName ??= findConfigFile('grader');
   if (configFileName.isEmpty) {
     print('No config file specified');
     io.exit(1);
@@ -188,11 +190,12 @@ String getLogFileName(ArgResults parsedArguments, String graderName) {
     if (conf['service'] is YamlMap) {
       final serviceProperties = ServiceProperties.fromYamlConfig(conf['service'], graderName);
       logFileName = serviceProperties.logFilePath;
+      if (logFileName.endsWith('/stdout')) {
+        logFileName = 'stdout';
+      }
     }
   }
-  if (logFileName == null) {
-    logFileName = 'stdout';
-  }
+  logFileName ??= 'stdout';
   return logFileName;
 }
 
@@ -304,7 +307,7 @@ Future<void> stopServer(ArgResults parsedArguments) async {
   final retryTimeout = Duration(seconds: 1);
   final waitTimeout = Duration(milliseconds: 100);
   bool processRunning = true;
-  final statusFile = io.File('/proc/${pid}/status');
+  final statusFile = io.File('/proc/$pid/status');
   io.stdout.write('Stopping grader process');
   while (attemptsLeft > 0) {
     io.stdout.write('.');
@@ -473,14 +476,14 @@ Future<void> toolMain(ArgResults mainArguments) async {
   final processed = Submission.fromBuffer(processedData);
 
   print(processed.status.name + '\n');
-  final findFirstTest = () {
+  TestResult findFirstTest() {
     for (final test in processed.testResults) {
       if (test.status == processed.status) {
         return test;
       }
     }
     return TestResult();
-  };
+  }
 
   if (processed.status == SolutionStatus.STYLE_CHECK_ERROR) {
     print(processed.styleErrorLog);

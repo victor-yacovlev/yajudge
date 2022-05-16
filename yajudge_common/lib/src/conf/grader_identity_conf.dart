@@ -17,7 +17,7 @@ class GraderIdentityProperties {
       arch = Arch.ARCH_X86;
     } else if (archName == 'x86_64') {
       arch = Arch.ARCH_X86_64;
-    } else if (archName == 'aarch64') {
+    } else if (archName == 'aarch64' || archName == 'arm64') {
       arch = Arch.ARCH_AARCH64;
     } else if (archName.startsWith('arm')) {
       arch = Arch.ARCH_ARMV7;

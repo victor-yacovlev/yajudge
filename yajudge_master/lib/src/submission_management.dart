@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
+import 'graders_manager.dart';
 import 'master_service.dart';
 
 
@@ -19,10 +20,15 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Map<String,List<StreamController<CourseStatus>>> _courseStatusStreamControllers = {};
   Map<String,List<StreamController<Submission>>> _submissionResultStreamControllers = {};
 
+  final GradersManager _gradersManager = GradersManager();
+
   SubmissionManagementService({
     required this.parent,
     required this.connection,
-  });
+  })
+  {
+    Timer.periodic(Duration(seconds: 5), (_) { processSubmissionsQueue(); });
+  }
 
   @override
   Future<CourseStatus> checkCourseStatus(ServiceCall call, CheckCourseStatusRequest request) async {
@@ -409,8 +415,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         id: Int64(usersId),
         firstName: firstName,
         lastName: lastName,
-        midName: midName!=null? midName : '',
-        groupName: groupName!=null? groupName : '',
+        midName: midName ?? '',
+        groupName: groupName ?? '',
       );
       Submission submission = Submission(
         id: Int64(id),
@@ -620,6 +626,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       );
     }
     _notifyProblemStatusChanged(currentUser, request.course, request.problemId, true);
+    pushSubmissionToGrader(request.copyWith((s) { s.id = Int64(submissionId); }));
     return Submission(id: Int64(submissionId));
   }
 
@@ -856,9 +863,10 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   Future<ProblemData> getProblemDataForSubmission(Submission sub) async {
     String courseDataId;
     if (sub.course.dataId.isEmpty) {
+      int courseId = sub.course.id.toInt();
       List<dynamic> rows = await parent.connection.query(
           'select course_data from courses where id=@id',
-          substitutionValues: {'id': sub.course.id.toInt()}
+          substitutionValues: {'id': courseId}
       );
       courseDataId = rows[0][0];
     } else {
@@ -1070,6 +1078,9 @@ values (@submissions_id,@test_number,@stdout,@stderr,
           'id': request.submission.id.toInt(),
         }
       );
+      final submission = request.submission.copyWith((s) {
+        s.course = request.course;
+      });
       final rows = await connection.query(
         'select timestamp, grader_name from submissions where id=@id',
         substitutionValues: {
@@ -1148,5 +1159,53 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
     return controller.stream;
   }
+
+  @override
+  Stream<Submission> receiveSubmissionsToGrade(ServiceCall call, GraderProperties request) {
+    final streamController = _gradersManager.registerNewGrader(call, request);
+
+    // check for unfinished submission processing by this grader and reassign them again
+    unassignGrader(request.name);
+
+    // force process queue of stored submissions
+    processSubmissionsQueue();
+
+    return streamController.stream;
+  }
+
+  Future<bool> pushSubmissionToGrader(Submission submission) async {
+    final problemData = await getProblemDataForSubmission(submission);
+    final platformRequired = problemData.gradingOptions.platformRequired;
+    final graderConnection = _gradersManager.findGrader(platformRequired);
+    bool result = false;
+    if (graderConnection!=null) {
+      if (graderConnection.pushSubmission(submission)) {
+        assignGrader(submission, graderConnection.properties.name);
+        _notifyProblemStatusChanged(submission.user, submission.course, submission.problemId, true);
+        log.info('submission ${submission.id} assigned and sent to grader ${graderConnection.properties.name}');
+        result = true;
+      }
+    }
+    return result;
+  }
+
+  void processSubmissionsQueue() async {
+    if (!_gradersManager.hasGraders) {
+      return;
+    }
+    final queue = await getSubmissionsToGrade();
+    for (final submission in queue) {
+      await pushSubmissionToGrader(submission);
+    }
+  }
+
+  @override
+  Future<Empty> setGraderStatus(ServiceCall call, GraderStatusMessage request) async {
+    _gradersManager.setGraderStatus(request.properties.name, request.status);
+    return Empty();
+  }
+
+
+
 
 }
