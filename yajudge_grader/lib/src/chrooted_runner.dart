@@ -91,7 +91,7 @@ class ChrootedRunner extends AbstractRunner {
       parts = parts.sublist(0, parts.length-1);
     }
     if (!foundWritableSlice) {
-      return 'no writable parent cgroup slice or service found. My current cgroup location is ${cgroupLocationSuffix}. Launch me using systemd-run --slice=NAME';
+      return 'no writable parent cgroup slice or service found. My current cgroup location is $cgroupLocationSuffix. Launch me using systemd-run --slice=NAME';
     }
     List<String> controllersAvailable = io.File(cgroupRoot+'/cgroup.controllers')
         .readAsStringSync().trim().split(' ');
@@ -129,7 +129,7 @@ class ChrootedRunner extends AbstractRunner {
   void createProblemTemporaryDirs() {
     // to build helpers
     overlayUpperDir = io.Directory(problemDir.path);
-    String base = path.absolute(locationProperties.workDir, '$courseId', '$problemId');
+    String base = path.absolute(locationProperties.workDir, courseId, problemId);
     overlayWorkDir = io.Directory(base + '/workdir');
     overlayMergeDir = io.Directory(base + '/mergedir');
     overlayWorkDir!.createSync(recursive: true);
@@ -278,7 +278,7 @@ class ChrootedRunner extends AbstractRunner {
     bool runTargetIsScript = false,
     String coprocessFileName = '',
   }) async {
-    assert (arguments.length >= 1);
+    assert (arguments.isNotEmpty);
     String executable = arguments.first;
     arguments = arguments.sublist(1);
     arguments.removeWhere((element) => element.trim().isEmpty);

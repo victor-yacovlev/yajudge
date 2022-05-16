@@ -52,19 +52,19 @@ class SimpleRunner extends AbstractRunner {
     String coprocessFileName = '',
       }) async
   {
-    assert (arguments.length >= 1);
+    assert (arguments.isNotEmpty);
     String executable = arguments.first;
     arguments = arguments.sublist(1);
     arguments.removeWhere((element) => element.trim().isEmpty);
     String workDir = path.absolute(
         path.normalize('${locationProperties.workDir}/${submission.id}/$workingDirectory')
     );
-    if (!runTargetIsScript && executable.startsWith('/'))
+    if (!runTargetIsScript && executable.startsWith('/')) {
       executable = path.absolute(
           path.normalize('${locationProperties.workDir}/${submission.id}/$executable')
       );
-    if (environment == null)
-      environment = io.Platform.environment;
+    }
+    environment ??= io.Platform.environment;
     final ioProcess = await io.Process.start(
       executable,
       arguments,

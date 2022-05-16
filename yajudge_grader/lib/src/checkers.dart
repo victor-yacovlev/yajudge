@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io' as io;
-import 'package:path/path.dart' as path;
 import 'package:yajudge_common/yajudge_common.dart';
 
 import 'assets_loader.dart';
@@ -84,8 +83,9 @@ class TextChecker extends AbstractChecker {
     }
     final stdoutLines = stdoutString.trimLeft().split('\n');
     final referenceLines = referenceString.trimLeft().split('\n');
-    if (stdoutLines.length != referenceLines.length)
+    if (stdoutLines.length != referenceLines.length) {
       return 'Line count mismatch.\nExpected:\n$referenceString\nGot:\n$stdoutString';
+    }
     for (int i=0; i<stdoutLines.length; i++) {
       final a = stdoutLines[i].trim();
       final b = referenceLines[i].trim();
@@ -123,8 +123,9 @@ class DoubleSequenceChecker extends AbstractChecker {
     for (int i=0; i<stdoutList.length; i++) {
       String stdoutValue = stdoutList[i];
       String referenceValue = referenceList[i];
-      if (!matchDoubles(stdoutValue, referenceValue, epsilon))
+      if (!matchDoubles(stdoutValue, referenceValue, epsilon)) {
         return 'Value mismatch. Expected $referenceValue, got $stdoutValue, epsilon=$epsilon';
+      }
     }
     return '';
   }
@@ -135,8 +136,9 @@ class DoubleSequenceChecker extends AbstractChecker {
       return false;
     }
     double diff = stdoutDouble - referenceDouble;
-    if (diff < 0)
+    if (diff < 0) {
       diff *= -1;
+    }
     return diff < epsilon;
   }
 }
@@ -157,8 +159,9 @@ class IntSequenceChecker extends AbstractChecker {
     for (int i=0; i<stdoutList.length; i++) {
       String stdoutValue = stdoutList[i];
       String referenceValue = referenceList[i];
-      if (!matchInts(stdoutValue, referenceValue))
+      if (!matchInts(stdoutValue, referenceValue)) {
         return 'Value mismatch. Expected $referenceValue, got $stdoutValue';
+      }
     }
     return '';
   }
@@ -180,8 +183,9 @@ class StandardCheckersFactory {
   };
 
   static AbstractChecker getChecker(String name) {
-    if (checkers.containsKey(name))
+    if (checkers.containsKey(name)) {
       return checkers[name]!;
+    }
     throw UnimplementedError('standard checker not implemented: $name');
   }
 }

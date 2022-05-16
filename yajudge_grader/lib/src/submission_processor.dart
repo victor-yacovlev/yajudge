@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
@@ -76,8 +78,9 @@ class SubmissionProcessor {
       for (final codeStyle in codeStyles) {
         String fileName = codeStyle.styleFile.name;
         String suffix = codeStyle.sourceFileSuffix;
-        if (suffix.startsWith('.'))
+        if (suffix.startsWith('.')) {
           suffix = suffix.substring(1);
+        }
         io.File(buildDir + '/' + fileName).writeAsBytesSync(
             codeStyle.styleFile.data);
         io.File(buildDir + '/.style_$suffix').writeAsStringSync(
@@ -124,8 +127,9 @@ class SubmissionProcessor {
             testsGenerator.name);
       }
 
-      if (opts.disableValgrind)
+      if (opts.disableValgrind) {
         io.File(buildDir + '/.disable_valgrind').createSync(recursive: true);
+      }
 
       final List<String> disabledSanitizers = opts.disableSanitizers;
       if (disabledSanitizers.isNotEmpty) {
@@ -183,10 +187,12 @@ class SubmissionProcessor {
         }
         if (args.isNotEmpty) {
           String testBaseName = '$testNumber';
-          if (testNumber < 10)
+          if (testNumber < 10) {
             testBaseName = '0' + testBaseName;
-          if (testNumber < 100)
+          }
+          if (testNumber < 100) {
             testBaseName = '0' + testBaseName;
+          }
           io.File(testsDir + '/' + testBaseName + '.args').writeAsStringSync(
               args);
         }
@@ -230,9 +236,6 @@ class SubmissionProcessor {
 
   Future<void> buildSecurityContextObjects(SecurityContext securityContext,
       String buildDir, String courseId, String problemId) async {
-    String binDir = path.dirname(io.Platform.script.path);
-    String procLimiterSourcePath = path.normalize(
-        path.absolute(binDir, '../src/', 'proc-limiter.c'));
     String tempSourcePath = buildDir + '/.forbidden-functions-wrapper.c';
 
 
@@ -380,8 +383,9 @@ static void forbid(const char *name) {
 
   String styleFileName(String suffix) {
     String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    if (suffix.startsWith('.'))
+    if (suffix.startsWith('.')) {
       suffix = suffix.substring(1);
+    }
     String styleLinkPath = '$solutionPath/.style_$suffix';
     if (io.File(styleLinkPath).existsSync()) {
       return io.File(styleLinkPath).readAsStringSync().trim();
@@ -433,8 +437,9 @@ static void forbid(const char *name) {
   }
 
   List<String> getSanitizersList() {
-    if (disableValgrindAndSanitizers)
+    if (disableValgrindAndSanitizers) {
       return [];
+    }
     List<String> sanitizers = List.from(compilersConfig.enableSanitizers);
     List<String> disabledSanitizers = disableProblemSanitizers();
     for (String sanitizer in disabledSanitizers) {
@@ -608,17 +613,19 @@ static void forbid(const char *name) {
           )));
       final lines = scriptFile.readAsLinesSync();
       String interpreter = '';
-      if (lines.length > 0) {
+      if (lines.isNotEmpty) {
         String firstLine = lines.first;
         if (firstLine.startsWith('#!')) {
           interpreter = firstLine.substring(2);
         }
       }
       if (interpreter.isEmpty) {
-        if (scriptName.endsWith('.sh'))
+        if (scriptName.endsWith('.sh')) {
           interpreter = '/usr/bin/env bash';
-        if (scriptName.endsWith('.py'))
+        }
+        if (scriptName.endsWith('.py')) {
           interpreter = '/usr/bin/env python3';
+        }
       }
       if (interpreter.isEmpty) {
         throw UnimplementedError('dont know how to run $scriptName');
@@ -696,10 +703,11 @@ static void forbid(const char *name) {
     } else {
       log.fine('successfully linked target $targetName for ${submission.id}');
     }
-    if (sanitizersToUse.isNotEmpty)
+    if (sanitizersToUse.isNotEmpty) {
       sanitizersBuildTarget = '/build/' + targetName;
-    else
+    } else {
       plainBuildTarget = '/build/' + targetName;
+    }
     return true;
   }
 
@@ -711,10 +719,12 @@ static void forbid(const char *name) {
     // Unpack .tgz bundles if any exists
     for (int i=1; i<=problemTestsCount(); i++) {
       String testBaseName = '$i';
-      if (i < 10)
+      if (i < 10) {
         testBaseName = '0' + testBaseName;
-      if (i < 100)
+      }
+      if (i < 100) {
         testBaseName = '0' + testBaseName;
+      }
       final testBundle = io.File('$testsPath/$testBaseName.tgz');
       if (testBundle.existsSync()) {
         io.Process.runSync('tar', ['zxf', testBundle.path], workingDirectory: runsDir.path);
@@ -809,20 +819,22 @@ static void forbid(const char *name) {
 
     for (int i=1; i<=testsCount; i++) {
       String baseName = '$i';
-      if (i < 10)
+      if (i < 10) {
         baseName = '0' + baseName;
-      if (i < 100)
+      }
+      if (i < 100) {
         baseName = '0' + baseName;
+      }
 
       List<TestResult> targetResults = [];
-      final hasFailedTests = () {
+      bool hasFailedTests() {
         for (final result in targetResults) {
           if (result.status == SolutionStatus.RUNTIME_ERROR) {
             return true;
           }
         }
         return false;
-      };
+      }
 
       bool hasFailed = false;
 
@@ -946,8 +958,9 @@ static void forbid(const char *name) {
     for (int i=0; i<line.length; i++) {
       String currentSymbol = line.substring(i, i+1);
       if (currentSymbol==' ' && quoteSymbol.isEmpty) {
-        if (currentToken.isNotEmpty)
+        if (currentToken.isNotEmpty) {
           result.add(currentToken);
+        }
         currentToken = '';
       }
       else if (currentSymbol=='"' && quoteSymbol!='"') {
@@ -963,8 +976,9 @@ static void forbid(const char *name) {
         currentToken += currentSymbol;
       }
     }
-    if (currentToken.isNotEmpty)
+    if (currentToken.isNotEmpty) {
       result.add(currentToken);
+    }
     return result;
   }
 
@@ -1097,7 +1111,7 @@ static void forbid(const char *name) {
 
     final maxDataSizeToShow = 50 * 1024;
 
-    final screenBadSymbols = (String s) {
+    String screenBadSymbols(String s) {
       String result = '';
       int outLength = s.length;
       if (outLength > maxDataSizeToShow) {
@@ -1114,7 +1128,7 @@ static void forbid(const char *name) {
         }
       }
       return result;
-    };
+    }
 
     if (signalKilled==0 && !timeoutExceed && checkValgrindErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
@@ -1211,7 +1225,7 @@ static void forbid(const char *name) {
       }
       log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
       resultCheckerMessage = runChecker(arguments,
-          stdinData==null? [] : stdinData, stdinFilePath,
+          stdinData, stdinFilePath,
           stdout, stdoutFilePath,
           referenceStdout, referencePath,
           wd);
@@ -1222,7 +1236,7 @@ static void forbid(const char *name) {
     if (resultCheckerMessage.isNotEmpty) {
       String waMessage = '=== Checker output:\n$resultCheckerMessage\n';
       String args = arguments.join(' ');
-      waMessage += '=== Arguments: ${args}\n';
+      waMessage += '=== Arguments: $args\n';
       List<int> stdinBytesToShow = [];
       if (stdinData.length > maxDataSizeToShow) {
         stdinBytesToShow = stdinData.sublist(0, maxDataSizeToShow);

@@ -46,14 +46,18 @@ class CompilersConfig {
     bool enableValgrind = false;
     int extraValgrindMemory = 0;
     double scaleValgrindTime = 1.0;
-    if (conf['c_compiler'] is String)
+    if (conf['c_compiler'] is String) {
       cCompiler = conf['c_compiler'];
-    if (conf['cxx_compiler'] is String)
+    }
+    if (conf['cxx_compiler'] is String) {
       cxxCompiler = conf['cxx_compiler'];
-    if (conf['c_base_options'] is String)
+    }
+    if (conf['c_base_options'] is String) {
       cBaseOptions = conf['c_base_options'].toString().split(' ');
-    if (conf['cxx_base_options'] is String)
+    }
+    if (conf['cxx_base_options'] is String) {
       cxxBaseOptions = conf['cxx_base_options'].toString().split(' ');
+    }
     if (conf['enable_sanitizers'] is YamlList) {
       YamlList yamlList = conf['enable_sanitizers'];
       for (final sanitizerEntry in yamlList) {
@@ -64,12 +68,15 @@ class CompilersConfig {
       String sanitizersLine = conf['enable_sanitizers'];
       enableSanitizers = sanitizersLine.split(' ');
     }
-    if (conf['enable_valgrind'] is bool)
+    if (conf['enable_valgrind'] is bool) {
       enableValgrind = Platform.isLinux && conf['enable_valgrind'].toString().toLowerCase()=='true';
-    if (conf['valgrind_extra_memory_limit_mb'] is int)
+    }
+    if (conf['valgrind_extra_memory_limit_mb'] is int) {
       extraValgrindMemory = int.parse(conf['valgrind_extra_memory_limit_mb'].toString());
-    if (conf['valgrind_cpu_time_scale'] is double)
+    }
+    if (conf['valgrind_cpu_time_scale'] is double) {
       scaleValgrindTime = double.parse(conf['valgrind_cpu_time_scale'].toString());
+    }
     return CompilersConfig(cCompiler: cCompiler, cxxCompiler: cxxCompiler,
         cBaseOptions: cBaseOptions, cxxBaseOptions: cxxBaseOptions,
         enableSanitizers: enableSanitizers,

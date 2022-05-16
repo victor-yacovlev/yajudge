@@ -44,19 +44,19 @@ class PythonInteractor extends AbstractInteractor {
       runInShell: true,
     );
 
-    var targetStdoutConsumer = (List<int> data) {
+    void targetStdoutConsumer(List<int> data) {
       interactorProcess.stdin.add(data);
       interactorProcess.stdin.flush();
-    };
+    }
 
-    var targetStdinProducer = (List<int> data) {
+    void targetStdinProducer(List<int> data) {
       targetProcess.writeToStdin(data);
-    };
+    }
 
     targetProcess.attachStdoutConsumer(targetStdoutConsumer);
     interactorProcess.stdout.listen(targetStdinProducer);
 
-    final interactorShutdown = () async {
+    void interactorShutdown() async {
       io.sleep(Duration(milliseconds: 250));
       interactorProcess.kill(io.ProcessSignal.sigterm);
       int exitCode = await interactorProcess.exitCode;
@@ -66,7 +66,7 @@ class PythonInteractor extends AbstractInteractor {
       else {
         log.fine('interactor successfully finished');
       }
-    };
+    }
 
     return interactorShutdown;
   }

@@ -32,8 +32,8 @@ class YajudgeProcess {
   final int stderrSizeLimit;
   final io.Process ioProcess;
 
-  List<int> _stdout = [];
-  List<int> _stderr = [];
+  final List<int> _stdout = [];
+  final List<int> _stderr = [];
   late final Future _stdoutListenerFuture;
   late final Future _stderrListenerFuture;
 
@@ -123,7 +123,7 @@ class YajudgeProcess {
     await ioProcess.stdin.close();
   }
 
-  void attachStdoutConsumer(void listener(List<int> data)) {
+  void attachStdoutConsumer(void Function(List<int> data) listener) {
     if (_stdout.isNotEmpty) {
       // in case if there are already something written to stdout
       listener(_stdout);
