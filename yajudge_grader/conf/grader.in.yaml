@@ -26,6 +26,10 @@ compilers:
   c_base_options: -O2 -g -Werror
   cxx_base_options: -O2 -g -Werror
 
+jobs:
+  arch_specific_only: false  # set to 'true' if grader is supplementary, for example if running on slow Raspberry Pi,
+                             # to prevent taking generic problem jobs which better to run on more powerful servers
+
 default_limits:
   stack_size_limit_mb: 4
   memory_max_limit_mb: 64

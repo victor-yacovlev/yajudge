@@ -13,7 +13,11 @@ class GraderConnection {
   GraderStatus status = GraderStatus.Unknown;
 
   GraderConnection(this.call, this.properties) {
-    log.info('attached grader ${properties.name} with CPU=${properties.platform.arch} and PR=${properties.performanceRating}');
+    String identity = '${properties.name} with CPU=${properties.platform.arch} and PR=${properties.performanceRating}';
+    if (properties.archSpecificOnlyJobs) {
+      identity += ' (takes only arch-specific jobs)';
+    }
+    log.info('attached grader $identity');
   }
 
   void destroy(Object? error, StackTrace? stackTrace) {
@@ -105,6 +109,10 @@ class GradersManager {
         if (platformRequired.arch != grader.properties.platform.arch) {
           continue; // CPU not matched
         }
+      }
+      if (grader.properties.archSpecificOnlyJobs && platformRequired.arch == Arch.ARCH_ANY) {
+        // grader accepts only arch-specific jobs but not generic
+        continue;
       }
       candidates.add(grader);
     }

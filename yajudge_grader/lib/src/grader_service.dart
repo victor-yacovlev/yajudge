@@ -51,6 +51,7 @@ class GraderService {
   final RpcProperties rpcProperties;
   final GraderLocationProperties locationProperties;
   final GraderIdentityProperties identityProperties;
+  final JobsConfig jobsConfig;
   final GradingLimits defaultLimits;
   final GradingLimits? overrideLimits;
   final SecurityContext defaultSecurityContext;
@@ -75,6 +76,7 @@ class GraderService {
     required this.rpcProperties,
     required this.locationProperties,
     required this.identityProperties,
+    required this.jobsConfig,
     required this.serviceProperties,
     required this.usePidFile,
     required this.defaultLimits,
@@ -224,6 +226,7 @@ class GraderService {
     name: identityProperties.name,
     platform: GradingPlatform(arch: identityProperties.arch),
     performanceRating: _performanceRating,
+    archSpecificOnlyJobs: jobsConfig.archSpecificOnly,
   );
 
   Future<void> serveSubmissionsStream() async {
@@ -254,9 +257,7 @@ class GraderService {
     catch (error) {
       if (isConnectionError(error)) {
         // pushGraderStatus has implementation to check when connection will restored
-        log.info('lost connection to master server');
         pushGraderStatus();
-        log.info('restored connection to master server');
         return; // restart connection by supervisor
       }
       else {

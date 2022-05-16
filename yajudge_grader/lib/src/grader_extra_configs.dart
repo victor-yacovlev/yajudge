@@ -105,3 +105,28 @@ class CompilersConfig {
   }
 
 }
+
+class JobsConfig {
+  final bool archSpecificOnly;
+
+  JobsConfig({
+    required this.archSpecificOnly,
+  });
+
+  factory JobsConfig.fromYaml(YamlMap conf) {
+    bool archSpecificOnly = false;
+    if (conf['arch_specific_only'] is bool) {
+      archSpecificOnly = true;
+    }
+    return JobsConfig(
+      archSpecificOnly: archSpecificOnly,
+    );
+  }
+
+  factory JobsConfig.createDefault() {
+    return JobsConfig(
+      archSpecificOnly: false,
+    );
+  }
+
+}

@@ -108,6 +108,14 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     compilersConfig = CompilersConfig.createDefault();
   }
 
+  JobsConfig jobsConfig;
+  if (config['jobs'] is YamlMap) {
+    YamlMap jobsConf = config['jobs'];
+    jobsConfig = JobsConfig.fromYaml(jobsConf);
+  } else {
+    jobsConfig = JobsConfig.createDefault();
+  }
+
   bool processInboxOnly = false;
   if (parsedArguments.command != null) {
     ArgResults daemonArgs = parsedArguments.command!;
@@ -143,6 +151,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     rpcProperties: rpcProperties,
     locationProperties: locationProperties,
     identityProperties: identityProperties,
+    jobsConfig: jobsConfig,
     defaultLimits: defaultLimits,
     defaultSecurityContext: defaultSecurityContext,
     compilersConfig: compilersConfig,
