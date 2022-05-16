@@ -42,4 +42,4 @@ default_limits:
   allow_network: false
 
 default_security_context:
-  forbidden_functions: fork clone kill unlink chroot execvp execlp execv execl execve execle
+  forbidden_functions: fork clone kill unlink chroot
