@@ -252,10 +252,7 @@ class GraderService {
       }
     }
     catch (error) {
-      bool serviceUnavailableError = error is GrpcError && error.code==StatusCode.unavailable;
-      bool connectionLostError = error is GrpcError && error.code==StatusCode.unknown
-          && error.message!=null && error.message!.toLowerCase().startsWith('http/2 error');
-      if (serviceUnavailableError || connectionLostError) {
+      if (isConnectionError(error)) {
         // pushGraderStatus has implementation to check when connection will restored
         log.info('lost connection to master server');
         pushGraderStatus();
@@ -268,6 +265,14 @@ class GraderService {
       }
     }
 
+  }
+  
+  bool isConnectionError(dynamic error) {
+    bool serviceUnavailableError = error is GrpcError && error.code==StatusCode.unavailable;
+    bool connectionLostError = error is GrpcError && error.code==StatusCode.unknown
+        && error.message!=null && error.message!.toLowerCase().startsWith('http/2 error');
+    bool httpDeadlineError = error is GrpcError && error.code==StatusCode.deadlineExceeded;
+    return serviceUnavailableError || connectionLostError || httpDeadlineError;
   }
 
   Future<void> processLocalInboxSubmissions() async {
@@ -323,10 +328,7 @@ class GraderService {
       }
       catch (error) {
         pushOK = false;
-        bool serviceUnavailableError = error is GrpcError && error.code==StatusCode.unavailable;
-        bool connectionLostError = error is GrpcError && error.code==StatusCode.unknown
-            && error.message!=null && error.message!.toLowerCase().startsWith('http/2 error');
-        if (serviceUnavailableError || connectionLostError) {
+        if (isConnectionError(error)) {
           io.sleep(Duration(seconds: 2));
         }
         else {
