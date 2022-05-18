@@ -112,20 +112,24 @@ class RichTextViewer extends StatelessWidget {
       textViewer = richText;
     } else if (contentType == 'text/markdown') {
       TextStyle mainTextStyle = theme.bodyText1!
-          .merge(GoogleFonts.ptSans())
+          // .merge(GoogleFonts.ptSans())
+          .merge(TextStyle(fontFamily: 'PT Sans'))
           .merge(TextStyle(letterSpacing: 1.05))
       ;
       TextStyle codeTextStyle = theme.bodyText1!
-          .merge(GoogleFonts.ptMono())
+          // .merge(GoogleFonts.ptMono())
+          .merge(TextStyle(fontFamily: 'PT Mono'))
           .merge(TextStyle(letterSpacing: 1.1))
       ;
       TextStyle h2TextStyle = theme.headline5!
-          .merge(GoogleFonts.ptSansCaption())
+          // .merge(GoogleFonts.ptSansCaption())
+          .merge(TextStyle(fontFamily: 'PT Sans Caption'))
           .merge(TextStyle(color: Theme.of(context).accentColor))
           .merge(TextStyle(height: 2.5))
       ;
       TextStyle h3TextStyle = theme.headline6!
-          .merge(GoogleFonts.ptSans())
+          // .merge(GoogleFonts.ptSans())
+          .merge(TextStyle(fontFamily: 'PT Sans'))
           .merge(TextStyle(color: Theme.of(context).accentColor.withAlpha(200)))
           .merge(TextStyle(height: 1.8))
       ;

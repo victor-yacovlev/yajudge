@@ -27,7 +27,8 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final codeTextStyle = theme.textTheme.bodyText1!
-        .merge(GoogleFonts.ptMono())
+        // .merge(GoogleFonts.ptMono())
+        .merge(TextStyle(fontFamily: 'PT Mono'))
         .merge(TextStyle(letterSpacing: 1.1));
 
     final borderColor = Colors.black12;

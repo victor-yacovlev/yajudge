@@ -48,6 +48,27 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  fonts:
+    - family: PT Mono
+      fonts:
+        - asset: fonts/PTMono-Regular.ttf
+    - family: PT Sans
+      fonts:
+        - asset: fonts/PTSans-Regular.ttf
+        - asset: fonts/PTSans-Bold.ttf
+          weight: 700
+        - asset: fonts/PTSans-Italic.ttf
+          style: italic
+        - asset: fonts/PTSans-BoldItalic.ttf
+          style: italic
+          weight: 700
+    - family: PT Sans Caption
+      fonts:
+        - asset: fonts/PTSansCaption-Regular.ttf
+        - asset: fonts/PTSansCaption-Bold.ttf
+          weight: 700
+
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
