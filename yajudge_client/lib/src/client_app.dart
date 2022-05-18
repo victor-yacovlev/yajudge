@@ -390,7 +390,7 @@ class AppState extends State<App> {
           }
       );
     };
-    String initialRoute = widget.initialSession.user.initialRoute;
+    String initialRoute = widget.initialSession.initialRoute;
     if (initialRoute.isEmpty) {
       initialRoute = '/';
     }

@@ -10,7 +10,7 @@ import 'package:posix/posix.dart' as posix;
 
 import './master_service.dart';
 
-const CourseReloadInterval = Duration(seconds: 15);
+const courseReloadInterval = Duration(seconds: 15);
 
 class CourseDataCacheItem {
   final CourseData? data;

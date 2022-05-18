@@ -346,23 +346,23 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
   }
 
   @override
-  Future<AllGroupsEnrollmentsResponse> getAllGroupsEnrollments(ServiceCall call, Course course) async {
-    final urlPrefix = course.urlPrefix;
+  Future<AllGroupsEnrollmentsResponse> getAllGroupsEnrollments(ServiceCall call, Course request) async {
+    final urlPrefix = request.urlPrefix;
     final coursesService = parent.courseManagementService;
-    course = await coursesService.getCourseInfoByUrlPrefix(urlPrefix);
+    request = await coursesService.getCourseInfoByUrlPrefix(urlPrefix);
 
     final patternsQuery = 'select group_pattern from group_enrollments where courses_id=@id';
-    final patternsRows = await connection.query(patternsQuery, substitutionValues: {'id': course.id.toInt()});
+    final patternsRows = await connection.query(patternsQuery, substitutionValues: {'id': request.id.toInt()});
 
     List<GroupEnrollmentsResponse> groups = [];
     for (final row in patternsRows) {
       String pattern = row.single;
-      final request = GroupEnrollmentsRequest(course: course, groupPattern: pattern);
-      final groupResponse = await getGroupEnrollments(call, request);
+      final groupRequest = GroupEnrollmentsRequest(course: request, groupPattern: pattern);
+      final groupResponse = await getGroupEnrollments(call, groupRequest);
       groups.add(groupResponse);
     }
 
-    return AllGroupsEnrollmentsResponse(course: course, groups: groups);
+    return AllGroupsEnrollmentsResponse(course: request, groups: groups);
   }
 
 

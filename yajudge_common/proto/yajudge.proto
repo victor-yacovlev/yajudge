@@ -25,14 +25,13 @@ message User {
   Role        default_role= 8;
   bool        disabled    = 9;
   string      login       = 10;   // alternate way to log in instead of id and email
-  bool        forbid_logout = 11; // user might be fixed by server configuration in case of demo mode
-  string      initial_route = 12; // entry navigation point after login
 }
 
 message Session {
   string      cookie      = 1;
   User        user        = 2;
-  int64       start       = 3;
+  int64       start       = 3;    // timestamp
+  string      initial_route=4;    // initial route on user login
 }
 
 message Nothing {

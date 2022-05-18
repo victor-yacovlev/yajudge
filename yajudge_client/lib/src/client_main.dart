@@ -40,7 +40,11 @@ void main(List<String>? arguments) async {
     ConnectionController.initialize(apiUri);
     Future<Session> futureSession = ConnectionController.instance!.getSession();
     futureSession.then((session) {
-      Logger.root.info('starting app with session id ${session.cookie} user id ${session.user.id} (login: ${session.user.login})');
+      final logMessage =
+          'starting app with session id ${session.cookie} ' +
+          'user id ${session.user.id} (login: ${session.user.login}) ' +
+          'and initial route ${session.initialRoute}';
+      Logger.root.info(logMessage);
       App app = App(initialSession: session);
       runApp(app);
     });

@@ -56,7 +56,7 @@ class ScreenActions {
   final List<ScreenAction> actions;
 
   ScreenAction? get rootAction {
-    if (onRootAction!=null && actions.length==0) {
+    if (onRootAction!=null && actions.isEmpty) {
       return ScreenAction(icon: rootIcon, title: rootTitle, onAction: onRootAction!);
     } else {
       return null;
@@ -70,9 +70,9 @@ class ScreenActions {
     Function()? onRoot,
     List<ScreenAction>? actions,
   })
-      : isPrimaryActions = isPrimary!=null? isPrimary : true,
+      : isPrimaryActions = isPrimary ?? true,
         onRootAction = onRoot,
-        this.actions = actions!=null? actions : List.empty() ;
+        actions = actions ?? List.empty() ;
 }
 
 class SecondLevelNavigationTab {
@@ -203,19 +203,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(8),
       ),
     );
-    if (widget.loggedUser.forbidLogout) {
-      // Demonstration mode with temporary user profile
-      // Do not allow actions like profile or logout
-      return box;
-    }
-    // MouseRegion pointable = MouseRegion(
-    //   child: box, cursor: SystemMouseCursors.click,
-    // );
-    // GestureDetector clickable = GestureDetector(
-    //   child: pointable,
-    //   onTap: _showProfileActions,
-    // );
-    // return clickable;
+
     return PopupMenuButton(
       tooltip: 'Профиль и выход',
       itemBuilder: (BuildContext context) {
@@ -269,8 +257,9 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
     List<TextSpan> titleWordSpans = List.empty(growable: true);
     List<String> titleWords = title.split(' ');
     for (String titleWord in titleWords) {
-      if (titleWordSpans.isNotEmpty)
+      if (titleWordSpans.isNotEmpty) {
         titleWordSpans.add(TextSpan(text: ' '));
+      }
       titleWordSpans.add(TextSpan(text: titleWord));
     }
     Widget titleItem = Container(
@@ -352,7 +341,6 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         if (isTabLabel && tabData.id.isNotEmpty) {
           currentPath.removeLast();
           currentPath.add(tabData.id);
-          String newPath = currentPath.join('/');
           // secondLevelNavigationKey.currentState!.pushReplacementNamed(tabData.id);
           setState(() {
             secondLevelNavigationKey.currentState!.pushReplacementNamed(tabData.id);
@@ -386,7 +374,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
       titleRowItems.addAll([Spacer(), userProfileItem]);
     }
     Widget? submitBar = _buildSubmitBar(context);
-    Widget? bottomWidget = submitBar!=null? submitBar : _buildFooter(context);
+    Widget? bottomWidget = submitBar ?? _buildFooter(context);
     Scaffold scaffold = Scaffold(
       appBar: AppBar(
         title: Row(children: titleRowItems),
@@ -421,8 +409,8 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         style: footerTextStyle,
         recognizer: TapGestureRecognizer()
           ..onTap = () {
-            launch(
-              'https://github.com/victor-yacovlev/yajudge',
+            launchUrl(
+              Uri.parse('https://github.com/victor-yacovlev/yajudge'),
             );
           }
       );
@@ -489,11 +477,11 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
   Widget? _buildFAB(BuildContext context) {
     ScreenActions? primary = buildPrimaryScreenActions(context);
     ScreenActions? secondary = buildSecondaryScreenActions(context);
-    ScreenActions? screenActions = secondary==null? primary : secondary;
+    ScreenActions? screenActions = secondary ?? primary;
     if (screenActions == null) {
       return null;
     }
-    if (screenActions.actions.length > 0) {
+    if (screenActions.actions.isNotEmpty) {
       List<ActionButton> actionButtons = List.of(
           screenActions.actions.map((ScreenAction a) {
             return ActionButton(
@@ -553,7 +541,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         onPressed: submit.onAction,
       ));
     }
-    if (items.length == 0) {
+    if (items.isEmpty) {
       return null;
     }
     return Container(

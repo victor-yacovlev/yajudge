@@ -18,20 +18,20 @@ class LoginScreen extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() {
-    return new LoginScreenState();
+    return LoginScreenState();
   }
 }
 
 class LoginScreenState extends State<LoginScreen> {
 
-  RegExp _emailRegExp = new RegExp(
+  final RegExp _emailRegExp = RegExp(
     r'^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$',
     multiLine: false,
   );
-  RegExp _idRegExp = new RegExp(r'^[0-9]+$', multiLine: false);
+  final RegExp _idRegExp = RegExp(r'^[0-9]+$', multiLine: false);
   final _formKey = GlobalKey<FormState>();
 
-  User _candidate = User();
+  final User _candidate = User();
   Uri _serverUri = Uri();
 
   String? _errorText;
@@ -74,7 +74,7 @@ class LoginScreenState extends State<LoginScreen> {
       logger.info('logger user ${session.user}');
       ConnectionController.instance!.setSession(session);
       setState(() {
-        String initialRoute = session.user.initialRoute;
+        String initialRoute = session.initialRoute;
         if (initialRoute.isEmpty) {
           initialRoute = '/';
         }
@@ -98,7 +98,7 @@ class LoginScreenState extends State<LoginScreen> {
     int code = error.code;
     if (code == StatusCode.unavailable) {
       final url = ConnectionController.instance!.connectionUri;
-      setError('сервер ${url} не доступен');
+      setError('сервер $url не доступен');
     }
     else if (code == StatusCode.notFound) {
       setError('такой пользователь не существует');
@@ -113,23 +113,25 @@ class LoginScreenState extends State<LoginScreen> {
     final greetingMessage =
         'Для продолжения работы необходимо войти в систему'
     ;
-    final serverValidator = (String? value) {
+    String? serverValidator(String? value) {
       if (value == null || value.trim().isEmpty && !kIsWeb) {
         return 'Необходимо указать сервер для подключения';
       }
       if (null == Uri.tryParse(value)) {
         return 'Некорректный адрес сервера';
       }
-    };
-    final serverSaver = (String? value) {
+      return null;
+    }
+    void serverSaver(String? value) {
       _serverUri = Uri.parse(value!);
-    };
-    final loginValidator = (String? value) {
+    }
+    String? loginValidator(String? value) {
       if (value == null || value.trim().isEmpty) {
         return 'Необходимо указать ID, логин или EMail';
       }
-    };
-    final loginSaver = (String? value) {
+      return null;
+    }
+    void loginSaver(String? value) {
       if (_emailRegExp.hasMatch(value!)) {
         _candidate.email = value;
         _candidate.id = Int64(0);
@@ -142,22 +144,23 @@ class LoginScreenState extends State<LoginScreen> {
         _candidate.email = '';
         _candidate.id = Int64(0);
       }
-    };
-    final passwordValidator = (String? value) {
+    }
+    String? passwordValidator(String? value) {
       if (value == null || value.trim().isEmpty) {
         return 'Пароль не бывает пустым';
       }
-    };
-    final passwordSaver = (String? value) {
+      return null;
+    }
+    void passwordSaver(String? value) {
       _candidate.password = value!;
-    };
+    }
     Widget errorItem = Padding(
       padding: EdgeInsets.all(10),
       child: Text(_errorText != null ? 'Ошибка авторизации: $_errorText' : '',
         style: TextStyle(color: Theme.of(context).errorColor),
       ),
     );
-    final buttonHandler = () {
+    void buttonHandler() {
       if (_formKey.currentState!.validate()) {
         setState(() {
           _errorText = null;
@@ -166,7 +169,7 @@ class LoginScreenState extends State<LoginScreen> {
         });
         processLogin();
       }
-    };
+    }
     final serverHint = 'Сервер для подключения';
     final loginHint = 'ID пользователя или EMail';
     final passwordHint = 'Пароль';

@@ -1,5 +1,6 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -18,38 +19,38 @@ class UserManagementService extends UserManagementServiceBase {
   UserManagementService({required this.connection, required this.parent}): super();
 
   @override
-  Future<Session> authorize(ServiceCall call, User user) async {
-    if (user.id==0 && user.email.isEmpty && user.login.isEmpty) {
+  Future<Session> authorize(ServiceCall call, User request) async {
+    if (request.id==0 && request.email.isEmpty && request.login.isEmpty) {
       log.warning('empty user id tried to authorize');
       throw GrpcError.invalidArgument('id or email not provided');
     }
-    if (user.password.isEmpty) {
-      log.warning('user ${user.id} / ${user.email} tried to authorize with no password');
+    if (request.password.isEmpty) {
+      log.warning('user ${request.id} / ${request.email} tried to authorize with no password');
       throw GrpcError.invalidArgument('password not provided');
     }
-    if (user.disabled) {
-      log.warning('disabled user ${user.id} / ${user.email} tried to authorize');
+    if (request.disabled) {
+      log.warning('disabled user ${request.id} / ${request.email} tried to authorize');
       throw GrpcError.permissionDenied('user disabled');
     }
     String findByIdQuery = 'select id, password from users where id=@id';
     String findByEmailQuery = 'select id, password from users where email=@email';
     String findByLoginQuery = 'select id, password from users where login=@login';
     List<List<dynamic>> usersRows;
-    if (user.id > 0) {
+    if (request.id > 0) {
       usersRows = await connection.query(
-          findByIdQuery, substitutionValues: {'id': user.id.toInt()}
+          findByIdQuery, substitutionValues: {'id': request.id.toInt()}
       );
-    } else if (user.email.isNotEmpty) {
+    } else if (request.email.isNotEmpty) {
       usersRows = await connection.query(
-          findByEmailQuery, substitutionValues: {'email': user.email}
+          findByEmailQuery, substitutionValues: {'email': request.email}
       );
     } else {
       usersRows = await connection.query(
-          findByLoginQuery, substitutionValues: {'login': user.login}
+          findByLoginQuery, substitutionValues: {'login': request.login}
       );
     }
     if (usersRows.isEmpty) {
-      log.warning('not existing user ${user.id} / ${user.email} tried to authorize');
+      log.warning('not existing user ${request.id} / ${request.email} tried to authorize');
       throw GrpcError.notFound('user not found');
     }
     List<dynamic> singleUserRow = usersRows.single;
@@ -58,23 +59,22 @@ class UserManagementService extends UserManagementServiceBase {
     bool passwordMatch;
     if (userPassword.startsWith('=')) {
       // plain text password
-      passwordMatch = user.password == userPassword.substring(1);
+      passwordMatch = request.password == userPassword.substring(1);
     } else {
-      String hexDigest = makePasswordHash(user.password, Int64(userId));
+      String hexDigest = makePasswordHash(request.password, Int64(userId));
       passwordMatch = userPassword == hexDigest;
     }
     if (!passwordMatch) {
-      log.warning('user ${user.id} / ${user.email} tried to authorize with wrong password');
+      log.warning('user ${request.id} / ${request.email} tried to authorize with wrong password');
       throw GrpcError.permissionDenied('wrong password');
     }
-    final session = await createSessionForAuthenticatedUser(user.copyWith((u) {
-      u.id = Int64(userId);
-    }));
-    log.fine('user ${user.id} / ${user.email} successfully authorized');
+    request.id = Int64(userId);
+    final session = await createSessionForAuthenticatedUser(request, "/");
+    log.fine('user ${request.id} / ${request.email} successfully authorized');
     return session;
   }
 
-  Future<Session> createSessionForAuthenticatedUser(User user) async {
+  Future<Session> createSessionForAuthenticatedUser(User user, String initialRoute) async {
     DateTime timestamp = DateTime.now();
     String sessionKey = '${user.id} ${user.email} ${timestamp.millisecondsSinceEpoch}';
     sessionKey = sha256.convert(utf8.encode(sessionKey)).toString();
@@ -82,6 +82,7 @@ class UserManagementService extends UserManagementServiceBase {
       cookie: sessionKey,
       start: Int64(timestamp.millisecondsSinceEpoch ~/ 1000),
       user: await getUserById(user.id),
+      initialRoute: initialRoute.isEmpty? "/" : initialRoute,
     );
     // try to find existing session first
     List<dynamic> existingSessionsRows = await connection.query(
@@ -99,13 +100,13 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<UsersList> batchCreateStudents(ServiceCall call, UsersList usersList) async {
-    for (User user in usersList.users) {
+  Future<UsersList> batchCreateStudents(ServiceCall call, UsersList request) async {
+    for (User user in request.users) {
       user.password = generateRandomPassword();
       user.defaultRole = Role.ROLE_STUDENT;
       user = await createOrUpdateUser(call, user);
     }
-    return usersList;
+    return request;
   }
 
   static String generateRandomPassword() {
@@ -121,12 +122,12 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<Nothing> batchDeleteUsers(ServiceCall call, UsersList usersList) async {
-    if (usersList.users.isEmpty) {
+  Future<Nothing> batchDeleteUsers(ServiceCall call, UsersList request) async {
+    if (request.users.isEmpty) {
       return Nothing();
     }
     await connection.transaction((connection) async {
-      for (User user in usersList.users) {
+      for (User user in request.users) {
         await connection.query('delete from personal_enrollments where users_id=@id',
           substitutionValues: {'id': user.id.toInt() }
         );
@@ -138,20 +139,20 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<User> changePassword(ServiceCall call, User user) async {
-    if (user.password.isEmpty) {
+  Future<User> changePassword(ServiceCall call, User request) async {
+    if (request.password.isEmpty) {
       throw GrpcError.invalidArgument('no new password');
     }
     if (call.clientMetadata==null || !call.clientMetadata!.containsKey('session')) {
       throw GrpcError.unauthenticated('no session in metadata');
     }
     User currentUser = await getUserBySession(Session()..cookie = call.clientMetadata!['session']!);
-    String newPassword = makePasswordHash(user.password, user.id);
+    String newPassword = makePasswordHash(request.password, request.id);
     await connection.query(
       'update users set password=@password where id=@id',
       substitutionValues: {
         'password': newPassword,
-        'id': user.id.toInt(),
+        'id': request.id.toInt(),
       }
     );
     return currentUser;
@@ -164,47 +165,47 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<User> createOrUpdateUser(ServiceCall? call, User user) async {
+  Future<User> createOrUpdateUser(ServiceCall? call, User request) async {
     User res;
-    if (user.id > 0) {
-      res = await getUserById(user.id);
+    if (request.id > 0) {
+      res = await getUserById(request.id);
     } else {
       res = User();
     }
     Map<String,dynamic> values = {};
-    if (user.password.isNotEmpty && user.id == 0) {
+    if (request.password.isNotEmpty && request.id == 0) {
       // allows to set password only at initial registration stage
       // use ResetUserPassword (by Admin role) or ChangePassword (by any Role) to set password
-      values['password'] = '='+user.password;
-      res.password = user.password;
+      values['password'] = '='+request.password;
+      res.password = request.password;
     }
-    if (user.login.isNotEmpty) {
-      values['login'] = user.login;
-      res.login = user.login;
+    if (request.login.isNotEmpty) {
+      values['login'] = request.login;
+      res.login = request.login;
     }
-    if (user.firstName.isNotEmpty) {
-      values['first_name'] = user.firstName;
-      res.firstName = user.firstName;
+    if (request.firstName.isNotEmpty) {
+      values['first_name'] = request.firstName;
+      res.firstName = request.firstName;
     }
-    if (user.lastName.isNotEmpty) {
-      values['last_name'] = user.lastName;
-      res.lastName = user.lastName;
+    if (request.lastName.isNotEmpty) {
+      values['last_name'] = request.lastName;
+      res.lastName = request.lastName;
     }
-    if (user.midName.isNotEmpty) {
-      values['mid_name'] = user.midName;
-      res.midName = user.midName;
+    if (request.midName.isNotEmpty) {
+      values['mid_name'] = request.midName;
+      res.midName = request.midName;
     }
-    if (user.groupName.isNotEmpty) {
-      values['group_name'] = user.groupName;
-      res.groupName = user.groupName;
+    if (request.groupName.isNotEmpty) {
+      values['group_name'] = request.groupName;
+      res.groupName = request.groupName;
     }
-    if (user.email.isNotEmpty) {
-      values['email'] = user.email;
-      res.email = user.email;
+    if (request.email.isNotEmpty) {
+      values['email'] = request.email;
+      res.email = request.email;
     }
-    if (user.defaultRole != Role.ROLE_ANY) {
-      values['default_role'] = user.defaultRole.value;
-      res.defaultRole = user.defaultRole;
+    if (request.defaultRole != Role.ROLE_ANY) {
+      values['default_role'] = request.defaultRole.value;
+      res.defaultRole = request.defaultRole;
     }
     String sets = '';
     String placeholders = '';
@@ -216,8 +217,8 @@ class UserManagementService extends UserManagementServiceBase {
       sets += '$key=@$key';
       placeholders += '@$key';
     }
-    if (user.id > 0) {
-      String query = 'update users set ' + sets + ' where id=' + user.id.toString();
+    if (request.id > 0) {
+      String query = 'update users set ' + sets + ' where id=' + request.id.toString();
       await connection.query(query, substitutionValues: values);
     } else {
       String query = 'insert into users(' + values.keys.join(', ') + ') values (' + placeholders + ') returning id';
@@ -225,29 +226,29 @@ class UserManagementService extends UserManagementServiceBase {
       List<dynamic> fields = row.first;
       int id = fields.first;
       res.id = Int64(id);
-      log.fine('created user ${user.email} with id = $id');
+      log.fine('created user ${request.email} with id = $id');
     }
     return res;
   }
 
   @override
-  Future<Nothing> deleteUser(ServiceCall call, User user) async {
-    if (user.id == 0) {
+  Future<Nothing> deleteUser(ServiceCall call, User request) async {
+    if (request.id == 0) {
       throw GrpcError.invalidArgument('user id required');
     }
-    await connection.query('delete from users where id=@id', substitutionValues: {'id': user.id.toInt()});
+    await connection.query('delete from users where id=@id', substitutionValues: {'id': request.id.toInt()});
     return Nothing();
   }
 
   @override
-  Future<User> getProfile(ServiceCall call, Session session) {
-    return getUserBySession(session);
+  Future<User> getProfile(ServiceCall call, Session request) {
+    return getUserBySession(request);
   }
 
   @override
-  Future<UsersList> getUsers(ServiceCall call, UsersFilter filter) async {
-    if (filter.user.id != 0) {
-      User oneUser = await getUserById(filter.user.id);
+  Future<UsersList> getUsers(ServiceCall call, UsersFilter request) async {
+    if (request.user.id != 0) {
+      User oneUser = await getUserById(request.user.id);
       UsersList result = UsersList();
       result.users.add(oneUser);
       return result;
@@ -280,25 +281,33 @@ class UserManagementService extends UserManagementServiceBase {
         defaultRole: role,
         login: login,
       );
-      if (filter.role != Role.ROLE_ANY) {
-        if (user.defaultRole != filter.role)
+      if (request.role != Role.ROLE_ANY) {
+        if (user.defaultRole != request.role) {
           continue;
+        }
       }
-      bool partial = filter.partialStringMatch;
-      if (!partialStringMatch(partial, user.firstName, filter.user.firstName))
+      bool partial = request.partialStringMatch;
+      if (!partialStringMatch(partial, user.firstName, request.user.firstName)) {
         continue;
-      if (!partialStringMatch(partial, user.lastName, filter.user.lastName))
+      }
+      if (!partialStringMatch(partial, user.lastName, request.user.lastName)) {
         continue;
-      if (!partialStringMatch(partial, user.midName, filter.user.midName))
+      }
+      if (!partialStringMatch(partial, user.midName, request.user.midName)) {
         continue;
-      if (!partialStringMatch(partial, user.email, filter.user.email))
+      }
+      if (!partialStringMatch(partial, user.email, request.user.email)) {
         continue;
-      if (!partialStringMatch(partial, user.groupName, filter.user.groupName))
+      }
+      if (!partialStringMatch(partial, user.groupName, request.user.groupName)) {
         continue;
-      if (!partialStringMatch(partial, user.login, filter.user.login))
+      }
+      if (!partialStringMatch(partial, user.login, request.user.login)) {
         continue;
-      if (!filter.includeDisabled && user.disabled)
+      }
+      if (!request.includeDisabled && user.disabled) {
         continue;
+      }
       result.users.add(user);
     }
     return result;
@@ -356,46 +365,46 @@ class UserManagementService extends UserManagementServiceBase {
   }
 
   @override
-  Future<User> resetUserPassword(ServiceCall call, User user) async {
-    if (user.id==0 || user.password.isEmpty) {
+  Future<User> resetUserPassword(ServiceCall call, User request) async {
+    if (request.id==0 || request.password.isEmpty) {
       throw GrpcError.invalidArgument('user id and new password required');
     }
-    String newPassword = '=' + user.password;
+    String newPassword = '=' + request.password;
     await connection.query(
         'update users set password=@password where id=@id',
         substitutionValues: {
           'password': newPassword,
-          'id': user.id.toInt(),
+          'id': request.id.toInt(),
         }
     );
-    return user;
+    return request;
   }
 
   @override
-  Future<UserRole> setUserDefaultRole(ServiceCall call, UserRole arg) async {
-    if (arg.user.id==0 && arg.user.email.isEmpty) {
+  Future<UserRole> setUserDefaultRole(ServiceCall call, UserRole request) async {
+    if (request.user.id==0 && request.user.email.isEmpty) {
       throw GrpcError.invalidArgument('bad user');
     }
-    if (arg.user.id==0) {
+    if (request.user.id==0) {
       List<dynamic> rows = await connection.query(
         'select id from users where email=@email',
-        substitutionValues: {'email': arg.user.email}
+        substitutionValues: {'email': request.user.email}
       );
       if (rows.isEmpty) {
         throw GrpcError.notFound('user not found');
       }
       List<dynamic> fields = rows.first;
       int id = fields.first;
-      arg.user.id = Int64(id);
+      request.user.id = Int64(id);
     }
     await connection.query(
       'update users set default_role=@role where id=@id',
       substitutionValues: {
-        'role': arg.role.value,
-        'id': arg.user.id.toInt()
+        'role': request.role.value,
+        'id': request.user.id.toInt()
       }
     );
-    return arg;
+    return request;
   }
 
   Future<User> getUserBySession(Session session) async {
@@ -434,7 +443,7 @@ class UserManagementService extends UserManagementServiceBase {
   @override
   Future<Session> startSession(ServiceCall call, Session request) async {
     User user = request.user;
-    Session resultSession = request;
+    Session resultSession = request.deepCopy();
     dynamic getUserSessionError;
     String initialRoute = '/';
     try {
@@ -449,24 +458,15 @@ class UserManagementService extends UserManagementServiceBase {
           final courseUrlPrefix = course.urlPrefix;
           initialRoute = '/' + courseUrlPrefix;
         }
-        user = user.copyWith((u) { u.initialRoute = initialRoute; });
       }
-      resultSession = resultSession.copyWith((s) {
-        s.user = user;
-      });
+      resultSession.user = user;
+      resultSession.initialRoute = initialRoute;
     }
     catch (e) {
       getUserSessionError = e;
     }
 
     final demo = parent.demoModeProperties;
-    bool forbidLogout = demo!=null && user.defaultRole!=Role.ROLE_ADMINISTRATOR;
-
-    resultSession = resultSession.copyWith((s) {
-      s.user = resultSession.user.copyWith((u) {
-        u.forbidLogout = forbidLogout;
-      });
-    });
 
     if (getUserSessionError != null && demo == null) {
       throw getUserSessionError;
@@ -478,11 +478,9 @@ class UserManagementService extends UserManagementServiceBase {
         password: 'not_set',
         groupName: demo.groupAssignment,
       );
-      newUser = await createOrUpdateUser(call, newUser); // to assign real user id
+      newUser = (await createOrUpdateUser(call, newUser)).deepCopy(); // to assign real user id
       final newUserName = demo.userNamePattern.replaceAll('%id', '${newUser.id}');
-      newUser = newUser.copyWith((s) {
-        s.login = newUserName;
-      });
+      newUser.login = newUserName;
       user = await createOrUpdateUser(call, newUser);
       final coursesResponse = await parent.courseManagementService.getCourses(call, CoursesFilter(user: user));
       final courses = coursesResponse.courses;
@@ -495,19 +493,9 @@ class UserManagementService extends UserManagementServiceBase {
         }
       }
       if (course != null) {
-        final enroll = EnrollUserRequest(
-          course: course,
-          user: user,
-          role: Role.ROLE_STUDENT,
-        );
-        // await parent.enrollmentManagementService.enrollUser(call, enroll);
         initialRoute = '/' + demo.publicCourse;
       }
-      user = user.copyWith((u) {
-        u.initialRoute = initialRoute;
-        u.forbidLogout = false;
-      });
-      resultSession = await createSessionForAuthenticatedUser(user);
+      resultSession = await createSessionForAuthenticatedUser(user, initialRoute);
       log.fine('successfully created new demo user ${user.login} with session ${resultSession.cookie}');
     }
 
