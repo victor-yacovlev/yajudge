@@ -484,7 +484,7 @@ class UserManagementService extends UserManagementServiceBase {
         s.login = newUserName;
       });
       user = await createOrUpdateUser(call, newUser);
-      final coursesResponse = await parent.courseManagementService.getCourses(call, CoursesFilter());
+      final coursesResponse = await parent.courseManagementService.getCourses(call, CoursesFilter(user: user));
       final courses = coursesResponse.courses;
       Course? course;
       final publicCourseUrlPrefix = demo.publicCourse;

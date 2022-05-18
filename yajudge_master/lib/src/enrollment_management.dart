@@ -1,9 +1,7 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
-import 'package:grpc/src/server/call.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
-import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
 import 'master_service.dart';
@@ -225,16 +223,16 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
         }
     );
 
-    final rowToUser = (final row) {
+    User rowToUser(final row) {
       int id = row[0];
       return User(id: Int64(id));
-    };
+    }
 
     List<User> foreignStudents = List.of(List.of(foreignStudentsRows).map(rowToUser));
     List<User> teachers = List.of(List.of(teachersRows).map(rowToUser));
     List<User> assistants = List.of(List.of(assistantsRows).map(rowToUser));
 
-    final updateUserProfiles = (List<User> source) async {
+    Future<List<User>> updateUserProfiles(List<User> source) async {
       List<User> result = [];
       final usersService = parent.userManagementService;
       for (final entry in source) {
@@ -242,7 +240,7 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
         result.add(withProfile);
       }
       return result;
-    };
+    }
 
     return GroupEnrollmentsResponse(
       id: Int64(groupEnrollmentId),
@@ -328,7 +326,7 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
       }
     }
 
-    final updateCourseInfo = (List<Enrollment> source) async {
+    Future<List<Enrollment>> updateCourseInfo(List<Enrollment> source) async {
       final service = parent.courseManagementService;
       List<Enrollment> result = [];
       for (final entry in source) {
@@ -340,7 +338,7 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
         ));
       }
       return result;
-    };
+    }
 
     return UserEnrollmentsResponse(
       enrollments: await updateCourseInfo(result),

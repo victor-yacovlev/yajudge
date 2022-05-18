@@ -270,20 +270,6 @@ class CourseManagementService extends CourseManagementServiceBase {
       if (!enrollmentFound && !userIsAdministrator) {
         continue;
       }
-      // if (enrollments.isNotEmpty) {
-      // } else if (filter.user.id > 0) {
-      //   courseRole =
-      //       await parent.userManagementService.getDefaultRole(filter.user);
-      // }
-      // if (filter.course.id > 0 && filter.course.id != candidate.id) {
-      //   continue;
-      // }
-      // if (filter.course.name.isNotEmpty) {
-      //   if (!UserManagementService.partialStringMatch(
-      //       filter.partialStringMatch, candidate.name, filter.course.name)) {
-      //     continue;
-      //   }
-      // }
       CoursesList_CourseListEntry entry = CoursesList_CourseListEntry();
       entry.course = candidate;
       entry.role = courseRole;
