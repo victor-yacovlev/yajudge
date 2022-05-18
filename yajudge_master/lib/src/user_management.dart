@@ -459,33 +459,36 @@ class UserManagementService extends UserManagementServiceBase {
       getUserSessionError = e;
     }
 
-    bool forbidLogout = parent.demoModeProperties!=null && user.defaultRole!=Role.ROLE_ADMINISTRATOR;
+    final demo = parent.demoModeProperties;
+    bool forbidLogout = demo!=null && user.defaultRole!=Role.ROLE_ADMINISTRATOR;
+
     resultSession = resultSession.copyWith((s) {
       s.user = resultSession.user.copyWith((u) {
         u.forbidLogout = forbidLogout;
       });
     });
 
-    if (getUserSessionError != null && parent.demoModeProperties == null) {
+    if (getUserSessionError != null && demo == null) {
       throw getUserSessionError;
     }
-    else if (getUserSessionError != null && parent.demoModeProperties != null) {
+    else if (getUserSessionError != null && demo != null) {
       // create temporary user for demo mode session
       User newUser = User(
         defaultRole: Role.ROLE_STUDENT,
         password: 'not_set',
-        groupName: parent.demoModeProperties!.groupAssignment,
+        groupName: demo.groupAssignment,
       );
       newUser = await createOrUpdateUser(call, newUser); // to assign real user id
-      final newUserName = parent.demoModeProperties!.userNamePattern.replaceAll('%id', '${newUser.id}');
+      final newUserName = demo.userNamePattern.replaceAll('%id', '${newUser.id}');
       newUser = newUser.copyWith((s) {
         s.login = newUserName;
       });
       user = await createOrUpdateUser(call, newUser);
-      final courses = await parent.courseManagementService.getCourses(call, CoursesFilter());
+      final coursesResponse = await parent.courseManagementService.getCourses(call, CoursesFilter());
+      final courses = coursesResponse.courses;
       Course? course;
-      final publicCourseUrlPrefix = parent.demoModeProperties!.publicCourse;
-      for (final c in courses.courses) {
+      final publicCourseUrlPrefix = demo.publicCourse;
+      for (final c in courses) {
         if (c.course.urlPrefix == publicCourseUrlPrefix) {
           course = c.course;
           break;
@@ -497,8 +500,8 @@ class UserManagementService extends UserManagementServiceBase {
           user: user,
           role: Role.ROLE_STUDENT,
         );
-        await parent.enrollmentManagementService.enrollUser(call, enroll);
-        initialRoute = '/' + parent.demoModeProperties!.publicCourse;
+        // await parent.enrollmentManagementService.enrollUser(call, enroll);
+        initialRoute = '/' + demo.publicCourse;
       }
       user = user.copyWith((u) {
         u.initialRoute = initialRoute;
