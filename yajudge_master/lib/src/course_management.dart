@@ -5,6 +5,7 @@ import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart';
 import 'package:postgres/postgres.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:posix/posix.dart' as posix;
 
@@ -178,8 +179,9 @@ class CourseManagementService extends CourseManagementServiceBase {
         );
       }
     } catch (error) {
-      log.severe('cant load course $courseId into cache: $error');
-      throw GrpcError.internal('cant load course $courseId into cache');
+      final shortMessage = 'cant load course $courseId into cache: $error';
+      log.severe(shortMessage);
+      throw GrpcError.internal(shortMessage);
     }
   }
 
