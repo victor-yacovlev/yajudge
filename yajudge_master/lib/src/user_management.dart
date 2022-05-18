@@ -471,7 +471,11 @@ class UserManagementService extends UserManagementServiceBase {
     }
     else if (getUserSessionError != null && parent.demoModeProperties != null) {
       // create temporary user for demo mode session
-      User newUser = User(defaultRole: Role.ROLE_STUDENT, password: 'not_set');
+      User newUser = User(
+        defaultRole: Role.ROLE_STUDENT,
+        password: 'not_set',
+        groupName: parent.demoModeProperties!.groupAssignment,
+      );
       newUser = await createOrUpdateUser(call, newUser); // to assign real user id
       final newUserName = parent.demoModeProperties!.userNamePattern.replaceAll('%id', '${newUser.id}');
       newUser = newUser.copyWith((s) {

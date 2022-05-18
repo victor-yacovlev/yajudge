@@ -5,14 +5,10 @@ import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart';
 import 'package:postgres/postgres.dart';
-import 'package:tuple/tuple.dart';
-import 'package:xml/xml.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:yaml/yaml.dart';
 import 'package:posix/posix.dart' as posix;
 
 import './master_service.dart';
-import './user_management.dart';
 
 const CourseReloadInterval = Duration(seconds: 15);
 
@@ -80,12 +76,12 @@ class CourseManagementService extends CourseManagementServiceBase {
   }
 
   @override
-  Future<Nothing> deleteCourse(ServiceCall call, Course course) async {
-    if (course.id == 0) {
+  Future<Nothing> deleteCourse(ServiceCall call, Course request) async {
+    if (request.id == 0) {
       throw GrpcError.invalidArgument('course id required');
     }
     connection.query('delete from courses where id=@id',
-        substitutionValues: {'id': course.id.toInt()});
+        substitutionValues: {'id': request.id.toInt()});
     return Nothing();
   }
 
@@ -202,13 +198,13 @@ class CourseManagementService extends CourseManagementServiceBase {
     String name = row[0];
     String dataId = row[1];
     String urlPrefix = row[2];
-    bool no_teacher_mode = row[3];
+    bool noTeacherMode = row[3];
     return Course(
       id: id,
       name: name,
       dataId: dataId,
       urlPrefix: urlPrefix,
-      noTeacherMode: no_teacher_mode,
+      noTeacherMode: noTeacherMode,
     );
   }
 
@@ -227,27 +223,27 @@ class CourseManagementService extends CourseManagementServiceBase {
     int id = row[0];
     String name = row[1];
     String dataId = row[2];
-    bool no_teacher_mode = row[3];
+    bool noTeacherMode = row[3];
     return Course(
       id: Int64(id),
       name: name,
       dataId: dataId,
       urlPrefix: urlPrefix,
-      noTeacherMode: no_teacher_mode,
+      noTeacherMode: noTeacherMode,
     );
   }
 
   @override
-  Future<CoursesList> getCourses(ServiceCall call, CoursesFilter filter) async {
+  Future<CoursesList> getCourses(ServiceCall call, CoursesFilter request) async {
     List<Enrollment> enrollments = [];
     final enrollmentsService = parent.enrollmentManagementService;
     final usersService = parent.userManagementService;
     bool userIsAdministrator = false;
-    if (filter.user.id > 0) {
-      enrollments = (await enrollmentsService.getUserEnrollments(call, filter.user)).enrollments;
+    if (request.user.id > 0) {
+      enrollments = (await enrollmentsService.getUserEnrollments(call, request.user)).enrollments;
       // check if user is really administrator
-      if (filter.user.defaultRole == Role.ROLE_ADMINISTRATOR) {
-        User userProfile = await usersService.getUserById(filter.user.id);
+      if (request.user.defaultRole == Role.ROLE_ADMINISTRATOR) {
+        User userProfile = await usersService.getUserById(request.user.id);
         userIsAdministrator =
             userProfile.defaultRole == Role.ROLE_ADMINISTRATOR;
       }
@@ -324,7 +320,7 @@ class CourseManagementService extends CourseManagementServiceBase {
       final statusResponse = await parent.submissionManagementService.checkCourseStatus(call, statusRequest);
       statuses.add(statusResponse);
     }
-    final statusComparator = (CourseStatus a, CourseStatus b) {
+    int statusComparator(CourseStatus a, CourseStatus b) {
       if (a.user.groupName == b.user.groupName) {
         if (a.user.lastName == b.user.lastName) {
           if (a.user.firstName == b.user.firstName) {
@@ -341,7 +337,7 @@ class CourseManagementService extends CourseManagementServiceBase {
       else {
         return a.user.groupName.compareTo(b.user.groupName);
       }
-    };
+    }
     statuses.sort(statusComparator);
     List<ProblemData> problems = [];
     if (request.includeProblemDetails) {

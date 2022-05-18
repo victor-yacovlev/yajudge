@@ -11,7 +11,7 @@ import 'utils/utils.dart';
 
 
 void main(List<String>? arguments) async {
-  List<String> args = arguments!=null? arguments : [];
+  List<String> args = arguments ?? [];
 
   bool verboseLogging = args.contains('--verbose') || args.contains('-v');
   Logger.root.level = verboseLogging ? Level.ALL : Level.INFO;
