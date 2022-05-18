@@ -10,4 +10,5 @@ description: >
 lessons:
   - intro
   - simple-testing
-  - several-files
+  - cpu-specific
+#  - several-files

@@ -1,0 +1,8 @@
+title: Разные архитектуры процессора
+
+readings:
+  - grader-config.md
+
+problems:
+  - simple-asm-aarch64-hello
+  - simple-asm-x86-64-hello

@@ -1,0 +1,7 @@
+title: Пример задачи Hello World на ассемблере AArch64
+
+solution_files:
+  - simple-asm-aarch64-hello.S
+
+arch: arm64
+link_options: -nostdlib
