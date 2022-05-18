@@ -5,7 +5,6 @@ import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart';
 import 'package:postgres/postgres.dart';
-import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:posix/posix.dart' as posix;
 
