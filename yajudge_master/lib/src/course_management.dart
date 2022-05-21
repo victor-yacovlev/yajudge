@@ -295,8 +295,8 @@ class CourseManagementService extends CourseManagementServiceBase {
         final filter = request.nameFilter.trim().toUpperCase();
         bool test1 = user.lastName.toUpperCase().contains(filter);
         bool test2 = user.firstName.toUpperCase().contains(filter);
-        bool test3 = (user.firstName + ' ' + user.lastName).toUpperCase().contains(filter);
-        bool test4 = (user.lastName + ' ' + user.firstName).toUpperCase().contains(filter);
+        bool test3 = ('${user.firstName} ${user.lastName}').toUpperCase().contains(filter);
+        bool test4 = ('${user.lastName} ${user.firstName}').toUpperCase().contains(filter);
         bool test5 = user.groupName.toUpperCase().contains(filter);
         bool matched = test1 || test2 || test3 || test4 || test5;
         if (!matched) {

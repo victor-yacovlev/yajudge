@@ -14,12 +14,12 @@ import './user_management.dart';
 import 'enrollment_management.dart';
 import 'grpc_web_proxy.dart';
 
-const NotLoggedMethods = ['StartSession', 'Authorize'];
-const PrivateMethods = [
+const notLoggedMethods = ['StartSession', 'Authorize'];
+const privateMethods = [
   'TakeSubmissionToGrade', 'GetProblemFullContent', 'UpdateGraderOutput',
   'ReceiveSubmissionsToGrade', 'SetGraderStatus',
 ];
-const StudentsMethods = [
+const studentsMethods = [
   'GetProfile', 'ChangePassword',
   'GetCourses', 'GetCoursePublicContent',
   'CheckSubmissionsCountLimit', 'SubmitProblemSolution', 'GetSubmissions',
@@ -29,13 +29,12 @@ const StudentsMethods = [
   'SubscribeToSubmissionResultNotifications'
 ];
 
-const MaxErrorsPerMinute = 3;
-const RestartTimeoutSecs = 1;
+const maxErrorsPerMinute = 3;
+const restartTimeoutSecs = 1;
 
 class MasterService {
   final Logger log = Logger('MasterService');
   int _errorsLastMinute = 0;
-  late final Timer _errorsResetTimer;
   final PostgreSQLConnection connection;
   final RpcProperties rpcProperties;
   final MasterLocationProperties locationProperties;
@@ -55,9 +54,6 @@ class MasterService {
     this.grpcWebProxyService,
   })
   {
-    _errorsResetTimer = Timer.periodic(Duration(minutes: 1), (timer) {
-      _errorsLastMinute = 0;
-    });
     userManagementService = UserManagementService(parent: this, connection: connection);
     String coursesRoot = normalize(absolute(locationProperties.coursesRoot));
     String problemsRoot = normalize(absolute(locationProperties.problemsRoot));
@@ -89,10 +85,10 @@ class MasterService {
   }
 
   FutureOr<GrpcError?> checkAuth(ServiceCall call, ServiceMethod method) async {
-    if (NotLoggedMethods.contains(method.name)) {
+    if (notLoggedMethods.contains(method.name)) {
       return null;
     }
-    if (PrivateMethods.contains(method.name)) {
+    if (privateMethods.contains(method.name)) {
       String? auth = call.clientMetadata!.containsKey('token') ? call.clientMetadata!['token'] : null;
       if (auth == null) {
         return GrpcError.unauthenticated('no token metadata to access private method ${method.name}');
@@ -121,7 +117,7 @@ class MasterService {
       }
     }
     if (currentUser.defaultRole == Role.ROLE_STUDENT) {
-      if (!StudentsMethods.contains(method.name)) {
+      if (!studentsMethods.contains(method.name)) {
         return GrpcError.permissionDenied('not allowed for method ${method.name}');
       }
     }
@@ -147,11 +143,11 @@ class MasterService {
     String stackTraceLine = stackTrace.toString().replaceAll('\n', ' ');
     log.severe('$error [$stackTraceLine]');
     _errorsLastMinute += 1;
-    if (_errorsLastMinute >= MaxErrorsPerMinute) {
+    if (_errorsLastMinute >= maxErrorsPerMinute) {
       log.shout('too many errors withing one minute');
       shutdown('too many errors', true);
     }
-    Future.delayed(Duration(seconds: RestartTimeoutSecs))
+    Future.delayed(Duration(seconds: restartTimeoutSecs))
         .then((_) => serveSupervised());
   }
 

@@ -160,10 +160,12 @@ class CourseLoader {
     if (submissionPropertiesFile.existsSync()) {
       updateCourseLastModified(submissionPropertiesFile);
       YamlMap propsMap = loadYaml(submissionPropertiesFile.readAsStringSync());
-      if (propsMap['max_submissions_per_hour'] is int)
+      if (propsMap['max_submissions_per_hour'] is int) {
         _maxSubmissionsPerHour = propsMap['max_submissions_per_hour'];
-      if (propsMap['max_submission_file_size'] is int)
+      }
+      if (propsMap['max_submission_file_size'] is int) {
         _maxSubmissionFileSize = propsMap['max_submission_file_size'];
+      }
     }
     final securityContextFile = io.File(problemPath('')+'/security-context.yaml');
     if (securityContextFile.existsSync()) {
@@ -172,14 +174,15 @@ class CourseLoader {
       _defaultSecurityContext = securityContextFromYaml(propsMap);
     }
     bool hasSections = false;
-    if (courseMap['sections'] != null)
+    if (courseMap['sections'] != null) {
       hasSections = true;
+    }
     List<Section> sectionsList = [];
     if (hasSections) {
       YamlList sections = courseMap['sections'];
       for (String entry in sections) {
         _section = Section(id: entry);
-        final sectionFile = io.File(rootPath+'/$entry/section.yaml');
+        final sectionFile = io.File('$rootPath/$entry/section.yaml');
         updateCourseLastModified(sectionFile);
         _sectionMap = loadYaml(sectionFile.readAsStringSync());
         _loadCourseSection();
@@ -312,8 +315,9 @@ class CourseLoader {
       throw Exception('file not exists: ${problemYamlFile.path}');
     }
     updateCourseLastModified(problemYamlFile);
-    if (withGradingData)
+    if (withGradingData) {
       updateProblemLastModified(problemId, problemYamlFile);
+    }
     YamlMap data = loadYaml(problemYamlFile.readAsStringSync());
     String statementFileName = data['statement'] is String? data['statement'] : 'statement.md';
     final statementFile = io.File(problemPath(problemId)+'/$statementFileName');
@@ -408,10 +412,12 @@ class CourseLoader {
         name = src = entry.toString();
       }
       final file = io.File(problemPath(problemId)+'/$src');
-      if (updateCourseCache)
+      if (updateCourseCache) {
         updateCourseLastModified(file);
-      if (updateProblemCache)
+      }
+      if (updateProblemCache) {
         updateProblemLastModified(problemId, file);
+      }
       List<int> data = file.readAsBytesSync();
       filesList.add(File(name: name, description: description, data: data));
     }
@@ -684,8 +690,9 @@ class CourseLoader {
   }
 
   void updateCourseLastModified(io.File file) {
-    if (courseCache.lastModified == null)
+    if (courseCache.lastModified == null) {
       return;
+    }
     DateTime fileLastModified;
     // if (customFileDateTimePicker != null) {
     //   fileLastModified = customFileDateTimePicker!(file);

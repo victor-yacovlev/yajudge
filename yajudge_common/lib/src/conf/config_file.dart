@@ -6,8 +6,8 @@ import 'package:path/path.dart' as path;
 String findConfigFile(String baseName) {
   String homeDir = Platform.environment['HOME']!;
   List<String> variants = [
-    homeDir + '/.config/yajudge/' + baseName + '.yaml',
-    '/etc/yajudge/' + baseName + '.yaml'
+    '$homeDir/.config/yajudge/$baseName.yaml',
+    '/etc/yajudge/$baseName.yaml'
   ];
   for (String item in variants) {
     if (File(item).existsSync()) {

@@ -176,7 +176,7 @@ class UserManagementService extends UserManagementServiceBase {
     if (request.password.isNotEmpty && request.id == 0) {
       // allows to set password only at initial registration stage
       // use ResetUserPassword (by Admin role) or ChangePassword (by any Role) to set password
-      values['password'] = '='+request.password;
+      values['password'] = '=${request.password}';
       res.password = request.password;
     }
     if (request.login.isNotEmpty) {
@@ -218,10 +218,10 @@ class UserManagementService extends UserManagementServiceBase {
       placeholders += '@$key';
     }
     if (request.id > 0) {
-      String query = 'update users set ' + sets + ' where id=' + request.id.toString();
+      String query = 'update users set $sets where id=${request.id}';
       await connection.query(query, substitutionValues: values);
     } else {
-      String query = 'insert into users(' + values.keys.join(', ') + ') values (' + placeholders + ') returning id';
+      String query = 'insert into users(${values.keys.join(', ')}) values ($placeholders) returning id';
       List<dynamic> row = await connection.query(query, substitutionValues: values);
       List<dynamic> fields = row.first;
       int id = fields.first;
@@ -369,7 +369,7 @@ class UserManagementService extends UserManagementServiceBase {
     if (request.id==0 || request.password.isEmpty) {
       throw GrpcError.invalidArgument('user id and new password required');
     }
-    String newPassword = '=' + request.password;
+    String newPassword = '=${request.password}';
     await connection.query(
         'update users set password=@password where id=@id',
         substitutionValues: {
@@ -456,7 +456,7 @@ class UserManagementService extends UserManagementServiceBase {
           final singleEnrollment = enrollments.single;
           final course = singleEnrollment.course;
           final courseUrlPrefix = course.urlPrefix;
-          initialRoute = '/' + courseUrlPrefix;
+          initialRoute = '/$courseUrlPrefix';
         }
       }
       resultSession.user = user;
@@ -493,7 +493,7 @@ class UserManagementService extends UserManagementServiceBase {
         }
       }
       if (course != null) {
-        initialRoute = '/' + demo.publicCourse;
+        initialRoute = '/${demo.publicCourse}';
       }
       resultSession = await createSessionForAuthenticatedUser(user, initialRoute);
       log.fine('successfully created new demo user ${user.login} with session ${resultSession.cookie}');

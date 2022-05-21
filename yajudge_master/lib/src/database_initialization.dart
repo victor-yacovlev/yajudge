@@ -72,7 +72,7 @@ Future createAdministratorUser(MasterService masterService, String email, String
       'email': email
     },
   );
-  if (existingUserRows.length > 0) {
+  if (existingUserRows.isNotEmpty) {
     // update existing user password
     await db.execute(
       '''
@@ -80,7 +80,7 @@ Future createAdministratorUser(MasterService masterService, String email, String
       ''',
       substitutionValues: {
         'email': email,
-        'password': '='+password,
+        'password': '=$password',
       }
     );
   }
@@ -92,7 +92,7 @@ Future createAdministratorUser(MasterService masterService, String email, String
         ''',
         substitutionValues: {
           'email': email,
-          'password': '=' + password,
+          'password': '=$password',
           'role': Role.ROLE_ADMINISTRATOR.value,
         }
     );

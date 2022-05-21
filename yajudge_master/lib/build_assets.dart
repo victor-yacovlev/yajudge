@@ -5,26 +5,26 @@ import 'dart:convert';
 
 // TODO make this script integrated into dart build_runner
 
-void build_assets() {
+void buildAssets() {
   final fileSet = getFileSet();
   final proto = fileSet.writeToBuffer();
   final compressed = io.gzip.encode(proto);
   final b64 = base64.encode(compressed);
   final dartSource = 'final fileset = \'$b64\';\n';
-  final packageRoot = path.normalize(io.Platform.script.path +'/../../');
+  final packageRoot = path.normalize('${io.Platform.script.path}/../../');
   final packageDir = io.Directory(packageRoot);
-  final generatedDir = io.Directory(packageDir.path + '/lib/src/generated');
+  final generatedDir = io.Directory('${packageDir.path}/lib/src/generated');
   if (!generatedDir.existsSync()) {
     generatedDir.createSync(recursive: true);
   }
-  final assetsFile = io.File(generatedDir.path + '/assets.gen.dart');
+  final assetsFile = io.File('${generatedDir.path}/assets.gen.dart');
   assetsFile.writeAsStringSync(dartSource);
 }
 
 FileSet getFileSet() {
-  final packageRoot = path.normalize(io.Platform.script.path +'/../../');
+  final packageRoot = path.normalize('${io.Platform.script.path}/../../');
   final packageDir = io.Directory(packageRoot);
-  final resourcesDir = io.Directory(packageDir.path + '/resources');
+  final resourcesDir = io.Directory('${packageDir.path}/resources');
   if (!resourcesDir.existsSync()) {
     return FileSet();
   }
@@ -40,5 +40,5 @@ FileSet getFileSet() {
 }
 
 void main() {
-  build_assets();
+  buildAssets();
 }

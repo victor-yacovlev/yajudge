@@ -9,7 +9,7 @@ import 'src/grpc_web_proxy.dart';
 import 'src/master_service.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yaml/yaml.dart';
-import 'src/database_initialization.dart' as dbInit;
+import 'src/database_initialization.dart' as db_init;
 
 Future<void> main(List<String> arguments) async {
   print('Starting at pid ${io.pid} with arguments: $arguments');
@@ -51,7 +51,7 @@ Future<void> main(List<String> arguments) async {
 
     // duplicate initialization messages to log file
     Logger.root.info('Starting master daemon at PID = ${io.pid}');
-    Logger.root.info('Using config file ${configFileName}');
+    Logger.root.info('Using config file $configFileName');
 
   }
   else {
@@ -148,10 +148,10 @@ Future<void> main(List<String> arguments) async {
       ArgResults? command = parsedArguments.command;
       bool initDbMode = command!=null && command.name=='initialize-database';
       if (initDbMode) {
-        await dbInit.initializeDatabase(masterService);
+        await db_init.initializeDatabase(masterService);
         io.exit(0);
       }
-      bool databaseOk = await dbInit.checkTablesExists(masterService);
+      bool databaseOk = await db_init.checkTablesExists(masterService);
       if (!databaseOk) {
         final message = 'Database not initialized properly. Run yajudge-master with initialize-database subcommand';
         print(message);
@@ -166,7 +166,7 @@ Future<void> main(List<String> arguments) async {
         }
         String email = command.rest[0];
         String password = command.rest[1];
-        await dbInit.createAdministratorUser(masterService, email, password);
+        await db_init.createAdministratorUser(masterService, email, password);
         io.exit(0);
       }
       bool startCourseMode = command!= null && command.name=='start-course';
@@ -176,7 +176,7 @@ Future<void> main(List<String> arguments) async {
         String courseUrl = command['url'];
         bool noTeacherMode = true;
         bool mustSolveAllProblemsToComplete = false;
-        await dbInit.createCourseEntry(masterService,
+        await db_init.createCourseEntry(masterService,
             courseTitle, courseData, courseUrl,
             noTeacherMode,
             mustSolveAllProblemsToComplete);
@@ -194,9 +194,7 @@ Future<void> main(List<String> arguments) async {
 
 String getConfigFileName(ArgResults parsedArguments) {
   String? configFileName = parsedArguments['config'];
-  if (configFileName == null) {
-    configFileName = findConfigFile('master');
-  }
+  configFileName ??= findConfigFile('master');
   if (configFileName.isEmpty) {
     print('No config file specified');
     io.exit(1);
@@ -231,9 +229,7 @@ String getLogFileName(ArgResults parsedArguments) {
       logFileName = serviceProperties.logFilePath;
     }
   }
-  if (logFileName == null) {
-    logFileName = 'stdout';
-  }
+  logFileName ??= 'stdout';
   return logFileName;
 }
 
@@ -251,7 +247,9 @@ void initializeLogger(io.IOSink? target) {
     Timer.periodic(Duration(milliseconds: 250), (timer) {
       try {
         target.flush();
-      } catch (e) {}
+      } catch (e) {
+        // do nothing
+      }
     });
   }
 }

@@ -1,4 +1,3 @@
-import 'package:grpc/grpc.dart';
 import 'package:fixnum/fixnum.dart';
 import 'package:yaml/yaml.dart';
 import './generated/yajudge.pb.dart';
@@ -162,26 +161,36 @@ GradingLimits limitsFromYaml(YamlMap conf) {
   int stderrMax = 0;
   bool allowNetwork = false;
 
-  if (conf['stack_size_limit_mb'] is int)
+  if (conf['stack_size_limit_mb'] is int) {
     stackSize = conf['stack_size_limit_mb'];
-  if (conf['memory_max_limit_mb'] is int)
+  }
+  if (conf['memory_max_limit_mb'] is int) {
     memoryMax = conf['memory_max_limit_mb'];
-  if (conf['cpu_time_limit_sec'] is int)
+  }
+  if (conf['cpu_time_limit_sec'] is int) {
     cpuTime = conf['cpu_time_limit_sec'];
-  if (conf['real_time_limit_sec'] is int)
+  }
+  if (conf['real_time_limit_sec'] is int) {
     realTime = conf['real_time_limit_sec'];
-  if (conf['proc_count_limit'] is int)
+  }
+  if (conf['proc_count_limit'] is int) {
     procs = conf['proc_count_limit'];
-  if (conf['new_proc_delay_msec'] is int)
+  }
+  if (conf['new_proc_delay_msec'] is int) {
     procStartDelay = conf['new_proc_delay_msec'];
-  if (conf['fd_count_limit'] is int)
+  }
+  if (conf['fd_count_limit'] is int) {
     files = conf['fd_count_limit'];
-  if (conf['stdout_size_limit_mb'] is int)
+  }
+  if (conf['stdout_size_limit_mb'] is int) {
     stdoutMax = conf['stdout_size_limit_mb'];
-  if (conf['stderr_size_limit_mb'] is int)
+  }
+  if (conf['stderr_size_limit_mb'] is int) {
     stderrMax = conf['stderr_size_limit_mb'];
-  if (conf['allow_network'] is bool)
+  }
+  if (conf['allow_network'] is bool) {
     allowNetwork = conf['allow_network'].toString().toLowerCase()=='true';
+  }
   return GradingLimits(
     stackSizeLimitMb: Int64(stackSize),
     memoryMaxLimitMb: Int64(memoryMax),
@@ -199,50 +208,69 @@ GradingLimits limitsFromYaml(YamlMap conf) {
 GradingLimits mergeLimits(GradingLimits source, GradingLimits update) {
   return source.copyWith((s) {
     final u = update;
-    if (u.stackSizeLimitMb != 0)
+    if (u.stackSizeLimitMb != 0) {
       s.stackSizeLimitMb = u.stackSizeLimitMb;
-    if (u.memoryMaxLimitMb != 0)
+    }
+    if (u.memoryMaxLimitMb != 0) {
       s.memoryMaxLimitMb = u.memoryMaxLimitMb;
-    if (u.cpuTimeLimitSec != 0)
+    }
+    if (u.cpuTimeLimitSec != 0) {
       s.cpuTimeLimitSec = u.cpuTimeLimitSec;
-    if (u.realTimeLimitSec != 0)
+    }
+    if (u.realTimeLimitSec != 0) {
       s.realTimeLimitSec = u.realTimeLimitSec;
-    if (u.procCountLimit != 0)
+    }
+    if (u.procCountLimit != 0) {
       s.procCountLimit = u.procCountLimit;
-    if (u.fdCountLimit != 0)
+    }
+    if (u.fdCountLimit != 0) {
       s.fdCountLimit = u.fdCountLimit;
-    if (u.stdoutSizeLimitMb != 0)
+    }
+    if (u.stdoutSizeLimitMb != 0) {
       s.stdoutSizeLimitMb = u.stdoutSizeLimitMb;
-    if (u.stderrSizeLimitMb != 0)
+    }
+    if (u.stderrSizeLimitMb != 0) {
       s.stderrSizeLimitMb = u.stderrSizeLimitMb;
-    if (u.allowNetwork)
+    }
+    if (u.allowNetwork) {
       s.allowNetwork = u.allowNetwork;
+    }
   });
 }
 
 String limitsToYamlString(GradingLimits limits, [int level = 0]) {
   String indent = level > 0 ? '  ' * level : '';
   String result = '';
-  if (limits.stackSizeLimitMb > 0)
+  if (limits.stackSizeLimitMb > 0) {
     result += '${indent}stack_size_limit_mb: ${limits.stackSizeLimitMb}\n';
-  if (limits.memoryMaxLimitMb > 0)
+  }
+  if (limits.memoryMaxLimitMb > 0) {
     result += '${indent}memory_max_limit_mb: ${limits.memoryMaxLimitMb}\n';
-  if (limits.cpuTimeLimitSec > 0)
+  }
+  if (limits.cpuTimeLimitSec > 0) {
     result += '${indent}cpu_time_limit_sec: ${limits.cpuTimeLimitSec}\n';
-  if (limits.realTimeLimitSec > 0)
+  }
+  if (limits.realTimeLimitSec > 0) {
     result += '${indent}real_time_limit_sec: ${limits.realTimeLimitSec}\n';
-  if (limits.procCountLimit > 0)
+  }
+  if (limits.procCountLimit > 0) {
     result += '${indent}proc_count_limit: ${limits.procCountLimit}\n';
-  if (limits.newProcDelayMsec > 0)
+  }
+  if (limits.newProcDelayMsec > 0) {
     result += '${indent}new_proc_delay_msec: ${limits.newProcDelayMsec}\n';
-  if (limits.fdCountLimit > 0)
+  }
+  if (limits.fdCountLimit > 0) {
     result += '${indent}fd_count_limit: ${limits.fdCountLimit}\n';
-  if (limits.stdoutSizeLimitMb > 0)
+  }
+  if (limits.stdoutSizeLimitMb > 0) {
     result += '${indent}stdout_size_limit_mb: ${limits.stdoutSizeLimitMb}\n';
-  if (limits.stderrSizeLimitMb > 0)
+  }
+  if (limits.stderrSizeLimitMb > 0) {
     result += '${indent}stderr_size_limit_mb: ${limits.stderrSizeLimitMb}\n';
-  if (limits.allowNetwork)
+  }
+  if (limits.allowNetwork) {
     result += '${indent}allow_network: ${limits.allowNetwork}\n';
+  }
   return result;
 }
 
@@ -349,9 +377,11 @@ SecurityContext mergeSecurityContextFromYaml(SecurityContext source, YamlMap con
 String securityContextToYamlString(SecurityContext securityContext, [int level = 0]) {
   String indent = level > 0 ? '  ' * level : '';
   String result = '';
-  if (securityContext.allowedFunctions.isNotEmpty)
+  if (securityContext.allowedFunctions.isNotEmpty) {
     result += '${indent}allowed_functions: ${securityContext.allowedFunctions.join(' ')}\n';
-  if (securityContext.forbiddenFunctions.isNotEmpty)
+  }
+  if (securityContext.forbiddenFunctions.isNotEmpty) {
     result += '${indent}forbidden_functions: ${securityContext.forbiddenFunctions.join(' ')}\n';
+  }
   return result;
 }
