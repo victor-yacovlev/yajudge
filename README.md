@@ -7,9 +7,9 @@ Almost everything implemented using
 use [gRPC Framework](https://grpc.io) for inter-component
 communication.
 
-Requires Dart >= 2.12 and Protobuf Compiler to build 
+Requires Dart >= 2.17 and Protobuf Compiler to build 
 server-side components and 
-also [Flutter SDK](https://flutter.dev) >= 2.8 to 
+also [Flutter SDK](https://flutter.dev) >= 3.0 to 
 build client-side app.
 
 To build gRPC-Web proxy server also required [GoLang](https://go.dev) >= 1.16.
