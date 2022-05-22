@@ -1,8 +1,5 @@
-import 'dart:math';
-
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/src/widgets/framework.dart';
 import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/src/generated/yajudge.pb.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -72,14 +69,11 @@ class SubmissionsListScreenState extends BaseScreenState {
       CoursesController.instance!
           .loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
           .then((Tuple2<Course,Role> value) {
-            final newFilter = query.copyWith((s) {
-              s.courseId = _course.id;
-            });
-            final afterLoadCourse = () {
+            void afterLoadCourse() {
               _course = value.item1;
               _role = value.item2;
               title = 'Посылки курса ${_course.name}';
-            };
+            }
             if (mounted) {
               setState(afterLoadCourse);
             }
@@ -148,9 +142,7 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _setFilterStatus(SolutionStatus? status) {
     bool changed = status != query.statusFilter;
-    if (status == null) {
-      status = SolutionStatus.ANY_STATUS_OR_NULL;
-    }
+    status ??= SolutionStatus.ANY_STATUS_OR_NULL;
     final newQuery = query.copyWith((s) {
       s.statusFilter = status!;
     });
