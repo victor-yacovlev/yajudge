@@ -254,7 +254,7 @@ class SubmissionsListScreenState extends BaseScreenState {
       ));
     }
     return Container(
-        width: 200,
+        width: 220,
         height: 48,
         child: DropdownButtonFormField<SolutionStatus>(
           items: menuItems,
