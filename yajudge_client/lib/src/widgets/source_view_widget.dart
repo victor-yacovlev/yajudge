@@ -15,9 +15,6 @@ class SourceViewWidget extends StatefulWidget {
 
   int get linesCount {
     int lines = text.split('\n').length;
-    if (text.endsWith('\n')) {
-      lines -= 1;
-    }
     return lines;
   }
 }
