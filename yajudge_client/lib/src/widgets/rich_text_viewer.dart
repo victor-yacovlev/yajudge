@@ -115,11 +115,13 @@ class RichTextViewer extends StatelessWidget {
           // .merge(GoogleFonts.ptSans())
           .merge(TextStyle(fontFamily: 'PT Sans'))
           .merge(TextStyle(letterSpacing: 1.05))
+          .merge(TextStyle(height: 1.5))
       ;
       TextStyle codeTextStyle = theme.bodyText1!
           // .merge(GoogleFonts.ptMono())
           .merge(TextStyle(fontFamily: 'PT Mono'))
           .merge(TextStyle(letterSpacing: 1.1))
+          .merge(TextStyle(height: 1.5))
       ;
       TextStyle h2TextStyle = theme.headline5!
           // .merge(GoogleFonts.ptSansCaption())
@@ -135,8 +137,13 @@ class RichTextViewer extends StatelessWidget {
       ;
       MarkdownBody markdown = MarkdownBody(
         styleSheet: MarkdownStyleSheet(
-          textScaleFactor: 1.3,
+          textScaleFactor: 1.15,
           p: mainTextStyle,
+          pPadding: EdgeInsets.fromLTRB(0, 0, 0, 8),
+          codeblockDecoration: BoxDecoration(
+            color: Color.fromARGB(255, 245, 245, 245),
+            borderRadius: BorderRadius.circular(4),
+          ),
           code: codeTextStyle,
           blockquote: codeTextStyle,
           h2: h2TextStyle,
