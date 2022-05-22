@@ -358,11 +358,11 @@ class SubmissionsListScreenState extends BaseScreenState {
     if (_courseData.id.isEmpty) {
       return Center(child: Text('Загрузка данных...'));
     }
-    final formatDateTime = (Int64 timestamp) {
+    String formatDateTime(Int64 timestamp) {
       DateFormat formatter = DateFormat(aboutNarrow? 'MM/dd, HH:mm' : 'yyyy-MM-dd, HH:mm:ss');
       DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt() * 1000);
       return formatter.format(dateTime);
-    };
+    }
     Widget searchBox = _createSearchBoxWidget(context);
     Widget resultsView;
     if (_submissionEntries.isEmpty) {
@@ -380,7 +380,7 @@ class SubmissionsListScreenState extends BaseScreenState {
         String problemId = entry.problemId;
         String status = statusMessageText(entry.status, '', narrow);
         Color statusTextColor = statusMessageColor(context, entry.status);
-        final makeClickableCellFromText = (String text, [Color? color]) {
+        TableCell makeClickableCellFromText(String text, [Color? color]) {
           TextStyle textStyle = Theme.of(context).textTheme.bodyText1!;
           if (narrow) {
             textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
@@ -402,7 +402,7 @@ class SubmissionsListScreenState extends BaseScreenState {
                 ),
               )
           );
-        };
+        }
         final tableRow = TableRow(
           children: [
             makeClickableCellFromText(id),
@@ -417,7 +417,7 @@ class SubmissionsListScreenState extends BaseScreenState {
       BorderSide borderSide = BorderSide(
           color: Theme.of(context).colorScheme.secondary.withAlpha(50)
       );
-      final makeSimpleCellFromText = (String text) {
+      TableCell makeSimpleCellFromText(String text) {
         TextStyle textStyle = Theme.of(context).textTheme.bodyText1!.copyWith(fontWeight: FontWeight.bold);
         if (narrow) {
           textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
@@ -430,7 +430,7 @@ class SubmissionsListScreenState extends BaseScreenState {
               child: Text(text, style: textStyle),
             )
         );
-      };
+      }
       final headerRow = TableRow(
         decoration: BoxDecoration(
           color: Theme.of(context).secondaryHeaderColor,
