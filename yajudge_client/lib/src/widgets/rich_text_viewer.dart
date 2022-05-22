@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:markdown/markdown.dart' as md;
 import 'package:universal_html/parsing.dart';
@@ -12,11 +10,11 @@ class RichTextViewer extends StatelessWidget {
   final String contentType;
   final TextTheme theme;
   final bool wrapInScroll;
-  html.HtmlDocument? _htmlDocument;
-  TextSpan? _data;
-  String? _markdownPreprocessed;
-  late Map<String,TextStyle> _tagStyles;
-  late RegExp _spaceNormalizer;
+  late final html.HtmlDocument? _htmlDocument;
+  late final TextSpan? _data;
+  late final String? _markdownPreprocessed;
+  late final Map<String,TextStyle> _tagStyles;
+  late final RegExp _spaceNormalizer;
 
   RichTextViewer(this.content, this.contentType, {
     required this.theme,
@@ -30,7 +28,7 @@ class RichTextViewer extends StatelessWidget {
     };
     _spaceNormalizer = RegExp(r'\s+');
     if (contentType == 'text/html') {
-      _htmlDocument = parseHtmlDocument(this.content);
+      _htmlDocument = parseHtmlDocument(content);
       _data = _fromHtml(_htmlDocument!);
     } else if (contentType == 'text/markdown') {
       _markdownPreprocessed = removeMarkdownHeading(content);
@@ -55,7 +53,7 @@ class RichTextViewer extends StatelessWidget {
         if (spans.isNotEmpty && spans.last.text!=null && spans.last.text!.isNotEmpty) {
           TextSpan last = spans.removeLast();
           spans.add(TextSpan(
-            text: last.text! + ' ',
+            text: '${last.text!} ',
             style: last.style,
             children: last.children,
           ));
@@ -67,7 +65,7 @@ class RichTextViewer extends StatelessWidget {
         if (tag != 'pre') {
           text = nodeValue.replaceAll(_spaceNormalizer, ' ').trim();
           if (nodeValue.startsWith(' ') && spans.isNotEmpty) {
-            text = ' ' + text;
+            text = ' $text';
           }
         } else {
           text = nodeValue;
@@ -97,7 +95,8 @@ class RichTextViewer extends StatelessWidget {
 
   void _processLink(String text, String? href, String title) {
     if (href != null) {
-      launch(href);
+      Uri uri = Uri.parse(href);
+      launchUrl(uri);
     }
   }
 
@@ -126,13 +125,13 @@ class RichTextViewer extends StatelessWidget {
       TextStyle h2TextStyle = theme.headline5!
           // .merge(GoogleFonts.ptSansCaption())
           .merge(TextStyle(fontFamily: 'PT Sans Caption'))
-          .merge(TextStyle(color: Theme.of(context).accentColor))
+          .merge(TextStyle(color: Theme.of(context).colorScheme.secondary))
           .merge(TextStyle(height: 2.5))
       ;
       TextStyle h3TextStyle = theme.headline6!
           // .merge(GoogleFonts.ptSans())
           .merge(TextStyle(fontFamily: 'PT Sans'))
-          .merge(TextStyle(color: Theme.of(context).accentColor.withAlpha(200)))
+          .merge(TextStyle(color: Theme.of(context).colorScheme.secondary.withAlpha(200)))
           .merge(TextStyle(height: 1.8))
       ;
       MarkdownBody markdown = MarkdownBody(
@@ -160,7 +159,7 @@ class RichTextViewer extends StatelessWidget {
       textViewer = markdown;
     } else {
       textViewer = Text(
-        'Content type '+contentType+' is not supported',
+        'Content type $contentType is not supported',
         style: TextStyle(color: Theme.of(context).errorColor),
       );
     }
@@ -177,12 +176,14 @@ class RichTextViewer extends StatelessWidget {
 
   String removeMarkdownHeading(String src) {
     List<String> lines = src.split('\n');
+    bool headingFound = false;
     String result = '';
     for (String line in lines) {
-      if (line.trim().startsWith('#') && !line.trim().startsWith('##')) {
+      if (line.trim().startsWith('#') && !line.trim().startsWith('##') && !headingFound) {
         // skip heading
+        headingFound = true;
       } else {
-        result += line + '\n';
+        result += '$line\n';
       }
     }
     return result;
