@@ -49,7 +49,10 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
       String lineNumbers = '';
       final linesCount = widget.linesCount;
       for (int i = 0; i < linesCount; ++i) {
-        lineNumbers += (i + 1).toString() + '\n';
+        if (lineNumbers.isNotEmpty) {
+          lineNumbers += '\n';
+        }
+        lineNumbers += '${i+1}';
       }
       final lineNumbersView = Text(lineNumbers,
           textAlign: TextAlign.right,
