@@ -371,8 +371,9 @@ class AppState extends State<App> {
 
   ThemeData buildThemeData() {
     return ThemeData(
-        colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue)
-            .copyWith(secondary: Colors.deepPurple)
+      colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.blue)
+          .copyWith(secondary: Colors.deepPurple),
+      fontFamily: 'PT Sans',
     );
   }
 
