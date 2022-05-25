@@ -40,18 +40,6 @@ class ProblemDataCacheItem {
   });
 }
 
-DateTime getFileLastModifiedUsingPosixCall(io.File file) {
-  // Workaround on bug in Dart runtime that caches file last modified
-  // time on first call and not usable to check file changes.
-  // This function is passed to CourseLoader and cannot be
-  // linked into yajudge_common package due to posix package is
-  // incompatible with Dart web target.
-  String filePath = normalize(absolute(file.path));
-  posix.Stat stat = posix.stat(filePath);
-  DateTime result = stat.lastModified;
-  return result;
-}
-
 class CourseManagementService extends CourseManagementServiceBase {
   final PostgreSQLConnection connection;
   final MasterService parent;
@@ -100,7 +88,6 @@ class CourseManagementService extends CourseManagementServiceBase {
         coursesRootPath: locationProperties.coursesRoot,
         separateProblemsRootPath: locationProperties.problemsRoot,
       );
-      loader.customFileDateTimePicker = getFileLastModifiedUsingPosixCall;
     } else {
       loader = courseLoaders[courseId]!;
     }
@@ -145,7 +132,6 @@ class CourseManagementService extends CourseManagementServiceBase {
         coursesRootPath: locationProperties.coursesRoot,
         separateProblemsRootPath: locationProperties.problemsRoot,
       );
-      loader.customFileDateTimePicker = getFileLastModifiedUsingPosixCall;
     } else {
       loader = courseLoaders[courseId]!;
     }
@@ -160,7 +146,7 @@ class CourseManagementService extends CourseManagementServiceBase {
     }
     final loader = _getCourseLoader(courseId);
     try {
-      DateTime lastModified = loader.courseLastModified();
+      final lastModified = loader.courseLastModified();
       if (lastModified.millisecondsSinceEpoch > request.cachedTimestamp.toInt()) {
         CourseData courseData = loader.courseData();
         log.fine('sent course data on $courseId to client');

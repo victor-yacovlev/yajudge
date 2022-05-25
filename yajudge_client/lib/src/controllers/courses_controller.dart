@@ -64,7 +64,7 @@ class CoursesController {
       return true;
     }
     DateTime lastChecked = item.lastChecked!;
-    DateTime nextCheck = lastChecked.add(CourseReloadInterval);
+    DateTime nextCheck = lastChecked.add(courseReloadInterval);
     DateTime now = DateTime.now();
     return now.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
   }

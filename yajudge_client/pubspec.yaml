@@ -27,6 +27,7 @@ dependencies:
   cupertino_icons: ^1.0.2
   flutter_treeview: ^1.0.4+1
   flutter_markdown: ^0.6.2
+  markdown: ^5.0.0
   google_fonts: ^3.0.0
   flutter_web_plugins:
     sdk: flutter

@@ -28,7 +28,10 @@ class CourseReadingScreenState extends BaseScreenState {
   Widget buildCentralWidget(BuildContext context) {
     TextReading textReading = (widget as CourseReadingScreen).textReading;
     TextTheme theme = Theme.of(context).textTheme;
-    Widget viewer = RichTextViewer(textReading.data, textReading.contentType, theme: theme);;
+    Widget viewer = RichTextViewer(textReading.data, textReading.contentType,
+        theme: theme, resources:
+        textReading.resources
+    );
 
     double screenWidth = MediaQuery.of(context).size.width;
     double horizontalMargins = (screenWidth - 950) / 2;

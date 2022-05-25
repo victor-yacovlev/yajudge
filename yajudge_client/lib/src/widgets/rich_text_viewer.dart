@@ -1,15 +1,19 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:markdown/markdown.dart' as md;
 import 'package:universal_html/parsing.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:yajudge_common/yajudge_common.dart';
 
 class RichTextViewer extends StatelessWidget {
   final String content;
   final String contentType;
   final TextTheme theme;
   final bool wrapInScroll;
+  final FileSet? resources;
   late final html.HtmlDocument? _htmlDocument;
   late final TextSpan? _data;
   late final String? _markdownPreprocessed;
@@ -18,6 +22,7 @@ class RichTextViewer extends StatelessWidget {
 
   RichTextViewer(this.content, this.contentType, {
     required this.theme,
+    this.resources,
     this.wrapInScroll = false
   }) : super() {
     _tagStyles = {
@@ -100,6 +105,29 @@ class RichTextViewer extends StatelessWidget {
     }
   }
 
+  Widget resourceImageBuilder(Uri uri, String? title, String? alt) {
+    Uint8List bytes = Uint8List(0);
+    if (uri.scheme == 'http' || uri.scheme == 'https') {
+      return Image.network(uri.toString());
+    }
+    if (resources == null) {
+      return Image.memory(bytes, width: 0, height: 0);
+    }
+    for (final resource in resources!.files) {
+      final resourceName = resource.name;
+      if (resourceName == uri.path) {
+        bytes = Uint8List.fromList(resource.data);
+        break;
+      }
+    }
+    if (bytes.isNotEmpty) {
+      return Image.memory(bytes);
+    }
+    else {
+      return Image.memory(bytes, width: 0, height: 0);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget textViewer;
@@ -125,13 +153,13 @@ class RichTextViewer extends StatelessWidget {
       TextStyle h2TextStyle = theme.headline5!
           // .merge(GoogleFonts.ptSansCaption())
           .merge(TextStyle(fontFamily: 'PT Sans Caption'))
-          .merge(TextStyle(color: Theme.of(context).colorScheme.secondary))
+          .merge(TextStyle(color: Theme.of(context).colorScheme.primary))
           .merge(TextStyle(height: 2.5))
       ;
       TextStyle h3TextStyle = theme.headline6!
           // .merge(GoogleFonts.ptSans())
           .merge(TextStyle(fontFamily: 'PT Sans'))
-          .merge(TextStyle(color: Theme.of(context).colorScheme.secondary.withAlpha(200)))
+          .merge(TextStyle(color: Theme.of(context).colorScheme.primary.withAlpha(200)))
           .merge(TextStyle(height: 1.8))
       ;
       MarkdownBody markdown = MarkdownBody(
@@ -150,6 +178,7 @@ class RichTextViewer extends StatelessWidget {
         ),
         selectable: false,
         data: _markdownPreprocessed!,
+        imageBuilder: resourceImageBuilder,
         extensionSet: md.ExtensionSet(
           md.ExtensionSet.gitHubFlavored.blockSyntaxes,
           [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes],

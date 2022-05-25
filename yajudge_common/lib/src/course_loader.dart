@@ -1,11 +1,12 @@
 import 'generated/yajudge.pb.dart';
 import 'package:path/path.dart' as path;
 import 'package:yaml/yaml.dart';
+import 'package:protobuf/protobuf.dart';
 import 'model_utils.dart';
 import 'dart:io' as io;
 
-const CourseReloadInterval = Duration(seconds: 10);
-const ProblemReloadInterval = Duration(seconds: 10);
+const courseReloadInterval = Duration(seconds: 10);
+const problemReloadInterval = Duration(seconds: 10);
 
 class CourseLoadError extends Error {
   final String message;
@@ -17,7 +18,7 @@ class CourseLoadError extends Error {
   String toString() {
     String msg = "while processing $relatedFileName: $message";
     if (underlyingError != null) {
-      msg += " [" + underlyingError.toString() + "]";
+      msg += " [$underlyingError]";
     }
     return msg;
   }
@@ -27,8 +28,6 @@ class CourseLoader {
   final String coursesRootPath;
   final String separateProblemsRootPath;
   final String courseId;
-
-  DateTime Function(io.File)? customFileDateTimePicker;
 
   CourseDataCacheItem courseCache = CourseDataCacheItem();
   Map<String, ProblemDataCacheItem> problemsCache = {};
@@ -121,7 +120,7 @@ class CourseLoader {
       return true;
     }
     DateTime lastChecked = courseCache.lastChecked!;
-    DateTime nextCheck = lastChecked.add(ProblemReloadInterval);
+    DateTime nextCheck = lastChecked.add(problemReloadInterval);
     DateTime now = DateTime.now();
     return now.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
   }
@@ -135,7 +134,7 @@ class CourseLoader {
       return true;
     }
     DateTime lastChecked = item.lastChecked!;
-    DateTime nextCheck = lastChecked.add(ProblemReloadInterval);
+    DateTime nextCheck = lastChecked.add(problemReloadInterval);
     DateTime now = DateTime.now();
     return now.millisecondsSinceEpoch >= nextCheck.millisecondsSinceEpoch;
   }
@@ -145,18 +144,18 @@ class CourseLoader {
     _lessonMap = YamlMap();
     courseCache.lastModified = DateTime.fromMillisecondsSinceEpoch(0);
 
-    final courseFile = io.File(rootPath+'/course.yaml');
+    final courseFile = io.File('$rootPath/course.yaml');
     updateCourseLastModified(courseFile);
     YamlMap courseMap = loadYaml(courseFile.readAsStringSync());
     String description = courseMap['description'] is String? courseMap['description'] : '';
     _codeStyles = _loadCourseCodeStyles('');
-    final defaultLimitsFile = io.File(problemPath('')+'/default-limits.yaml');
+    final defaultLimitsFile = io.File('${problemPath('')}/default-limits.yaml');
     if (defaultLimitsFile.existsSync()) {
       updateCourseLastModified(defaultLimitsFile);
       YamlMap limitsMap = loadYaml(defaultLimitsFile.readAsStringSync());
       _defaultLimits = limitsFromYaml(limitsMap);
     }
-    final submissionPropertiesFile = io.File(problemPath('')+'/submission-properties.yaml');
+    final submissionPropertiesFile = io.File('${problemPath('')}/submission-properties.yaml');
     if (submissionPropertiesFile.existsSync()) {
       updateCourseLastModified(submissionPropertiesFile);
       YamlMap propsMap = loadYaml(submissionPropertiesFile.readAsStringSync());
@@ -167,7 +166,7 @@ class CourseLoader {
         _maxSubmissionFileSize = propsMap['max_submission_file_size'];
       }
     }
-    final securityContextFile = io.File(problemPath('')+'/security-context.yaml');
+    final securityContextFile = io.File('${problemPath('')}/security-context.yaml');
     if (securityContextFile.existsSync()) {
       updateCourseLastModified(securityContextFile);
       YamlMap propsMap = loadYaml(securityContextFile.readAsStringSync());
@@ -189,10 +188,11 @@ class CourseLoader {
         sectionsList.add(_section);
       }
     } else {
-      _section = Section();
+      _section = Section().deepCopy();
       _sectionMap = courseMap;
       _loadCourseSection();
-      _section = _section.copyWith((s) { s.name = ''; s.description = ''; });
+      _section.name = '';
+      _section.description = '';
       sectionsList.add(_section);
     }
     courseCache.data = CourseData(
@@ -214,7 +214,7 @@ class CourseLoader {
     List<Lesson> lessonsList = [];
     YamlList lessons = _sectionMap['lessons'];
     for (String entry in lessons) {
-      final lessonFile = io.File(rootPath+'/${_section.id}/$entry/lesson.yaml');
+      final lessonFile = io.File('$rootPath/${_section.id}/$entry/lesson.yaml');
       if (!lessonFile.existsSync()) {
         throw CourseLoadError('file not found', lessonFile.path);
       }
@@ -229,16 +229,15 @@ class CourseLoader {
       _loadCourseLesson();
       lessonsList.add(_lesson);
     }
-    _section = _section.copyWith((s) {
-      s.name = title;
-      s.description = description;
-      s.lessons.addAll(lessonsList);
-    });
+    _section = _section.deepCopy();
+    _section.name = title;
+    _section.description = description;
+    _section.lessons.addAll(lessonsList);
   }
 
   void _loadCourseLesson() {
-    String title = _lessonMap['title'] is String? _lessonMap['title'] : '';
-    String description = _lessonMap['description'] is String? _lessonMap['description'] : '';
+    final title = _lessonMap['title'] is String? _lessonMap['title'] : '';
+    final description = _lessonMap['description'] is String? _lessonMap['description'] : '';
     List<TextReading> readingsList = [];
     List<ProblemData> problemsList = [];
     List<ProblemMetadata> problemsMetadataList = [];
@@ -261,7 +260,7 @@ class CourseLoader {
       }
     }
     else {
-      final readmeMd = io.File(rootPath+'/${_section.id}/${_lesson.id}/README.md');
+      final readmeMd = io.File('$rootPath/${_section.id}/${_lesson.id}/README.md');
       if (readmeMd.existsSync()) {
         _textReading = TextReading(id: _lesson.id);
         _loadTextReading(_lesson.id, readmeMd.path);
@@ -300,17 +299,16 @@ class CourseLoader {
         problemsMetadataList.add(problemMetadata);
       }
     }
-    _lesson = _lesson.copyWith((l) { 
-      l.name = title;
-      l.description = description;
-      l.problems.addAll(problemsList);
-      l.problemsMetadata.addAll(problemsMetadataList);
-      l.readings.addAll(readingsList);
-    });
+    _lesson = _lesson.deepCopy();
+    _lesson.name = title;
+    _lesson.description = description;
+    _lesson.problems.addAll(problemsList);
+    _lesson.problemsMetadata.addAll(problemsMetadataList);
+    _lesson.readings.addAll(readingsList);
   }
 
   ProblemData _loadProblemData(bool withGradingData, String problemId) {
-    final problemYamlFile = io.File(problemPath(problemId)+'/problem.yaml');
+    final problemYamlFile = io.File('${problemPath(problemId)}/problem.yaml');
     if (!problemYamlFile.existsSync()) {
       throw Exception('file not exists: ${problemYamlFile.path}');
     }
@@ -320,7 +318,7 @@ class CourseLoader {
     }
     YamlMap data = loadYaml(problemYamlFile.readAsStringSync());
     String statementFileName = data['statement'] is String? data['statement'] : 'statement.md';
-    final statementFile = io.File(problemPath(problemId)+'/$statementFileName');
+    final statementFile = io.File('${problemPath(problemId)}/$statementFileName');
     if (!statementFileName.endsWith('.md')) {
       throw UnimplementedError('statements other than Markdown (.md) are not supported: ${statementFile.path}');
     }
@@ -365,7 +363,7 @@ class CourseLoader {
       publicFiles = _loadFileSet(problemId, yamlList, true, false);
     }
     else if (solutionTemplateFileName.isNotEmpty) {
-      final solutionTemplateFile = io.File(problemPath(problemId)+'/'+solutionTemplateFileName);
+      final solutionTemplateFile = io.File('${problemPath(problemId)}/$solutionTemplateFileName');
       final templateData = solutionTemplateFile.readAsBytesSync();
       final description = 'Шаблон решения'; // TODO i18n
       updateCourseLastModified(solutionTemplateFile);
@@ -411,7 +409,7 @@ class CourseLoader {
       else {
         name = src = entry.toString();
       }
-      final file = io.File(problemPath(problemId)+'/$src');
+      final file = io.File('${problemPath(problemId)}/$src');
       if (updateCourseCache) {
         updateCourseLastModified(file);
       }
@@ -425,7 +423,7 @@ class CourseLoader {
   }
 
   GradingOptions _loadProblemGradingOptions(String problemId, FileSet publicFiles) {
-    final problemYamlFile = io.File(problemPath(problemId)+'/problem.yaml');
+    final problemYamlFile = io.File('${problemPath(problemId)}/problem.yaml');
     updateCourseLastModified(problemYamlFile);
     updateProblemLastModified(problemId, problemYamlFile);
     YamlMap data = loadYaml(problemYamlFile.readAsStringSync());
@@ -455,25 +453,25 @@ class CourseLoader {
     }
     File customChecker = File();
     if (customCheckerName.isNotEmpty) {
-      final checkerFile = io.File(problemPath(problemId)+'/'+customCheckerName);
+      final checkerFile = io.File('${problemPath(problemId)}/$customCheckerName');
       updateProblemLastModified(problemId, checkerFile);
       customChecker = File(name: customCheckerName, data: checkerFile.readAsBytesSync());
     }
     File customInteractor = File();
     if (interactorName.isNotEmpty) {
-      final interactorFile = io.File(problemPath(problemId)+'/'+interactorName);
+      final interactorFile = io.File('${problemPath(problemId)}/$interactorName');
       updateProblemLastModified(problemId, interactorFile);
       customInteractor = File(name: interactorName, data: interactorFile.readAsBytesSync());
     }
     File testsGenerator = File();
     if (testsGeneratorName.isNotEmpty) {
-      final generatorFile = io.File(problemPath(problemId)+'/'+testsGeneratorName);
+      final generatorFile = io.File('${problemPath(problemId)}/$testsGeneratorName');
       updateProblemLastModified(problemId, generatorFile);
       testsGenerator = File(name: testsGeneratorName, data: generatorFile.readAsBytesSync());
     }
     File coprocess = File();
     if (coprocessName.isNotEmpty) {
-      final coprocessFile = io.File(problemPath(problemId)+'/'+coprocessName);
+      final coprocessFile = io.File('${problemPath(problemId)}/$coprocessName');
       updateProblemLastModified(problemId, coprocessFile);
       coprocess = File(name: coprocessName, data: coprocessFile.readAsBytesSync());
     }
@@ -515,7 +513,7 @@ class CourseLoader {
   }
 
   List<CodeStyle> _loadCourseCodeStyles(String problemId) {
-    final codeStylesFile = io.File(problemPath('')+'/code-styles.yaml');
+    final codeStylesFile = io.File('${problemPath('')}/code-styles.yaml');
     List<CodeStyle> codeStyles = [];
     if (codeStylesFile.existsSync()) {
       updateCourseLastModified(codeStylesFile);
@@ -526,7 +524,7 @@ class CourseLoader {
       for (final entry in codeStylesMap.entries) {
         String suffix = entry.key;
         String styleFileName = entry.value;
-        final styleFile = io.File(problemPath('')+'/'+styleFileName);
+        final styleFile = io.File('${problemPath('')}/$styleFileName');
         List<int> styleFileData = styleFile.readAsBytesSync();
         updateCourseLastModified(styleFile);
         codeStyles.add(CodeStyle(
@@ -539,7 +537,7 @@ class CourseLoader {
   }
 
   List<TestCase> _loadProblemTestCases(String problemId) {
-    final testsDir = io.Directory(problemPath(problemId)+'/tests');
+    final testsDir = io.Directory('${problemPath(problemId)}/tests');
     List<TestCase> result = [];
     final gzip = io.gzip;
     if (testsDir.existsSync()) {
@@ -642,7 +640,7 @@ class CourseLoader {
       readingId = _textReading.id;
     }
     if (readingFilePath.isEmpty) {
-      readingFilePath = rootPath+'/${_section.id}/${_lesson.id}/${_textReading.id}';
+      readingFilePath = '$rootPath/${_section.id}/${_lesson.id}/${_textReading.id}';
     }
     final readingFile = io.File(readingFilePath);
     updateCourseLastModified(readingFile);
@@ -666,7 +664,7 @@ class CourseLoader {
     final rxResourceLink = RegExp(r'\[.*\]\((.+)\)');
     for (final RegExpMatch match in rxResourceLink.allMatches(content)) {
       String resourceName = match.group(1)!;
-      final resourceFile = io.File(rootPath+'/${_section.id}/${_lesson.id}/$resourceName');
+      final resourceFile = io.File('$rootPath/${_section.id}/${_lesson.id}/$resourceName');
       if (resourceFile.existsSync()) {
         updateCourseLastModified(resourceFile);
         resources.add(File(name: resourceName, data: resourceFile.readAsBytesSync()));
@@ -693,27 +691,16 @@ class CourseLoader {
     if (courseCache.lastModified == null) {
       return;
     }
-    DateTime fileLastModified;
-    // if (customFileDateTimePicker != null) {
-    //   fileLastModified = customFileDateTimePicker!(file);
-    // } else {
-    fileLastModified = file.lastModifiedSync();
-    // }
-    DateTime cacheLastModified = courseCache.lastModified!;
-    if (file.lastModifiedSync().millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
+    final fileLastModified = file.lastModifiedSync();
+    final cacheLastModified = courseCache.lastModified!;
+    if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       courseCache.lastModified = file.lastModifiedSync();
     }
   }
 
   void updateProblemLastModified(String problemId, io.File file) {
-    // workaround on Dart bug at dart:io.File.lastModifiedSync()
-    DateTime fileLastModified;
-    // if (customFileDateTimePicker != null) {
-    //   fileLastModified = customFileDateTimePicker!(file);
-    // } else {
-    fileLastModified = file.lastModifiedSync();
-    // }
-    DateTime cacheLastModified = problemsCache[problemId]!.lastModified!;
+    final fileLastModified = file.lastModifiedSync();
+    final cacheLastModified = problemsCache[problemId]!.lastModified!;
     if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       problemsCache[problemId]!.lastModified = fileLastModified;
     }
