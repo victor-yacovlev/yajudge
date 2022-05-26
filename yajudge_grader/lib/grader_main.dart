@@ -219,14 +219,16 @@ void initializeLogger(io.IOSink? target) {
         target.add(bytes);
       }
       catch (error) {
-        print('LOG: ' + messageLine);
+        print('LOG: $messageLine');
         print('Got logger error: $error');
       }
     }
   });
   if (target != null) {
     Timer.periodic(Duration(milliseconds: 250), (timer) {
-      target.flush();
+      try {
+        target.flush();
+      } catch (_) {}
     });
   }
 }
@@ -363,7 +365,7 @@ String realGraderExecutablePath() {
       }
       start = end+1;
     }
-    return targetExecutablePath + ' ' + dartFileName;
+    return '$targetExecutablePath $dartFileName';
   }
   else {
     return targetExecutablePath;
@@ -484,7 +486,7 @@ Future<void> toolMain(ArgResults mainArguments) async {
   doneFile.deleteSync();
   final processed = Submission.fromBuffer(processedData);
 
-  print(processed.status.name + '\n');
+  print('${processed.status.name}\n');
   TestResult findFirstTest() {
     for (final test in processed.testResults) {
       if (test.status == processed.status) {
@@ -502,7 +504,7 @@ Future<void> toolMain(ArgResults mainArguments) async {
   }
   else if (processed.status == SolutionStatus.RUNTIME_ERROR) {
     final broken = findFirstTest();
-    print(broken.stdout + '\n' + broken.stderr);
+    print('${broken.stdout}\n${broken.stderr}');
   }
   else if (processed.status == SolutionStatus.VALGRIND_ERRORS) {
     final broken = findFirstTest();

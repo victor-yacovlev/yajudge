@@ -1,6 +1,7 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:yaml/yaml.dart';
+import 'package:protobuf/protobuf.dart';
 import 'dart:io';
 
 class CompilersConfig {
@@ -86,46 +87,54 @@ class CompilersConfig {
   }
 
   GradingLimits applyValgrindToGradingLimits(GradingLimits base) {
-    return base.copyWith((l) {
-      double cpuTime = l.cpuTimeLimitSec.toDouble();
-      double realTime = l.realTimeLimitSec.toDouble();
-      int memoryMax = l.memoryMaxLimitMb.toInt();
-      if (cpuTime > 0 && scaleValgrindTime > 0) {
-        cpuTime *= scaleValgrindTime;
-        l.cpuTimeLimitSec = Int64(cpuTime.toInt());
-      }
-      if (realTime > 0 && scaleValgrindTime > 0) {
-        realTime *= scaleValgrindTime;
-        l.realTimeLimitSec = Int64(realTime.toInt());
-      }
-      if (memoryMax > 0 && extraValgrindMemory > 0) {
-        l.memoryMaxLimitMb = Int64(memoryMax + extraValgrindMemory);
-      }
-    });
+    GradingLimits result = base.deepCopy();
+    double cpuTime = base.cpuTimeLimitSec.toDouble();
+    double realTime = base.realTimeLimitSec.toDouble();
+    int memoryMax = base.memoryMaxLimitMb.toInt();
+    if (cpuTime > 0 && scaleValgrindTime > 0) {
+      cpuTime *= scaleValgrindTime;
+      result.cpuTimeLimitSec = Int64(cpuTime.toInt());
+    }
+    if (realTime > 0 && scaleValgrindTime > 0) {
+      realTime *= scaleValgrindTime;
+      result.realTimeLimitSec = Int64(realTime.toInt());
+    }
+    if (memoryMax > 0 && extraValgrindMemory > 0) {
+      result.memoryMaxLimitMb = Int64(memoryMax + extraValgrindMemory);
+    }
+    return result;
   }
 
 }
 
 class JobsConfig {
   final bool archSpecificOnly;
+  final int workers;
 
   JobsConfig({
     required this.archSpecificOnly,
+    required this.workers,
   });
 
   factory JobsConfig.fromYaml(YamlMap conf) {
     bool archSpecificOnly = false;
+    int workers = 0;
     if (conf['arch_specific_only'] is bool) {
       archSpecificOnly = true;
     }
+    if (conf['workers'] is int) {
+      workers = conf['workers'];
+    }
     return JobsConfig(
       archSpecificOnly: archSpecificOnly,
+      workers: workers,
     );
   }
 
   factory JobsConfig.createDefault() {
     return JobsConfig(
       archSpecificOnly: false,
+      workers: 0,
     );
   }
 

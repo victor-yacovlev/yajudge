@@ -14,7 +14,7 @@ import 'package:path/path.dart' as path;
 
 import 'abstract_runner.dart';
 
-const ReconnectTimeout = Duration(seconds: 5);
+const reconnectTimeout = Duration(seconds: 5);
 
 class TokenAuthGrpcInterceptor implements ClientInterceptor {
   final String _token;
@@ -59,6 +59,7 @@ class GraderService {
   final ServiceProperties serviceProperties;
   final bool usePidFile;
   final bool processLocalInboxOnly;
+  late final int workersCount;
 
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
@@ -100,6 +101,16 @@ class GraderService {
     log.info('estimating performance rating, this will take some time...');
     _performanceRating = estimatePerformanceRating();
     log.info('performance rating: $_performanceRating');
+    int maxWorkersCount = estimateWorkersCount();
+    int availableWorkersCount = jobsConfig.workers;
+    if (availableWorkersCount <= 0 || availableWorkersCount > maxWorkersCount) {
+      availableWorkersCount = maxWorkersCount;
+    }
+    workersCount = availableWorkersCount;
+  }
+
+  static int estimateWorkersCount() {
+    return io.Platform.numberOfProcessors;
   }
 
   static double estimatePerformanceRating() {
@@ -144,7 +155,7 @@ class GraderService {
       io.exit(5);
     }
     if (waitBeforeRestart) {
-      Future.delayed(ReconnectTimeout).then((_) => serveSupervised());
+      Future.delayed(reconnectTimeout).then((_) => serveSupervised());
     } else {
       serveSupervised();
     }
