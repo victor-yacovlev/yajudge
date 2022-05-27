@@ -25,7 +25,6 @@ class SubmissionProcessor {
   final GradingLimits? overrideLimits;
   final SecurityContext defaultSecurityContext;
   final CompilersConfig compilersConfig;
-  final CourseManagementClient coursesService;
   final InteractorFactory interactorFactory;
 
   String plainBuildTarget = '';
@@ -37,7 +36,6 @@ class SubmissionProcessor {
   SubmissionProcessor({
     required this.submission,
     required this.runner,
-    required this.coursesService,
     required this.locationProperties,
     required this.defaultLimits,
     this.overrideLimits,
@@ -45,241 +43,6 @@ class SubmissionProcessor {
     required this.compilersConfig,
   }): interactorFactory = InteractorFactory(locationProperties: locationProperties);
 
-  Future<void> loadProblemData() async {
-    final courseId = submission.course.dataId;
-    final problemId = submission.problemId;
-    String root = locationProperties.cacheDir;
-    final problemDir = io.Directory(path.absolute(root, courseId, problemId));
-    final problemTimeStampFile = io.File(problemDir.path + '/.timestamp');
-    int timeStamp = 0;
-    if (problemTimeStampFile.existsSync()) {
-      String timeStampData = problemTimeStampFile.readAsStringSync().trim();
-      timeStamp = int.parse(timeStampData);
-    }
-    final request = ProblemContentRequest(
-      courseDataId: courseId,
-      problemId: problemId,
-      cachedTimestamp: Int64(timeStamp),
-    );
-    final response = await coursesService.getProblemFullContent(request);
-    if (response.status == ContentStatus.HAS_DATA) {
-      problemDir.createSync(recursive: true);
-      String buildDir = problemDir.path + '/build';
-      String testsDir = problemDir.path + '/tests';
-      io.Directory(buildDir).createSync(recursive: true);
-      io.Directory(testsDir).createSync(recursive: true);
-      final problemData = response.data;
-      final opts = problemData.gradingOptions;
-      String compileOptions = opts.extraCompileOptions.join(' ');
-      String linkOptions = opts.extraLinkOptions.join(' ');
-      io.File(buildDir + '/.compile_options').writeAsStringSync(compileOptions);
-      io.File(buildDir + '/.link_options').writeAsStringSync(linkOptions);
-      final codeStyles = opts.codeStyles;
-      for (final codeStyle in codeStyles) {
-        String fileName = codeStyle.styleFile.name;
-        String suffix = codeStyle.sourceFileSuffix;
-        if (suffix.startsWith('.')) {
-          suffix = suffix.substring(1);
-        }
-        io.File(buildDir + '/' + fileName).writeAsBytesSync(
-            codeStyle.styleFile.data);
-        io.File(buildDir + '/.style_$suffix').writeAsStringSync(
-            codeStyle.styleFile.name);
-      }
-      for (final file in opts.extraBuildFiles.files) {
-        io.File(buildDir + '/' + file.name).writeAsBytesSync(file.data);
-      }
-      final customChecker = opts.customChecker;
-      if (customChecker.name.isNotEmpty) {
-        io.File(buildDir + '/' + customChecker.name)
-            .writeAsBytesSync(customChecker.data);
-        String checkerName = opts.customChecker.name;
-        String checkerOpts = opts.standardCheckerOpts;
-        io.File(buildDir + '/.checker')
-            .writeAsStringSync('$checkerName\n$checkerOpts\n');
-      } else {
-        String checkerName = opts.standardChecker;
-        String checkerOpts = opts.standardCheckerOpts;
-        io.File(buildDir + '/.checker')
-            .writeAsStringSync('=$checkerName\n$checkerOpts\n');
-      }
-      final interactor = opts.interactor;
-      if (interactor.name.isNotEmpty) {
-        io.File(buildDir + '/.interactor').writeAsStringSync(interactor.name);
-        io.File(buildDir + '/' + interactor.name)
-            .writeAsBytesSync(interactor.data);
-      }
-      final coprocess = opts.coprocess;
-      if (coprocess.name.isNotEmpty) {
-        io.File(buildDir + '/.coprocess').writeAsStringSync(coprocess.name);
-        io.File(buildDir + '/' + coprocess.name).writeAsBytesSync(coprocess.data);
-        if (coprocess.name.endsWith('.c') || coprocess.name.endsWith('.cxx') || coprocess.name.endsWith('.cpp')) {
-          final binaryName = path.basenameWithoutExtension(coprocess.name);
-          await buildSupplementaryProgram(coprocess.name, binaryName, buildDir, courseId, problemId);
-          io.File(buildDir + '/.coprocess').writeAsStringSync(binaryName);
-        }
-      }
-      final testsGenerator = opts.testsGenerator;
-      if (testsGenerator.name.isNotEmpty) {
-        io.File(buildDir + '/' + testsGenerator.name).writeAsBytesSync(
-            testsGenerator.data);
-        io.File(buildDir + '/.tests_generator').writeAsStringSync(
-            testsGenerator.name);
-      }
-
-      if (opts.disableValgrind) {
-        io.File(buildDir + '/.disable_valgrind').createSync(recursive: true);
-      }
-
-      final List<String> disabledSanitizers = opts.disableSanitizers;
-      if (disabledSanitizers.isNotEmpty) {
-        io.File(buildDir + '/.disable_sanitizers').writeAsStringSync(
-            disabledSanitizers.join(' '));
-      }
-
-      GradingLimits limits = opts.limits;
-      String limitsYaml = limitsToYamlString(limits);
-      if (limitsYaml
-          .trim()
-          .isNotEmpty) {
-        io.File(buildDir + '/.limits').writeAsStringSync(limitsYaml);
-      }
-
-      SecurityContext problemSecurityContext = opts.securityContext;
-      String securityContextYaml = securityContextToYamlString(
-          problemSecurityContext);
-      if (securityContextYaml
-          .trim()
-          .isNotEmpty) {
-        io.File(buildDir + '/.security_context').writeAsStringSync(
-            securityContextYaml);
-      }
-      SecurityContext securityContext = mergeSecurityContext(
-          defaultSecurityContext, problemSecurityContext);
-      if (io.Platform.isLinux) {
-        await buildSecurityContextObjects(
-            securityContext, buildDir, courseId, problemId);
-      }
-
-      final gzip = io.gzip;
-      int testNumber = 1;
-      int testsCount = 0;
-      for (final testCase in opts.testCases) {
-        final stdin = testCase.stdinData;
-        final stdout = testCase.stdoutReference;
-        final stderr = testCase.stderrReference;
-        final bundle = testCase.directoryBundle;
-        final args = testCase.commandLineArguments;
-        if (stdin.name.isNotEmpty) {
-          io.File(testsDir + '/' + stdin.name).writeAsBytesSync(
-              gzip.decode(stdin.data));
-        }
-        if (stdout.name.isNotEmpty) {
-          io.File(testsDir + '/' + stdout.name).writeAsBytesSync(
-              gzip.decode(stdout.data));
-        }
-        if (stderr.name.isNotEmpty) {
-          io.File(testsDir + '/' + stderr.name).writeAsBytesSync(
-              gzip.decode(stderr.data));
-        }
-        if (bundle.name.isNotEmpty) {
-          io.File(testsDir + '/' + bundle.name).writeAsBytesSync(bundle.data);
-        }
-        if (args.isNotEmpty) {
-          String testBaseName = '$testNumber';
-          if (testNumber < 10) {
-            testBaseName = '0' + testBaseName;
-          }
-          if (testNumber < 100) {
-            testBaseName = '0' + testBaseName;
-          }
-          io.File(testsDir + '/' + testBaseName + '.args').writeAsStringSync(
-              args);
-        }
-        testNumber ++;
-        testsCount ++;
-      }
-      io.File(testsDir + "/.tests_count").writeAsStringSync('$testsCount\n');
-      problemTimeStampFile.writeAsStringSync(
-          '${response.lastModified.toInt()}\n');
-    }
-  }
-
-  Future<void> buildSupplementaryProgram(
-      String sourceName, String binaryName,
-      String buildDir, String courseId, String problemId
-      ) async {
-
-    bool useCxx = sourceName.endsWith('.cxx') || sourceName.endsWith('.cpp');
-    final compiler = useCxx ? compilersConfig.cxxCompiler : compilersConfig.cCompiler;
-    final baseOptions = useCxx ? compilersConfig.cxxBaseOptions : compilersConfig.cBaseOptions;
-
-    runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId));
-
-    final arguments = baseOptions + ['-o', binaryName, sourceName];
-    final process = await runner.start(
-      Submission(id: Int64(-1), problemId: problemId),
-      [compiler] + arguments,
-      workingDirectory: '/build',
-    );
-
-    bool compilerOk = await process.ok;
-    if (!compilerOk) {
-      String errorMessage = await process.outputAsString;
-      log.severe(
-          'cant build supplementary $sourceName: $compiler ${arguments.join(
-              ' ')}:\n$errorMessage\n');
-    }
-
-    runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)));
-  }
-
-  Future<void> buildSecurityContextObjects(SecurityContext securityContext,
-      String buildDir, String courseId, String problemId) async {
-    String tempSourcePath = buildDir + '/.forbidden-functions-wrapper.c';
-
-
-    final compiler = compilersConfig.cCompiler;
-    final options = ['-c', '-fPIC'];
-
-    runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId));
-
-    if (securityContext.forbiddenFunctions.isNotEmpty) {
-      String sourceHeader = r'''
-#include <stdio.h>
-#include <signal.h>
-#include <unistd.h>
-
-static void forbid(const char *name) {
-    fprintf(stderr, "yajudge_error: Function '%s' is forbidden\n", name);
-    _exit(127);
-}
-    '''.trimLeft();
-      String forbidSource = sourceHeader + '\n';
-      for (final name in securityContext.forbiddenFunctions) {
-        final line = 'void __wrap_$name() { forbid("$name"); }\n';
-        forbidSource += line;
-      }
-      io.File(tempSourcePath).writeAsStringSync(forbidSource);
-      final arguments = compilersConfig.cBaseOptions + options + [
-        '-o', '.forbidden-functions-wrapper.o',
-        '.forbidden-functions-wrapper.c'
-      ];
-      final process = await runner.start(
-        Submission(id: Int64(-1), problemId: problemId),
-        [compiler] + arguments,
-        workingDirectory: '/build',
-      );
-      bool compilerOk = await process.ok;
-      if (!compilerOk) {
-        String errorMessage = await process.outputAsString;
-        log.severe(
-            'cant build security context object: $compiler ${arguments.join(
-                ' ')}:\n$errorMessage\n');
-      }
-    }
-    runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)));
-  }
 
   Future<void> processSubmission() async {
     try {
@@ -299,31 +62,31 @@ static void forbid(const char *name) {
   }
 
   List<String> solutionFileNames() {
-    String solutionPath = runner.submissionPrivateDirectory(submission)+'/build';
-    return io.File(solutionPath+'/.solution_files').readAsStringSync().trim().split('\n');
+    String solutionPath = '${runner.submissionPrivateDirectory(submission)}/build';
+    return io.File('$solutionPath/.solution_files').readAsStringSync().trim().split('\n');
   }
 
   List<String> compileOptions() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    return io.File(solutionPath+'/.compile_options').readAsStringSync().trim().split(' ');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    return io.File('$solutionPath/.compile_options').readAsStringSync().trim().split(' ');
   }
 
   List<String> linkOptions() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    return io.File(solutionPath+'/.link_options').readAsStringSync().trim().split(' ');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    return io.File('$solutionPath/.link_options').readAsStringSync().trim().split(' ');
   }
 
   String problemChecker() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    return io.File(solutionPath+'/.checker').readAsStringSync().trim();
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    return io.File('$solutionPath/.checker').readAsStringSync().trim();
   }
 
   String interactorFilePath() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    final interactorLinkFile = io.File(solutionPath+'/.interactor');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    final interactorLinkFile = io.File('$solutionPath/.interactor');
     if (interactorLinkFile.existsSync()) {
       String interactorName = interactorLinkFile.readAsStringSync().trim();
-      return solutionPath + '/' + interactorName;
+      return '$solutionPath/$interactorName';
     }
     else {
       return '';
@@ -331,11 +94,11 @@ static void forbid(const char *name) {
   }
 
   String coprocessFilePath() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    final coprocessLinkFile = io.File(solutionPath+'/.coprocess');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    final coprocessLinkFile = io.File('$solutionPath/.coprocess');
     if (coprocessLinkFile.existsSync()) {
       String coprocessName = coprocessLinkFile.readAsStringSync().trim();
-      return solutionPath + '/' + coprocessName;
+      return '$solutionPath/$coprocessName';
     }
     else {
       return '';
@@ -343,13 +106,13 @@ static void forbid(const char *name) {
   }
 
   int problemTestsCount() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/tests';
-    return int.parse(io.File(solutionPath+'/.tests_count').readAsStringSync().trim());
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/tests';
+    return int.parse(io.File('$solutionPath/.tests_count').readAsStringSync().trim());
   }
 
   String problemTestsGenerator() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    final generatorFile = io.File(solutionPath+'/.tests_generator');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    final generatorFile = io.File('$solutionPath/.tests_generator');
     if (generatorFile.existsSync()) {
       return generatorFile.readAsStringSync().trim();
     } else {
@@ -358,19 +121,19 @@ static void forbid(const char *name) {
   }
 
   bool disableProblemValgrind() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    return io.File(solutionPath+'/.disable_valgrind').existsSync();
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    return io.File('$solutionPath/.disable_valgrind').existsSync();
   }
 
   List<String> disableProblemSanitizers() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    final confFile = io.File(solutionPath+'/.disable_sanitizers');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    final confFile = io.File('$solutionPath/.disable_sanitizers');
     return confFile.existsSync()? confFile.readAsStringSync().trim().split(' ') : [];
   }
 
   SecurityContext securityContext() {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
-    final confFile = io.File(solutionPath+'/.security_context');
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
+    final confFile = io.File('$solutionPath/.security_context');
     if (confFile.existsSync()) {
       YamlMap conf = loadYaml(confFile.readAsStringSync());
       final problemSecurityContext = securityContextFromYaml(conf);
@@ -382,7 +145,7 @@ static void forbid(const char *name) {
   }
 
   String styleFileName(String suffix) {
-    String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
     if (suffix.startsWith('.')) {
       suffix = suffix.substring(1);
     }
@@ -413,7 +176,7 @@ static void forbid(const char *name) {
 
         String submissionPath = runner.submissionPrivateDirectory(submission);
         String sourcePath = path.normalize('$submissionPath/build/$fileName');
-        String formattedPath = sourcePath + '.formatted';
+        String formattedPath = '$sourcePath.formatted';
         final formattedFile = io.File(formattedPath);
         formattedFile.writeAsStringSync(await clangProcess.outputAsString);
 
@@ -487,7 +250,7 @@ static void forbid(const char *name) {
   }
 
   Future<bool> buildMakeProject() async {
-    final buildDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/build');
+    final buildDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/build');
     DateTime beforeMake = DateTime.now();
     io.sleep(Duration(milliseconds: 250));
     final makeProcess = await runner.start(
@@ -499,7 +262,7 @@ static void forbid(const char *name) {
     if (!makeOk) {
       String message = await makeProcess.outputAsString;
       log.fine('cant build Makefile project from ${submission.id}:\n$message');
-      io.File(buildDir.path+'/make.log').writeAsStringSync(message);
+      io.File('${buildDir.path}/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrorLog = message;
@@ -524,7 +287,7 @@ static void forbid(const char *name) {
     if (newExecutables.isEmpty) {
       String message = 'no executables created by make in Makefile project from ${submission.id}';
       log.fine(message);
-      io.File(buildDir.path+'/make.log').writeAsStringSync(message);
+      io.File('${buildDir.path}/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrorLog = message;
@@ -534,14 +297,14 @@ static void forbid(const char *name) {
     if (newExecutables.length > 1) {
       String message = 'several executables created by make in Makefile project from ${submission.id}: $newExecutables}';
       log.fine(message);
-      io.File(buildDir.path+'/make.log').writeAsStringSync(message);
+      io.File('${buildDir.path}/make.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrorLog = message;
       });
       return false;
     }
-    plainBuildTarget = '/build/'+newExecutables.first;
+    plainBuildTarget = '/build/${newExecutables.first}';
     disableValgrindAndSanitizers = true;
     return true;
   }
@@ -608,8 +371,7 @@ static void forbid(const char *name) {
       }
       String scriptName = scriptFiles.first;
       final scriptFile = io.File(
-          path.normalize(path.absolute(runner.submissionPrivateDirectory(submission)
-              + '/$scriptName'
+          path.normalize(path.absolute('${runner.submissionPrivateDirectory(submission)}/$scriptName'
           )));
       final lines = scriptFile.readAsLinesSync();
       String interpreter = '';
@@ -630,13 +392,13 @@ static void forbid(const char *name) {
       if (interpreter.isEmpty) {
         throw UnimplementedError('dont know how to run $scriptName');
       }
-      plainBuildTarget = path.normalize(path.absolute(runner.submissionRootPrefix(submission)+'/$scriptName'));
+      plainBuildTarget = path.normalize(path.absolute('${runner.submissionRootPrefix(submission)}/$scriptName'));
       targetInterpreter = interpreter;
       runTargetIsScript = true;
       return true;
     }
     List<String> objectFiles = [];
-    final buildDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/build');
+    final buildDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/build');
     for (final sourceFile in submission.solutionFiles.files) {
       String suffix = path.extension(sourceFile.name);
       if (!['.S', '.s', '.c', '.cpp', '.cxx', '.cc'].contains(suffix)) continue;
@@ -657,7 +419,7 @@ static void forbid(const char *name) {
       bool compilerOk = await compilerProcess.ok;
       if (!compilerOk) {
         String message = await compilerProcess.outputAsString;
-        io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
+        io.File('${buildDir.path}/compile.log').writeAsStringSync(message);
         log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compilerCommand.join(' ')}\n$message');
         submission = submission.copyWith((changed) {
           changed.status = SolutionStatus.COMPILATION_ERROR;
@@ -694,7 +456,7 @@ static void forbid(const char *name) {
     if (!linkerOk) {
       String message = await linkerProcess.outputAsString;
       log.fine('cant link ${submission.id}: ${linkerCommand.join(' ')}\n$message');
-      io.File(buildDir.path+'/compile.log').writeAsStringSync(message);
+      io.File('${buildDir.path}/compile.log').writeAsStringSync(message);
       submission = submission.copyWith((changed) {
         changed.status = SolutionStatus.COMPILATION_ERROR;
         changed.buildErrorLog = message;
@@ -704,26 +466,26 @@ static void forbid(const char *name) {
       log.fine('successfully linked target $targetName for ${submission.id}');
     }
     if (sanitizersToUse.isNotEmpty) {
-      sanitizersBuildTarget = '/build/' + targetName;
+      sanitizersBuildTarget = '/build/$targetName';
     } else {
-      plainBuildTarget = '/build/' + targetName;
+      plainBuildTarget = '/build/$targetName';
     }
     return true;
   }
 
   int prepareSubmissionTests(String targetPrefix) {
-    String testsPath = runner.submissionProblemDirectory(submission)+'/tests';
-    final runsDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/runs/$targetPrefix/');
+    String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
+    final runsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/runs/$targetPrefix/');
     runsDir.createSync(recursive: true);
 
     // Unpack .tgz bundles if any exists
     for (int i=1; i<=problemTestsCount(); i++) {
       String testBaseName = '$i';
       if (i < 10) {
-        testBaseName = '0' + testBaseName;
+        testBaseName = '0$testBaseName';
       }
       if (i < 100) {
-        testBaseName = '0' + testBaseName;
+        testBaseName = '0$testBaseName';
       }
       final testBundle = io.File('$testsPath/$testBaseName.tgz');
       if (testBundle.existsSync()) {
@@ -741,11 +503,11 @@ static void forbid(const char *name) {
     }
 
     if (testsGenerator.endsWith('.py')) {
-      final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+      final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
       if (!wrappersDir.existsSync()) {
         wrappersDir.createSync(recursive: true);
       }
-      final wrapperFile = io.File(wrappersDir.path + '/tests_generator_wrapper.py');
+      final wrapperFile = io.File('${wrappersDir.path}/tests_generator_wrapper.py');
       if (!wrapperFile.existsSync()) {
         final content = assetsLoader.fileAsBytes('tests_generator_wrapper.py');
         wrapperFile.writeAsBytesSync(content);
@@ -753,7 +515,7 @@ static void forbid(const char *name) {
 
       final arguments = [
         wrapperFile.path,
-        runner.submissionProblemDirectory(submission)+'/build/$testsGenerator',
+        '${runner.submissionProblemDirectory(submission)}/build/$testsGenerator',
         runsDir.path,
       ];
 
@@ -764,7 +526,7 @@ static void forbid(const char *name) {
         log.severe('tests generator $testsGenerator failed: $message');
         return 0;
       }
-      return int.parse(io.File(runsDir.path+'/.tests_count').readAsStringSync().trim());
+      return int.parse(io.File('${runsDir.path}/.tests_count').readAsStringSync().trim());
     }
     else {
       throw UnimplementedError('Tests generators other than Python not supported yet: $testsGenerator');
@@ -820,10 +582,10 @@ static void forbid(const char *name) {
     for (int i=1; i<=testsCount; i++) {
       String baseName = '$i';
       if (i < 10) {
-        baseName = '0' + baseName;
+        baseName = '0$baseName';
       }
       if (i < 100) {
-        baseName = '0' + baseName;
+        baseName = '0$baseName';
       }
 
       List<TestResult> targetResults = [];
@@ -933,10 +695,7 @@ static void forbid(const char *name) {
 
   GradingLimits getLimitsForProblem() {
     String limitsPath = path.absolute(
-      locationProperties.cacheDir + '/' +
-      submission.course.dataId + '/' +
-      submission.problemId + '/' +
-      'build/.limits'
+      '${locationProperties.cacheDir}/${submission.course.dataId}/${submission.problemId}/build/.limits'
     );
     GradingLimits limits = defaultLimits;
     final limitsFile = io.File(limitsPath);
@@ -994,10 +753,10 @@ static void forbid(const char *name) {
 
   }) async {
     log.info('running test $testBaseName ($description) for submission ${submission.id}');
-    String testsPath = runner.submissionProblemDirectory(submission)+'/tests';
-    final runsDir = io.Directory(runner.submissionPrivateDirectory(submission)+'/runs/$runsDirPrefix/');
+    String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
+    final runsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/runs/$runsDirPrefix/');
     String wd;
-    if (io.Directory(runsDir.path+'/$testBaseName.dir').existsSync()) {
+    if (io.Directory('${runsDir.path}/$testBaseName.dir').existsSync()) {
       wd = '/runs/$runsDirPrefix/$testBaseName.dir';
     }
     else {
@@ -1132,7 +891,7 @@ static void forbid(const char *name) {
 
     if (signalKilled==0 && !timeoutExceed && checkValgrindErrors) {
       log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
-      String runsPath = runner.submissionPrivateDirectory(submission)+'/runs';
+      String runsPath = '${runner.submissionPrivateDirectory(submission)}/runs';
       final valgrindOut = io.File('$runsPath/valgrind/$testBaseName.valgrind').readAsStringSync();
       valgrindErrors = 0;
       final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
@@ -1208,17 +967,17 @@ static void forbid(const char *name) {
       final checkerOpts = checkerData.length > 1? checkerData[1].split(' ') : [];
       for (String opt in checkerOpts) {
         if (opt.startsWith('stdin=')) {
-          stdinFilePath = runner.submissionProblemDirectory(submission) + '/$wd/' + opt.substring(6);
+          stdinFilePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(6)}';
           final stdinFile = io.File(stdinFilePath);
           stdinData = stdinFile.existsSync()? stdinFile.readAsBytesSync() : [];
         }
         if (opt.startsWith('stdout=')) {
-          stdoutFilePath = runner.submissionPrivateDirectory(submission) + '/$wd/' + opt.substring(7);
+          stdoutFilePath = '${runner.submissionPrivateDirectory(submission)}/$wd/${opt.substring(7)}';
           final stdoutFile = io.File(stdoutFilePath);
           stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
         }
         if (opt.startsWith('reference=')) {
-          referencePath = runner.submissionProblemDirectory(submission) + '/$wd/' + opt.substring(10);
+          referencePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(10)}';
           final referenceFile = io.File(referencePath);
           referenceStdout = referenceFile.existsSync()? referenceFile.readAsBytesSync() : [];
         }
@@ -1292,7 +1051,7 @@ static void forbid(const char *name) {
     final checkerName = checkerData[0];
     final checkerOpts = checkerData.length > 1? checkerData[1] : '';
     wd = path.normalize(
-        path.absolute(runner.submissionPrivateDirectory(submission)+'/'+wd)
+        path.absolute('${runner.submissionPrivateDirectory(submission)}/$wd')
     );
     if (stdinName.isNotEmpty) {
       stdinName = path.normalize(path.absolute(stdinName));
@@ -1310,9 +1069,9 @@ static void forbid(const char *name) {
       checker = StandardCheckersFactory.getChecker(standardCheckerName);
     }
     else if (checkerName.endsWith('.py')) {
-      String solutionPath = runner.submissionProblemDirectory(submission)+'/build';
+      String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
       String checkerPy = path.normalize(
-          path.absolute(solutionPath + '/' + checkerName)
+          path.absolute('$solutionPath/$checkerName')
       );
       checker = PythonChecker(checkerPy: checkerPy, locationProperties: locationProperties);
     }
