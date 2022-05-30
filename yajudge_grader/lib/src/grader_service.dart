@@ -9,6 +9,7 @@ import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'grader_extra_configs.dart';
 import 'chrooted_runner.dart';
+import 'grading_worker.dart';
 import 'problem_loader.dart';
 import 'simple_runner.dart';
 import 'submission_processor.dart';
@@ -47,133 +48,6 @@ class TokenAuthGrpcInterceptor implements ClientInterceptor {
   }
 }
 
-class _ServiceWorkerRequest {
-  final Submission submission;
-  final GraderLocationProperties locationProperties;
-  final CompilersConfig compilersConfig;
-  final SecurityContext defaultSecurityContext;
-  final GradingLimits defaultLimits;
-  final GradingLimits? overrideLimits;
-  late final String cgroupRoot;
-  late final String logFilePath;
-
-  _ServiceWorkerRequest({
-    required this.submission,
-    required this.locationProperties,
-    required this.compilersConfig,
-    required this.defaultSecurityContext,
-    required this.defaultLimits,
-    required this.overrideLimits,
-  });
-}
-
-class _ServiceWorkerResponse {
-  final Submission? submission;
-  final Object? error;
-
-  _ServiceWorkerResponse.ok(this.submission): error = null;
-  _ServiceWorkerResponse.error(this.error): submission = null;
-}
-
-class _ServiceWorker {
-  GraderStatus _status = GraderStatus.Unknown;
-
-  get status => _status;
-  SendPort? _sendPort;
-  Completer<_ServiceWorkerResponse>? _resultCompleter;
-  final String workerName;
-
-  _ServiceWorker(this.workerName);
-
-  Future<void> initialize() async {
-    final sendPortCompleter = Completer<SendPort>();
-    ReceivePort isolateToMainStream = ReceivePort();
-
-    isolateToMainStream.listen((data) {
-      if (data is SendPort) {
-        SendPort mainToIsolateStream = data;
-        sendPortCompleter.complete(mainToIsolateStream);
-      } else if (data is _ServiceWorkerResponse) {
-        _resultCompleter?.complete(data);
-        _resultCompleter = null;
-        _status = GraderStatus.Idle;
-      }
-    });
-
-    await Isolate.spawn(
-      _run,
-      isolateToMainStream.sendPort,
-      debugName: 'isolate $workerName',
-    );
-    _sendPort = await sendPortCompleter.future;
-    _status = GraderStatus.Idle;
-  }
-
-  void _run(SendPort isolateToMainStream) {
-    ReceivePort mainToIsolateStream = ReceivePort();
-    isolateToMainStream.send(mainToIsolateStream.sendPort);
-
-    mainToIsolateStream.listen((data) async {
-      if (data is _ServiceWorkerRequest) {
-        final request = data;
-        if (GraderService.serviceLogFilePath == null) {
-          GraderService.configureLogger(request.logFilePath, Isolate.current.debugName!);
-        }
-        final runner = GraderService.createRunner(
-            request.submission,
-            request.locationProperties
-        );
-        if (runner is ChrootedRunner) {
-          ChrootedRunner.cgroupRoot = request.cgroupRoot;
-        }
-        final processor = SubmissionProcessor(
-          submission: request.submission,
-          runner: runner,
-          locationProperties: request.locationProperties,
-          defaultLimits: request.defaultLimits,
-          defaultSecurityContext: request.defaultSecurityContext,
-          compilersConfig: request.compilersConfig,
-          overrideLimits: request.overrideLimits,
-        );
-        try {
-          await processor.processSubmission();
-          final result = processor.submission;
-          isolateToMainStream.send(_ServiceWorkerResponse.ok(result));
-        }
-        catch (error) {
-          isolateToMainStream.send(_ServiceWorkerResponse.error(error));
-        }
-      } else if (data is GraderStatus && data==GraderStatus.ShuttingDown) {
-        _status = GraderStatus.ShuttingDown;
-        Isolate.exit();
-      }
-    });
-  }
-
-  void sendRequest(_ServiceWorkerRequest request) {
-    assert(_sendPort!=null);
-    _sendPort!.send(
-        request
-          ..logFilePath = GraderService.serviceLogFilePath!
-          ..cgroupRoot = ChrootedRunner.cgroupRoot
-    );
-  }
-
-  Future<_ServiceWorkerResponse> process(_ServiceWorkerRequest request) {
-    _status = GraderStatus.Busy;
-    _resultCompleter = Completer<_ServiceWorkerResponse>();
-    sendRequest(request);
-    return _resultCompleter!.future;
-  }
-
-  void shutdown() {
-    assert(_sendPort!=null);
-    _sendPort!.send(GraderStatus.ShuttingDown);
-  }
-
-}
-
-
 class GraderService {
   final Logger log = Logger('GraderService');
 
@@ -188,7 +62,7 @@ class GraderService {
   final ServiceProperties serviceProperties;
   final bool usePidFile;
   final bool processLocalInboxOnly;
-  final List<_ServiceWorker> _workers = [];
+  int _idleWorkersCount = 0;
 
   late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
@@ -235,10 +109,7 @@ class GraderService {
     if (availableWorkersCount <= 0 || availableWorkersCount > maxWorkersCount) {
       availableWorkersCount = maxWorkersCount;
     }
-    for (int i=0; i<availableWorkersCount; i++) {
-      _workers.add(_ServiceWorker('$i'));
-      _workers.last.initialize();
-    }
+    _idleWorkersCount = availableWorkersCount;
   }
 
   static int estimateWorkersCount() {
@@ -390,36 +261,6 @@ class GraderService {
     }
   }
 
-  // Future<void> serveIncomingSubmissions() async {
-  //
-  //   while (!shuttingDown) {
-  //     bool processed = false;
-  //     Submission submission = Submission();
-  //
-  //     // Check submission from master server
-  //     if (!processLocalInboxOnly) {
-  //       submission =
-  //       await submissionsService.takeSubmissionToGrade(GraderProperties(
-  //         name: identityProperties.name,
-  //         platform: GradingPlatform(arch: identityProperties.arch),
-  //       ));
-  //       if (submission.id.toInt() > 0) {
-  //         submission = await processSubmission(submission);
-  //         submission = submission.copyWith((s) {
-  //           s.graderName = identityProperties.name;
-  //         });
-  //         await submissionsService.updateGraderOutput(submission);
-  //         processed = true;
-  //       }
-  //     }
-  //
-  //     // Wait and retry if there is no submissions
-  //     if (!processed) {
-  //       io.sleep(Duration(seconds: 2));
-  //     }
-  //   }
-  // }
-
   GraderProperties graderProperties() => GraderProperties(
     name: identityProperties.name,
     platform: GradingPlatform(arch: identityProperties.arch),
@@ -428,15 +269,26 @@ class GraderService {
   );
 
   Future<GraderStatus> waitForAnyWorkerIdle() async {
-    while (isBusy()) {
-      io.sleep(Duration(milliseconds: 250));
+    final completer = Completer<GraderStatus>();
+    bool checkForReady() {
+      if (shuttingDown) {
+        completer.complete(GraderStatus.ShuttingDown);
+        return true;
+      }
+      if (_idleWorkersCount > 0) {
+        completer.complete(GraderStatus.Idle);
+        return true;
+      }
+      return false;
     }
-    if (shuttingDown) {
-      return GraderStatus.ShuttingDown;
+    if (!checkForReady()) {
+      Timer.periodic(Duration(milliseconds: 250), (timer) {
+        if (checkForReady()) {
+          timer.cancel();
+        }
+      });
     }
-    else {
-      return GraderStatus.Idle;
-    }
+    return completer.future;
   }
 
   Future<void> serveSubmissionsStream() async {
@@ -550,25 +402,11 @@ class GraderService {
   }
 
   bool isIdle() {
-    bool hasIdle = false;
-    for (final worker in _workers) {
-      if (worker.status == GraderStatus.Idle) {
-        hasIdle = true;
-        break;
-      }
-    }
-    return hasIdle;
+    return _idleWorkersCount > 0;
   }
 
   bool isBusy() {
-    bool allBusy = true;
-    for (final worker in _workers) {
-      if (worker.status != GraderStatus.Busy) {
-        allBusy = false;
-        break;
-      }
-    }
-    return allBusy;
+    return !isIdle();
   }
 
   static AbstractRunner createRunner(Submission submission, GraderLocationProperties locationProperties) {
@@ -602,19 +440,13 @@ class GraderService {
     );
 
     await problemLoader.loadProblemData();
+    final currentStatus = await waitForAnyWorkerIdle();
 
-    _ServiceWorker? worker;
-    do {
-      waitForAnyWorkerIdle();
-      for (final w in _workers) {
-        if (w.status == GraderStatus.Idle) {
-          worker = w;
-          break;
-        }
-      }
-    } while (worker == null);
+    if (currentStatus == GraderStatus.ShuttingDown) {
+      return Future.error('server shutting down');
+    }
 
-    final job = _ServiceWorkerRequest(
+    final job = WorkerRequest(
       submission: submission,
       locationProperties: locationProperties,
       compilersConfig: compilersConfig,
@@ -623,18 +455,17 @@ class GraderService {
       overrideLimits: overrideLimits,
     );
 
-    final resultCompleter = Completer<Submission>();
-    final workerResult = worker.process(job);
-
-    workerResult.then((_ServiceWorkerResponse value) {
-      if (value.submission != null) {
-        resultCompleter.complete(value.submission!);
-      } else {
-        resultCompleter.completeError(value.error!);
-      }
+    final worker = Worker(submission);
+    _idleWorkersCount --;
+    final completer = Completer<Submission>();
+    worker.process(job).then((value) {
+      _idleWorkersCount ++;
+      completer.complete(value);
+    }, onError: (error, stackTrace) {
+      _idleWorkersCount ++;
+      completer.completeError(error, stackTrace);
     });
-
-    return resultCompleter.future;
+    return completer.future;
   }
 
   void shutdown(String reason, [bool error = false]) async {

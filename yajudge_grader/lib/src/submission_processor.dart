@@ -46,6 +46,7 @@ class SubmissionProcessor {
 
   Future<void> processSubmission() async {
     try {
+      log.fine('started processing ${submission.id}');
       runner.createDirectoryForSubmission(submission);
       if (!await checkCodeStyles()) {
         return;
@@ -54,6 +55,7 @@ class SubmissionProcessor {
         return;
       }
       await runTests();
+      log.fine('submission ${submission.id} done with status ${submission.status.value} (${submission.status.name})');
     } catch (error) {
       log.severe(error);
     } finally {
