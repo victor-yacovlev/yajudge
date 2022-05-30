@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' as io;
 import 'dart:math';
-import 'dart:isolate';
 
 import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
@@ -12,7 +11,6 @@ import 'chrooted_runner.dart';
 import 'grading_worker.dart';
 import 'problem_loader.dart';
 import 'simple_runner.dart';
-import 'submission_processor.dart';
 import 'package:path/path.dart' as path;
 
 import 'abstract_runner.dart';

@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:posix/posix.dart' as posix;
-import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:yajudge_common/yajudge_common.dart';

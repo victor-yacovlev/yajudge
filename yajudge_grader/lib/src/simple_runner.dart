@@ -19,7 +19,7 @@ class SimpleRunner extends AbstractRunner {
     String courseId = submission.course.dataId;
     String problemId = submission.problemId;
     String problemContentPath = path.absolute(locationProperties.cacheDir, courseId, problemId);
-    final submissionFilesDir = io.Directory(submissionPath+'/build');
+    final submissionFilesDir = io.Directory('$submissionPath/build');
     submissionFilesDir.createSync(recursive: true);
     final problemContent = io.Directory(problemContentPath);
     problemContent.listSync().forEach((element) {
@@ -27,7 +27,7 @@ class SimpleRunner extends AbstractRunner {
       assert(copyResult.exitCode == 0);
     });
     final fileNames = submission.solutionFiles.files.map((e) => e.name);
-    io.File(submissionFilesDir.path+'/.solution_files').writeAsStringSync(
+    io.File('${submissionFilesDir.path}/.solution_files').writeAsStringSync(
         fileNames.join('\n')
     );
     for (final file in submission.solutionFiles.files) {

@@ -81,8 +81,8 @@ class ChrootedRunner extends AbstractRunner {
     while (parts.isNotEmpty) {
       String lastPart = parts.last;
       if (lastPart.endsWith('.slice')) {
-        cgroupRoot = path.normalize(path.absolute(cgroupFsRoot + '/' + parts.join('/')));
-        final cgroupProcsFilePath = cgroupRoot + '/cgroup.procs';
+        cgroupRoot = path.normalize(path.absolute('$cgroupFsRoot/${parts.join('/')}'));
+        final cgroupProcsFilePath = '$cgroupRoot/cgroup.procs';
         if (0 == posix.access(cgroupProcsFilePath, posix.R_OK | posix.W_OK)) {
           foundWritableSlice = true;
           break;
@@ -93,7 +93,7 @@ class ChrootedRunner extends AbstractRunner {
     if (!foundWritableSlice) {
       return 'no writable parent cgroup slice or service found. My current cgroup location is $cgroupLocationSuffix. Launch me using systemd-run --slice=NAME';
     }
-    List<String> controllersAvailable = io.File(cgroupRoot+'/cgroup.controllers')
+    List<String> controllersAvailable = io.File('$cgroupRoot/cgroup.controllers')
         .readAsStringSync().trim().split(' ');
     if (!controllersAvailable.contains('memory')) {
       return 'memory cgroup controller not available';
@@ -130,26 +130,26 @@ class ChrootedRunner extends AbstractRunner {
     // to build helpers
     overlayUpperDir = io.Directory(problemDir.path);
     String base = path.absolute(locationProperties.workDir, courseId, problemId);
-    overlayWorkDir = io.Directory(base + '/workdir');
-    overlayMergeDir = io.Directory(base + '/mergedir');
+    overlayWorkDir = io.Directory('$base/workdir');
+    overlayMergeDir = io.Directory('$base/mergedir');
     overlayWorkDir!.createSync(recursive: true);
     overlayMergeDir!.createSync(recursive: true);
   }
   
   void createSubmissionDir(Submission submission) {
     String submissionPath = path.normalize(path.absolute(locationProperties.workDir, '${submission.id}'));
-    overlayUpperDir = io.Directory(submissionPath + '/upperdir');
-    overlayWorkDir = io.Directory(submissionPath + '/workdir');
-    overlayMergeDir = io.Directory(submissionPath + '/mergedir');
+    overlayUpperDir = io.Directory('$submissionPath/upperdir');
+    overlayWorkDir = io.Directory('$submissionPath/workdir');
+    overlayMergeDir = io.Directory('$submissionPath/mergedir');
     overlayUpperDir!.createSync(recursive: true);
     overlayWorkDir!.createSync(recursive: true);
     overlayMergeDir!.createSync(recursive: true);
-    io.Directory submissionBuildDir = io.Directory(overlayUpperDir!.path + '/build');
-    io.Directory submissionTestsDir = io.Directory(overlayUpperDir!.path + '/tests');
+    io.Directory submissionBuildDir = io.Directory('${overlayUpperDir!.path}/build');
+    io.Directory submissionTestsDir = io.Directory('${overlayUpperDir!.path}/tests');
     submissionBuildDir.createSync(recursive: true);
     submissionTestsDir.createSync(recursive: true);
     final fileNames = submission.solutionFiles.files.map((e) => e.name);
-    io.File(submissionBuildDir.path+'/.solution_files').writeAsStringSync(
+    io.File('${submissionBuildDir.path}/.solution_files').writeAsStringSync(
       fileNames.join('\n')
     );
     for (final file in submission.solutionFiles.files) {
@@ -158,11 +158,11 @@ class ChrootedRunner extends AbstractRunner {
       io.Directory(fileDir).createSync(recursive: true);
       io.File(filePath).writeAsBytesSync(file.data);
     }
-    io.Directory problemTestsDir = io.Directory(problemDir.path+'/tests');
+    io.Directory problemTestsDir = io.Directory('${problemDir.path}/tests');
     for (final entry in problemTestsDir.listSync(recursive: true)) {
       if (entry.statSync().type == io.FileSystemEntityType.directory) {
         String entryPath = entry.path.substring(problemTestsDir.path.length);
-        io.Directory testsSubdir = io.Directory(submissionTestsDir.path+'/'+entryPath);
+        io.Directory testsSubdir = io.Directory('${submissionTestsDir.path}/$entryPath');
         testsSubdir.createSync(recursive: true);
       }
     }
@@ -170,7 +170,7 @@ class ChrootedRunner extends AbstractRunner {
   }
 
   String get runWrapperToolPath {
-    final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+    final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
     }
@@ -183,7 +183,7 @@ class ChrootedRunner extends AbstractRunner {
       'run_wrapper_stage05_coprocess.sh',
     ];
     for (final name in names) {
-      final file = io.File(wrappersDir.path + '/' + name);
+      final file = io.File('${wrappersDir.path}/$name');
       if (!file.existsSync()) {
         final content = assetsLoader.fileAsBytes(name);
         file.writeAsBytesSync(content);
@@ -194,10 +194,10 @@ class ChrootedRunner extends AbstractRunner {
 
   String submissionCgroupPath(Submission submission) {
     if (submission.id >= 0) {
-      return cgroupRoot + '/submission-${submission.id}';
+      return '$cgroupRoot/submission-${submission.id}';
     }
     else {
-      return cgroupRoot + '/problem-${submission.problemId}';
+      return '$cgroupRoot/problem-${submission.problemId}';
     }
   }
 
@@ -324,10 +324,10 @@ class ChrootedRunner extends AbstractRunner {
       }
       String coprocess = coprocessFileName;
       if (coprocess.endsWith('.py')) {
-        coprocess = 'python3 ' + coprocess;
+        coprocess = 'python3 $coprocess';
       }
       else if (coprocessFileName.endsWith('.sh')) {
-        coprocess = 'bash ' + coprocess;
+        coprocess = 'bash $coprocess';
       }
       environment['YAJUDGE_COPROCESS'] = coprocess;
       environment['YAJUDGE_COPROCESS_NAME'] = path.basename(coprocessFileName);
@@ -335,7 +335,7 @@ class ChrootedRunner extends AbstractRunner {
 
     String lowerDir = locationProperties.osImageDir;
     if (problemDir.path != overlayUpperDir!.path) {
-      lowerDir += ':' + problemDir.path;
+      lowerDir += ':${problemDir.path}';
     }
     environment['YAJUDGE_OVERLAY_LOWERDIR'] = lowerDir;
     environment['YAJUDGE_OVERLAY_UPPERDIR'] = overlayUpperDir!.path;
@@ -453,9 +453,9 @@ class ChrootedRunner extends AbstractRunner {
     removeSubmissionCgroup(submission);
 
     // clean temporary directories and files
-    final workdirWork = io.Directory(overlayWorkDir!.path + '/work');
+    final workdirWork = io.Directory('${overlayWorkDir!.path}/work');
     if (workdirWork.existsSync()) {
-      io.Process.runSync('rmdir', [overlayWorkDir!.path + '/work']);
+      io.Process.runSync('rmdir', ['${overlayWorkDir!.path}/work']);
     }
     if (workdirWork.existsSync()) {
       io.Process.runSync('rmdir', [overlayWorkDir!.path]);

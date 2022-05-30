@@ -18,11 +18,11 @@ class PythonChecker extends AbstractChecker {
 
   @override
   String matchFiles(List<String> args, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) {
-    final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+    final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
     }
-    final wrapperFile = io.File(wrappersDir.path + '/checker_wrapper.py');
+    final wrapperFile = io.File('${wrappersDir.path}/checker_wrapper.py');
     if (!wrapperFile.existsSync()) {
       final content = assetsLoader.fileAsBytes('checker_wrapper.py');
       wrapperFile.writeAsBytesSync(content);

@@ -17,11 +17,11 @@ class PythonInteractor extends AbstractInteractor {
   @override
   Future<Function> interact(YajudgeProcess targetProcess, String workDir, String dataFileName) async {
     final log = Logger('interactor');
-    final wrappersDir = io.Directory(locationProperties.cacheDir + '/wrappers');
+    final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
     }
-    final wrapperFile = io.File(wrappersDir.path + '/interactor_wrapper.py');
+    final wrapperFile = io.File('${wrappersDir.path}/interactor_wrapper.py');
     if (!wrapperFile.existsSync()) {
       final content = assetsLoader.fileAsBytes('interactor_wrapper.py');
       wrapperFile.writeAsBytesSync(content);
