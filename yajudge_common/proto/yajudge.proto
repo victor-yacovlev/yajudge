@@ -501,6 +501,7 @@ message GraderProperties {
   GradingPlatform platform    = 2;
   double          performance_rating = 3; // higher is better: 1_000_000/(time_in_ms_for_20000_primes_generation)
   bool            arch_specific_only_jobs = 4;
+  int32           number_of_workers = 5;  // number of CPU cores available to grade in parallel
 }
 
 message SubmissionsCountLimit {

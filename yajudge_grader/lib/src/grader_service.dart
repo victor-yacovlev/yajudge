@@ -76,6 +76,8 @@ class GraderService {
   bool shuttingDown = false;
   int shutdownExitCode = 0;
 
+  int availableWorkersCount = 1;
+
   GraderService({
     required this.rpcProperties,
     required this.locationProperties,
@@ -105,7 +107,7 @@ class GraderService {
     _performanceRating = estimatePerformanceRating();
     log.info('performance rating: $_performanceRating');
     int maxWorkersCount = estimateWorkersCount();
-    int availableWorkersCount = jobsConfig.workers;
+    availableWorkersCount = jobsConfig.workers;
     if (availableWorkersCount <= 0 || availableWorkersCount > maxWorkersCount) {
       availableWorkersCount = maxWorkersCount;
     }
@@ -266,6 +268,7 @@ class GraderService {
     platform: GradingPlatform(arch: identityProperties.arch),
     performanceRating: _performanceRating,
     archSpecificOnlyJobs: jobsConfig.archSpecificOnly,
+    numberOfWorkers: availableWorkersCount,
   );
 
   Future<GraderStatus> waitForAnyWorkerIdle() async {
