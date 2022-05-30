@@ -53,19 +53,11 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   if (useLogFile) {
     print('Configuring logger');
     final logFilePath = getLogFileName(parsedArguments, graderInstanceName);
+    GraderService.configureLogger(logFilePath, '');
     if (logFilePath.isNotEmpty && logFilePath!='stdout') {
-      print('Using log file $logFilePath');
-      final logFile = io.File(logFilePath);
-      initializeLogger(logFile.openWrite(mode: io.FileMode.append));
-      print('Logger initialized so next non-critical messages will be in $logFilePath');
-
       // duplicate initialization messages to log file
       Logger.root.info('Starting grader daemon at PID = ${io.pid}');
       Logger.root.info('Using config file $configFileName');
-    }
-    else {
-      print('Log file not set so will use stdout for logging');
-      initializeLogger(io.stdout);
     }
   }
 

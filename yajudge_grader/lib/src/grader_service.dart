@@ -47,119 +47,132 @@ class TokenAuthGrpcInterceptor implements ClientInterceptor {
   }
 }
 
+class _ServiceWorkerRequest {
+  final Submission submission;
+  final GraderLocationProperties locationProperties;
+  final CompilersConfig compilersConfig;
+  final SecurityContext defaultSecurityContext;
+  final GradingLimits defaultLimits;
+  final GradingLimits? overrideLimits;
+  late final String cgroupRoot;
+  late final String logFilePath;
+
+  _ServiceWorkerRequest({
+    required this.submission,
+    required this.locationProperties,
+    required this.compilersConfig,
+    required this.defaultSecurityContext,
+    required this.defaultLimits,
+    required this.overrideLimits,
+  });
+}
+
+class _ServiceWorkerResponse {
+  final Submission? submission;
+  final Object? error;
+
+  _ServiceWorkerResponse.ok(this.submission): error = null;
+  _ServiceWorkerResponse.error(this.error): submission = null;
+}
+
 class _ServiceWorker {
   GraderStatus _status = GraderStatus.Unknown;
-  GraderStatus get status => _status;
-  final log = Logger('_ServiceWorker');
-  late final SendPort _requestsPort;
-  late final ReceivePort _responsesPort;
-  late final Isolate _isolate;
-  final String debugName;
-  Completer<Submission>? _resultCompleter;
 
-  _ServiceWorker(this.debugName);
+  get status => _status;
+  SendPort? _sendPort;
+  Completer<_ServiceWorkerResponse>? _resultCompleter;
+  final String workerName;
 
-  void initialize() {
-    _responsesPort = ReceivePort('responses port for $debugName');
-    final futureIsolate = Isolate.spawn(
-        _run,
-        _responsesPort.sendPort,
-        debugName: 'isolate $debugName',
+  _ServiceWorker(this.workerName);
+
+  Future<void> initialize() async {
+    final sendPortCompleter = Completer<SendPort>();
+    ReceivePort isolateToMainStream = ReceivePort();
+
+    isolateToMainStream.listen((data) {
+      if (data is SendPort) {
+        SendPort mainToIsolateStream = data;
+        sendPortCompleter.complete(mainToIsolateStream);
+      } else if (data is _ServiceWorkerResponse) {
+        _resultCompleter?.complete(data);
+        _resultCompleter = null;
+        _status = GraderStatus.Idle;
+      }
+    });
+
+    await Isolate.spawn(
+      _run,
+      isolateToMainStream.sendPort,
+      debugName: 'isolate $workerName',
     );
-    futureIsolate.then((value) {
-      _isolate = value;
+    _sendPort = await sendPortCompleter.future;
+    _status = GraderStatus.Idle;
+  }
+
+  void _run(SendPort isolateToMainStream) {
+    ReceivePort mainToIsolateStream = ReceivePort();
+    isolateToMainStream.send(mainToIsolateStream.sendPort);
+
+    mainToIsolateStream.listen((data) async {
+      if (data is _ServiceWorkerRequest) {
+        final request = data;
+        if (GraderService.serviceLogFilePath == null) {
+          GraderService.configureLogger(request.logFilePath, Isolate.current.debugName!);
+        }
+        final runner = GraderService.createRunner(
+            request.submission,
+            request.locationProperties
+        );
+        if (runner is ChrootedRunner) {
+          ChrootedRunner.cgroupRoot = request.cgroupRoot;
+        }
+        final processor = SubmissionProcessor(
+          submission: request.submission,
+          runner: runner,
+          locationProperties: request.locationProperties,
+          defaultLimits: request.defaultLimits,
+          defaultSecurityContext: request.defaultSecurityContext,
+          compilersConfig: request.compilersConfig,
+          overrideLimits: request.overrideLimits,
+        );
+        try {
+          await processor.processSubmission();
+          final result = processor.submission;
+          isolateToMainStream.send(_ServiceWorkerResponse.ok(result));
+        }
+        catch (error) {
+          isolateToMainStream.send(_ServiceWorkerResponse.error(error));
+        }
+      } else if (data is GraderStatus && data==GraderStatus.ShuttingDown) {
+        _status = GraderStatus.ShuttingDown;
+        Isolate.exit();
+      }
     });
-    futureIsolate.onError((error, stackTrace) {
-      log.severe('cant start worker isolate: $error', error, stackTrace);
-      return futureIsolate;
-    });
-    _responsesPort.listen(_handleMessageFromIsolate);
+  }
+
+  void sendRequest(_ServiceWorkerRequest request) {
+    assert(_sendPort!=null);
+    _sendPort!.send(
+        request
+          ..logFilePath = GraderService.serviceLogFilePath!
+          ..cgroupRoot = ChrootedRunner.cgroupRoot
+    );
+  }
+
+  Future<_ServiceWorkerResponse> process(_ServiceWorkerRequest request) {
+    _status = GraderStatus.Busy;
+    _resultCompleter = Completer<_ServiceWorkerResponse>();
+    sendRequest(request);
+    return _resultCompleter!.future;
   }
 
   void shutdown() {
-    _requestsPort.send(GraderStatus.ShuttingDown);
-    io.sleep(Duration(seconds: 1));
-    _isolate.kill();
+    assert(_sendPort!=null);
+    _sendPort!.send(GraderStatus.ShuttingDown);
   }
 
-  void _handleMessageFromIsolate(dynamic message) {
-    if (message is GraderStatus) {
-      _status = message;
-    }
-    else if (message is SendPort) {
-      _requestsPort = message;
-    }
-    else if (message is Submission) {
-      assert(_resultCompleter!=null);
-      _resultCompleter!.complete(message);
-    }
-    else if (message is Error) {
-      if (_resultCompleter!=null) {
-        _resultCompleter!.completeError(message);
-      }
-      else {
-        throw message;
-      }
-    }
-  }
-
-  static void _run(SendPort resultsStreamWriter) async {
-    final requestsPort = ReceivePort();
-    resultsStreamWriter.send(requestsPort.sendPort);
-    resultsStreamWriter.send(GraderStatus.Idle);
-    await for (final message in requestsPort) {
-      if (message is GraderStatus && message==GraderStatus.ShuttingDown) {
-        Isolate.exit();
-      }
-      else if (message is Map) {
-        resultsStreamWriter.send(GraderStatus.Busy);
-        final submission = message['submission'] as Submission;
-        final locationProperties = message['locationProperties'] as GraderLocationProperties;
-        final defaultLimits = message['defaultLimits'] as GradingLimits;
-        final defaultSecurityContext = message['defaultSecurityContext'] as SecurityContext;
-        final compilersConfig = message['compilersConfig'] as CompilersConfig;
-        final overrideLimits = message['overrideLimits'] as GradingLimits?;
-        final processor = SubmissionProcessor(
-          submission: submission,
-          runner: GraderService.createRunner(submission, locationProperties),
-          locationProperties: locationProperties,
-          defaultLimits: defaultLimits,
-          defaultSecurityContext: defaultSecurityContext,
-          compilersConfig: compilersConfig,
-          overrideLimits: overrideLimits,
-        );
-        Submission? result;
-        Object? error;
-        try {
-          await processor.processSubmission();
-          result = processor.submission;
-        }
-        catch (err) {
-          error = err;
-        }
-        if (result != null) {
-          resultsStreamWriter.send(result);
-        }
-        else {
-          resultsStreamWriter.send(error);
-        }
-        resultsStreamWriter.send(GraderStatus.Idle);
-      }
-    }
-  }
-
-  Future<Submission> processSubmission(Map<String,dynamic> parameters) {
-    _status = GraderStatus.Busy;
-    _resultCompleter = Completer<Submission>();
-    try {
-      _requestsPort.send(parameters);
-      return _resultCompleter!.future;
-    } catch (error) {
-      _resultCompleter = null;
-      return Future.error(error);
-    }
-  }
 }
+
 
 class GraderService {
   final Logger log = Logger('GraderService');
@@ -183,6 +196,7 @@ class GraderService {
 
   late final double _performanceRating;
   Timer? _statusPushTimer;
+  static String? serviceLogFilePath;  // to recreate log object while in isolate
 
 
   bool shuttingDown = false;
@@ -255,6 +269,57 @@ class GraderService {
     final milliseconds = endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch;
     double result = 1000000.0 / milliseconds;
     return result;
+  }
+
+  static void configureLogger(String logFilePath, String isolateName) {
+    serviceLogFilePath = logFilePath;
+    if (logFilePath.isNotEmpty && logFilePath!='stdout') {
+      if (isolateName.isEmpty) {
+        print('Using log file $logFilePath');
+      }
+      final logFile = io.File(logFilePath);
+      final openedFile = logFile.openSync(mode: io.FileMode.writeOnlyAppend);
+      _initializeLogger(openedFile, isolateName);
+      if (isolateName.isEmpty) {
+        print(
+            'Logger initialized so next non-critical messages will be in $logFilePath');
+      }
+    }
+    else {
+      if (isolateName.isEmpty) {
+        print('Log file not set so will use stdout for logging');
+      }
+      _initializeLogger(null, isolateName);
+    }
+  }
+
+  static void _initializeLogger(io.RandomAccessFile? outFile, String isolateName) {
+    Logger.root.level = Level.ALL;
+    Logger.root.onRecord.listen((record) async {
+      String messageLine;
+      if (isolateName.isEmpty) {
+        messageLine =
+        '${record.time}: ${record.level.name} - ${record.message}\n';
+      }
+      else {
+        messageLine =
+        '${record.time}: ${record.level.name} - [$isolateName] ${record.message}\n';
+      }
+      try {
+        if (outFile != null) {
+          outFile.lockSync();
+          outFile.writeStringSync(messageLine);
+          outFile.flushSync();
+          outFile.unlockSync();
+        } else {
+          io.stdout.nonBlocking.write(messageLine);
+        }
+      }
+      catch (error) {
+        print('LOG: $messageLine');
+        print('Got logger error: $error');
+      }
+    });
   }
 
   void handleGraderError(Object? error) {
@@ -549,16 +614,27 @@ class GraderService {
       }
     } while (worker == null);
 
-    final job = {
-      'submission': submission,
-      'locationProperties': locationProperties,
-      'compilersConfig': compilersConfig,
-      'defaultSecurityContext': defaultSecurityContext,
-      'defaultLimits': defaultLimits,
-      'overrideLimits': overrideLimits,
-    };
+    final job = _ServiceWorkerRequest(
+      submission: submission,
+      locationProperties: locationProperties,
+      compilersConfig: compilersConfig,
+      defaultSecurityContext: defaultSecurityContext,
+      defaultLimits: defaultLimits,
+      overrideLimits: overrideLimits,
+    );
 
-    return worker.processSubmission(job);
+    final resultCompleter = Completer<Submission>();
+    final workerResult = worker.process(job);
+
+    workerResult.then((_ServiceWorkerResponse value) {
+      if (value.submission != null) {
+        resultCompleter.complete(value.submission!);
+      } else {
+        resultCompleter.completeError(value.error!);
+      }
+    });
+
+    return resultCompleter.future;
   }
 
   void shutdown(String reason, [bool error = false]) async {
