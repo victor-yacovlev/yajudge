@@ -9,6 +9,13 @@ import 'package:fixnum/fixnum.dart';
 import 'graders_manager.dart';
 import 'master_service.dart';
 
+class SubmissionListNotificationsEntry {
+  final User user;
+  final SubmissionListQuery query;
+  final StreamController<SubmissionListEntry> controller;
+
+  SubmissionListNotificationsEntry(this.user, this.query, this.controller);
+}
 
 class SubmissionManagementService extends SubmissionManagementServiceBase {
 
@@ -16,9 +23,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   final PostgreSQLConnection connection;
   final MasterService parent;
 
-  Map<String,List<StreamController<ProblemStatus>>> _problemStatusStreamControllers = {};
-  Map<String,List<StreamController<CourseStatus>>> _courseStatusStreamControllers = {};
-  Map<String,List<StreamController<Submission>>> _submissionResultStreamControllers = {};
+  final Map<String,List<StreamController<ProblemStatus>>> _problemStatusStreamControllers = {};
+  final Map<String,List<StreamController<CourseStatus>>> _courseStatusStreamControllers = {};
+  final Map<String,List<StreamController<Submission>>> _submissionResultStreamControllers = {};
+
+  final Map<String,SubmissionListNotificationsEntry> _submissionListListeners = {};
 
   final GradersManager _gradersManager = GradersManager();
 
@@ -342,7 +351,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         )  
         ''';
         String normalizedName = request.nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
-        queryValues['name'] = normalizedName + '%';
+        queryValues['name'] = '$normalizedName%';
       }
     }
     final query = queryBegin + queryFilter + queryEnd;
@@ -612,6 +621,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
     );
     int submissionId = submissionsRows[0][0];
+    request.updateId(submissionId);
     for (File file in request.solutionFiles.files) {
       await connection.query(
         '''
@@ -626,7 +636,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       );
     }
     _notifyProblemStatusChanged(currentUser, request.course, request.problemId, true);
-    pushSubmissionToGrader(request.copyWith((s) { s.id = Int64(submissionId); }));
+    _notifySubmissionResultChanged(request);
+    pushSubmissionToGrader(request);
     return Submission(id: Int64(submissionId));
   }
 
@@ -979,21 +990,37 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   }
 
   void _notifySubmissionResultChanged(Submission submission) {
+
+    // controllers related to problem views
     final key = '${submission.id}';
-    List<StreamController<Submission>> controllers = [];
-
+    List<StreamController<Submission>> problemViews = [];
     if (_submissionResultStreamControllers.containsKey(key)) {
-      controllers = _submissionResultStreamControllers[key]!;
+      problemViews.addAll(_submissionResultStreamControllers[key]!);
     }
-
-    for (final controller in controllers) {
+    for (final controller in problemViews) {
       controller.add(submission);
     }
+
+    // controllers related to list views
+    List<StreamController<SubmissionListEntry>> listViews = [];
+    for (final watcher in _submissionListListeners.values) {
+      final query = watcher.query;
+      final user = watcher.user;
+      if (query.match(submission, currentUser: user)) {
+        listViews.add(watcher.controller);
+      }
+    }
+    for (final controller in listViews) {
+      final listEntry = submission.asSubmissionListEntry();
+      controller.add(listEntry);
+    }
+
   }
+
 
   void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) {
     final courseKey = '${user.id}/${course.id}';
-    final problemKey = '${user.id}/${course.id}/${problemId}';
+    final problemKey = '${user.id}/${course.id}/$problemId';
 
     List<StreamController<CourseStatus>> courseControllers = [];
     List<StreamController<ProblemStatus>> problemControllers = [];
@@ -1203,6 +1230,30 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   Future<Empty> setGraderStatus(ServiceCall call, GraderStatusMessage request) async {
     _gradersManager.setGraderStatus(request.properties.name, request.status);
     return Empty();
+  }
+
+  @override
+  Stream<SubmissionListEntry> subscribeToSubmissionListNotifications(ServiceCall call, SubmissionListQuery request) {
+    final key = call.session;
+    if (_submissionListListeners.containsKey(key)) {
+      _submissionListListeners[key]!.controller.close();
+    }
+
+    final controller = StreamController<SubmissionListEntry>();
+
+    parent.userManagementService.getUserBySession(Session(cookie: call.session))
+    .then((user) {
+      final entry = SubmissionListNotificationsEntry(user, request, controller);
+      _submissionListListeners[key] = entry;
+    });
+
+    controller.onCancel = () {
+      if (_submissionListListeners.containsKey(key)) {
+        _submissionListListeners.remove(key);
+      }
+    };
+
+    return controller.stream;
   }
 
 

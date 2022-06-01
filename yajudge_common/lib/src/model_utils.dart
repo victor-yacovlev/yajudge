@@ -385,3 +385,59 @@ String securityContextToYamlString(SecurityContext securityContext, [int level =
   }
   return result;
 }
+
+extension SubmissionListEntryExtension on SubmissionListEntry {
+  void updateStatus(SolutionStatus newStatus) {
+    status = newStatus;
+  }
+}
+
+extension SubmissionListQueryExtension on SubmissionListQuery {
+  bool match(Submission submission, {User? currentUser}) {
+    if (submissionId!=0 && submissionId==submission.id) {
+      return true;
+    }
+    bool statusMatch = true;
+    if (statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
+      statusMatch = submission.status==statusFilter;
+    }
+    bool currentUserMatch = true;
+    if (currentUser!=null && !showMineSubmissions) {
+      currentUserMatch = currentUser.id!=submission.user.id;
+    }
+    bool problemMatch = true;
+    if (problemIdFilter.isNotEmpty) {
+      problemMatch = problemIdFilter==submission.problemId;
+    }
+    bool nameMatch = true;
+    if (nameQuery.trim().isNotEmpty) {
+      final normalizedName = nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
+      final user = submission.user;
+      bool firstNameLike = user.firstName.toUpperCase().startsWith(normalizedName);
+      bool lastNameLike = user.firstName.toUpperCase().startsWith(normalizedName);
+      final firstLastName = '${user.firstName} ${user.lastName}'.toUpperCase();
+      final lastFirstName = '${user.lastName} ${user.firstName}'.toUpperCase();
+      bool firstLastNameLike = firstLastName.startsWith(normalizedName);
+      bool lastFirstNameLike = lastFirstName.startsWith(normalizedName);
+      nameMatch = firstNameLike || lastNameLike || lastFirstNameLike || firstLastNameLike;
+    }
+    return statusMatch && currentUserMatch && problemMatch && nameMatch;
+  }
+}
+
+extension SubmissionExtension on Submission {
+  SubmissionListEntry asSubmissionListEntry() {
+    return SubmissionListEntry(
+      submissionId: id,
+      status: status,
+      sender: user,
+      timestamp: timestamp,
+      problemId: problemId,
+    );
+  }
+
+  void updateId(int newId) {
+    id = Int64(newId);
+  }
+
+}

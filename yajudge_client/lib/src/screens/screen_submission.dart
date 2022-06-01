@@ -152,6 +152,9 @@ class SubmissionScreenState extends BaseScreenState {
         _updateSubmission(event);
       },
       onError: (error) {
+        if (!mounted) {
+          return;
+        }
         log.info('submission status subscription error: $error');
         setState(() {
           _statusStream = null;
@@ -421,11 +424,6 @@ class SubmissionScreenState extends BaseScreenState {
     final mainHeadPadding = EdgeInsets.fromLTRB(0, 10, 0, 20);
     final dividerColor = Colors.black38;
 
-    contents.add(Divider(
-      height: 40,
-      thickness: 2,
-      color: dividerColor,
-    ));
     contents.addAll(buildSubmissionCommonItems(context));
     contents.add(Divider(
       height: 40,

@@ -594,6 +594,7 @@ service SubmissionManagement {
   rpc GetSubmissionResult(Submission) returns (Submission) {}
 
   rpc GetSubmissionList(SubmissionListQuery) returns (SubmissionListResponse) {}
+  rpc SubscribeToSubmissionListNotifications(SubmissionListQuery) returns (stream SubmissionListEntry);
 
   rpc Rejudge(RejudgeRequest) returns (RejudgeRequest) {}
 

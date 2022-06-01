@@ -11,3 +11,4 @@ export 'src/conf/service_conf.dart';
 export 'src/conf/config_file.dart';
 export 'src/course_loader.dart';
 export 'src/conf/config_file.dart';
+export 'src/grpc_utils.dart';

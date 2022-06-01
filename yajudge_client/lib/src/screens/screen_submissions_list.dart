@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
-import 'package:yajudge_common/src/generated/yajudge.pb.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:intl/intl.dart';
+import 'package:grpc/grpc.dart' as grpc;
+import 'package:protobuf/protobuf.dart';
 import '../controllers/connection_controller.dart';
 import '../controllers/courses_controller.dart';
 import 'screen_base.dart';
@@ -41,8 +44,9 @@ class SubmissionsListScreenState extends BaseScreenState {
   Role _role = Role.ROLE_ANY;
   CourseData _courseData = CourseData();
   List<Tuple2<String,String>> _courseProblems = [];
-  TextEditingController _nameEditController = TextEditingController();
+  final _nameEditController = TextEditingController();
   List<SubmissionListEntry> _submissionEntries = [];
+  grpc.ResponseStream<SubmissionListEntry>? _statusStream;
 
   SubmissionsListScreenState({
     required this.screen,
@@ -51,10 +55,10 @@ class SubmissionsListScreenState extends BaseScreenState {
     if (query == null) {
       this.query = SubmissionListQuery(
         statusFilter: SolutionStatus.ANY_STATUS_OR_NULL,
-      );
+      ).deepCopy();
     }
     else {
-      this.query = query;
+      this.query = query.deepCopy();
     }
   }
 
@@ -62,6 +66,43 @@ class SubmissionsListScreenState extends BaseScreenState {
   void initState() {
     super.initState();
     _loadCourse();
+    _subscribeToNotifications();
+  }
+
+  void _subscribeToNotifications() {
+    if (!mounted) {
+      return;
+    }
+    log.info('subscribing to list notifications');
+    _statusStream?.cancel();
+    final submissionsService = ConnectionController.instance!.submissionsService;
+    _statusStream = submissionsService.subscribeToSubmissionListNotifications(query);
+    _statusStream!.listen((event) {
+      log.info('got submission update on ${event.submissionId}');
+      _updateSubmissionInList(event);
+    }, onError: (error) {
+      if (!mounted) {
+        return;
+      }
+      log.info('got error: $error');
+      Timer(Duration(seconds: 2), _subscribeToNotifications);
+    });
+  }
+
+  void _updateSubmissionInList(SubmissionListEntry event) {
+    setState((){
+      bool found = false;
+      for (var entry in _submissionEntries) {
+        if (entry.submissionId == event.submissionId) {
+          entry.updateStatus(event.status);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        _submissionEntries.insert(0, event);
+      }
+    });
   }
 
   void _loadCourse() {
@@ -124,44 +165,35 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   void _setFilterProblemId(String? problemId) {
+    problemId ??= '';
     bool changed = problemId != query.problemIdFilter;
-    String id = '';
-    if (problemId!=null) {
-      id = problemId;
-    }
-    final newQuery = query.copyWith((s) {
-      s.problemIdFilter = id;
-    });
     setState(() {
-      query = newQuery;
+      query.problemIdFilter = problemId!;
     });
     if (changed) {
-      _sendListQuery(newQuery);
+      _sendListQuery(query);
     }
   }
 
   void _setFilterStatus(SolutionStatus? status) {
-    bool changed = status != query.statusFilter;
     status ??= SolutionStatus.ANY_STATUS_OR_NULL;
-    final newQuery = query.copyWith((s) {
-      s.statusFilter = status!;
-    });
+    bool changed = status != query.statusFilter;
     setState(() {
-      query = newQuery;
+      query.statusFilter = status!;
     });
     if (changed) {
-      _sendListQuery(newQuery);
+      _sendListQuery(query);
     }
   }
 
   void _setShowMineSubmissions(bool? value) {
+    value ??= false;
     bool changed = value != query.showMineSubmissions;
-    final newQuery = query.copyWith((s) { s.showMineSubmissions = value!; });
     setState(() {
-      query = newQuery;
+      query.showMineSubmissions = value!;
     });
     if (changed) {
-      _sendListQuery(newQuery);
+      _sendListQuery(query);
     }
   }
 
