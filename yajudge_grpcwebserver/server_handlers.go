@@ -38,7 +38,8 @@ func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		origin := request.Header.Get("Origin")
 		originUrl, _ := url.Parse(origin)
 		if originUrl != nil && originUrl.Host != "" {
-			hostName = originUrl.Host
+			parts = strings.Split(originUrl.Host, ":")
+			hostName = parts[0]
 		}
 	}
 	host, found := s.Sites[hostName]
@@ -110,7 +111,7 @@ func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 			http.Error(wr, errorMessage, 503)
 			return
 		}
-		log.Printf("%s requested %v using gRPC-Listen protocol, proxied to %s:%d",
+		log.Printf("%s requested %v using gRPC-Web protocol, proxied to %s:%d",
 			req.RemoteAddr,
 			req.URL,
 			host.config.GrpcBackendHost,

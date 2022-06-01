@@ -9,6 +9,7 @@ require (
 	github.com/sirupsen/logrus v1.7.0
 	golang.org/x/net v0.0.0-20220421235706-1d1ef9303861
 	google.golang.org/grpc v1.46.0
+	github.com/gabriel-vasile/mimetype v1.4.0
 )
 
 require (

@@ -18,6 +18,8 @@ type SiteConfig struct {
 	WebAppStaticRoot           string `yaml:"web_app_static_root" json:"web_app_static_root"`
 	WebAppIndexFile            string `yaml:"web_app_index_file" json:"web_app_index_file"`
 	WebAppDisableSPANavigation bool   `yaml:"web_app_disable_spa_navigation" json:"web_app_disable_spa_navigation"`
+	WebAppStaticMaxAge         int    `yaml:"web_app_static_max_age" json:"web_app_static_max_age"`
+	StaticReloadInterval       int    `yaml:"static_reload_interval" json:"static_reload_interval"`
 }
 
 type ServiceConfig struct {
@@ -101,6 +103,14 @@ func ParseSiteConfig(fileName string) (*SiteConfig, error) {
 	}
 	if config.WebAppIndexFile == "" {
 		config.WebAppIndexFile = "/index.html"
+	}
+	if config.WebAppStaticMaxAge == 0 {
+		config.WebAppStaticMaxAge = 31536000
+	} else {
+		config.WebAppStaticMaxAge = config.WebAppStaticMaxAge * 60 * 60
+	}
+	if config.StaticReloadInterval == 0 {
+		config.StaticReloadInterval = 600
 	}
 	return &config, nil
 }
