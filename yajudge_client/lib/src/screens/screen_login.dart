@@ -217,7 +217,7 @@ class LoginScreenState extends State<LoginScreen> {
       autovalidateMode: AutovalidateMode.onUserInteraction,
       validator: loginValidator,
       onSaved: loginSaver,
-      autofillHints: [AutofillHints.name],
+      autofillHints: [AutofillHints.username],
       onEditingComplete: () { _passwordFocusNode.requestFocus(); },
     );
     formItems.add(loginField);
