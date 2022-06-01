@@ -543,6 +543,7 @@ message RejudgeRequest {
   Course      course = 2;
   string      problem_id = 3;
   Submission  submission = 4;
+  bool        only_failed_submissions = 5;
 }
 
 message LocalGraderSubmission {

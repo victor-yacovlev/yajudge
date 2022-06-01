@@ -38,6 +38,12 @@ class SubmissionScreen extends BaseScreen {
 
 }
 
+enum WhatToRejudge {
+  thisSubmission,
+  brokenSubmissions,
+  allSubmissions,
+}
+
 class SubmissionScreenState extends BaseScreenState {
 
   final SubmissionScreen screen;
@@ -49,6 +55,7 @@ class SubmissionScreenState extends BaseScreenState {
   Role? _role;
   grpc.ResponseStream<Submission>? _statusStream;
   Timer? _statusCheckTimer;
+  WhatToRejudge _whatToRejudge = WhatToRejudge.thisSubmission;
 
   SubmissionScreenState(this.screen)
       : super(title: 'Посылка ${screen.submissionId}');
@@ -196,56 +203,100 @@ class SubmissionScreenState extends BaseScreenState {
   }
 
   List<Widget> buildSubmissionCommonItems(BuildContext context) {
-    List<Widget> contents = [];
     if (_submission == null) {
       return [];
     }
+    final leftColumn = <Widget>[];
     final theme = Theme.of(context);
-    final fileHeadStyle = theme.textTheme.headline6!.merge(TextStyle());
-    final fileHeadPadding = EdgeInsets.fromLTRB(8, 10, 8, 4);
-    final maxFileSizeToShow = 50 * 1024;
-    final wrapIntoPadding = (Widget w) {
+
+    Padding wrapIntoPadding(Widget w) {
       return Padding(
           child: w,
           padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
       );
-    };
-    final makeText = (String text, [Color? color]) {
+    }
+
+    Text makeText(String text, [Color? color]) {
       return Text(text,
           style: theme.textTheme.bodyText1!.merge(TextStyle(
             fontSize: 16,
             color: color,
           ))
       );
-    };
-    final addText = (String text, [Color? color]) {
-      contents.add(
+    }
+
+    void addText(String text, [Color? color]) {
+      leftColumn.add(
         wrapIntoPadding(makeText(text, color))
       );
-    };
+    }
+
     String statusName = statusMessageText(_submission!.status, _submission!.graderName, false);
     Color statusColor = statusMessageColor(context, _submission!.status);
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
+
     final whoCanRejudge = [
       Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
     ];
+
+    final rightColumn = <Widget>[];
+
     if (screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanRejudge.contains(screen.role)) {
-      contents.add(wrapIntoPadding(Row(
-        children: [
-          wrapIntoPadding(Row(children: [makeText('Статус: '), makeText(statusName, statusColor)])),
-          Spacer(),
-          ElevatedButton(
-            onPressed: _doRejudge,
-            child: Text('Перетестировать'),
-          )
-        ],
-      )));
+      rightColumn.add(
+        ElevatedButton(
+          onPressed: _doRejudge,
+          child: Container(
+            width: 172,
+            child: Text('Перетестировать', textAlign: TextAlign.center),
+          ),
+        )
+      );
+      final texts = {
+        WhatToRejudge.thisSubmission: 'Только эту посылку',
+        WhatToRejudge.brokenSubmissions: 'Неуспешные посылки задачи',
+        WhatToRejudge.allSubmissions: 'Все посылки задачи',
+      };
+      rightColumn.add(
+        DropdownButton(
+          // icon: Icon(Icons.arrow_drop_down_circle_outlined),
+          style: theme.textTheme.button,
+          value: _whatToRejudge,
+          // underline: Container(),
+          onChanged: (WhatToRejudge? value) {
+            if (value!=null) {
+              setState((){
+                _whatToRejudge = value;
+                FocusManager.instance.primaryFocus?.unfocus();
+              });
+            }
+          },
+          items: texts.entries.map((e) {
+            return DropdownMenuItem<WhatToRejudge>(
+              value: e.key,
+              child: Container(
+                width: 180,
+                child: Text(e.value, textAlign: TextAlign.center)
+              ),
+            );
+          }).toList(),
+        )
+      );
+    }
+    addText('Статус: $statusName');
+    addText('Отправлена: $dateSent');
+    if (rightColumn.isEmpty) {
+      return leftColumn;
     }
     else {
-      addText('Статус: $statusName');
+      return [Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Column(children: leftColumn, crossAxisAlignment: CrossAxisAlignment.start),
+          Spacer(),
+          Column(children: rightColumn, crossAxisAlignment: CrossAxisAlignment.end),
+        ],
+      )];
     }
-    addText('Отправлена: $dateSent');
-    return contents;
   }
 
   void _doRejudge() {
@@ -258,17 +309,36 @@ class SubmissionScreenState extends BaseScreenState {
       dataId: _course!.dataId
     );
     final userForRequest = User(id: screen.loggedUser.id);
-    final submissionForRequest = Submission(
-      id: _submission!.id,
-      problemId: _problemData!.id,
-    );
 
-    final request = RejudgeRequest(
-      user: userForRequest,
-      course: courseForRequest,
-      problemId: _problemData!.id,
-      submission: submissionForRequest,
-    );
+    RejudgeRequest request;
+    if (_whatToRejudge == WhatToRejudge.thisSubmission) {
+      final submissionForRequest = Submission(
+        id: _submission!.id,
+        problemId: _problemData!.id,
+      );
+      request = RejudgeRequest(
+        course: courseForRequest,
+        problemId: _problemData!.id,
+        submission: submissionForRequest,
+      );
+    }
+    else if (_whatToRejudge == WhatToRejudge.brokenSubmissions) {
+      request = RejudgeRequest(
+        course: courseForRequest,
+        problemId: _problemData!.id,
+        onlyFailedSubmissions: true,
+      );
+    }
+    else if (_whatToRejudge == WhatToRejudge.allSubmissions) {
+      request = RejudgeRequest(
+        course: courseForRequest,
+        problemId: _problemData!.id,
+        onlyFailedSubmissions: false,
+      );
+    }
+    else {
+      request = RejudgeRequest();
+    }
 
     final futureResponse = service.rejudge(request);
     futureResponse.then(
@@ -298,7 +368,7 @@ class SubmissionScreenState extends BaseScreenState {
     for (File file in _submission!.solutionFiles.files) {
       contents.add(Container(
           padding: fileHeadPadding,
-          child: Text(file.name+':', style: fileHeadStyle))
+          child: Text('${file.name}:', style: fileHeadStyle))
       );
       final button = YCardLikeButton(
           'Скачать', () {

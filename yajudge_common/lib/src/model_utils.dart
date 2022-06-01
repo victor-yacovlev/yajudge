@@ -393,7 +393,7 @@ extension SubmissionListEntryExtension on SubmissionListEntry {
 }
 
 extension SubmissionListQueryExtension on SubmissionListQuery {
-  bool match(Submission submission, {User? currentUser}) {
+  bool match(Submission submission, User currentUser) {
     if (submissionId!=0 && submissionId==submission.id) {
       return true;
     }
@@ -401,10 +401,13 @@ extension SubmissionListQueryExtension on SubmissionListQuery {
     if (statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
       statusMatch = submission.status==statusFilter;
     }
-    bool currentUserMatch = true;
-    if (currentUser!=null && !showMineSubmissions) {
-      currentUserMatch = currentUser.id!=submission.user.id;
+
+    bool currentUserMatch = currentUser.id==submission.user.id;
+    bool hideThisSubmission = false;
+    if (currentUserMatch) {
+      hideThisSubmission = !showMineSubmissions;
     }
+
     bool problemMatch = true;
     if (problemIdFilter.isNotEmpty) {
       problemMatch = problemIdFilter==submission.problemId;
@@ -421,7 +424,7 @@ extension SubmissionListQueryExtension on SubmissionListQuery {
       bool lastFirstNameLike = lastFirstName.startsWith(normalizedName);
       nameMatch = firstNameLike || lastNameLike || lastFirstNameLike || firstLastNameLike;
     }
-    return statusMatch && currentUserMatch && problemMatch && nameMatch;
+    return statusMatch && problemMatch && nameMatch && !hideThisSubmission;
   }
 }
 

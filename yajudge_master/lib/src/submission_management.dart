@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import 'graders_manager.dart';
@@ -1002,11 +1002,12 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
 
     // controllers related to list views
+
     List<StreamController<SubmissionListEntry>> listViews = [];
     for (final watcher in _submissionListListeners.values) {
       final query = watcher.query;
       final user = watcher.user;
-      if (query.match(submission, currentUser: user)) {
+      if (query.match(submission, user)) {
         listViews.add(watcher.controller);
       }
     }
@@ -1089,58 +1090,75 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       }
     }
 
-    if (request.submission.id != 0) {
-      // TODO make transaction
-      // rejudge only just one submission
+    Future<void> rejudgeSubmission(Submission submission) async {
       await connection.query(
-        'delete from submission_results where submissions_id=@id',
-        substitutionValues: {
-          'id': request.submission.id.toInt(),
-        }
+          'delete from submission_results where submissions_id=@id',
+          substitutionValues: {
+            'id': submission.id.toInt(),
+          }
       );
       await connection.query(
-        'update submissions set status=@new_status where id=@id',
-        substitutionValues: {
-          'new_status': SolutionStatus.SUBMITTED.value,
-          'id': request.submission.id.toInt(),
-        }
+          'update submissions set status=@new_status where id=@id',
+          substitutionValues: {
+            'new_status': SolutionStatus.SUBMITTED.value,
+            'id': submission.id.toInt(),
+          }
       );
-      final submission = request.submission.copyWith((s) {
-        s.course = request.course;
-      });
       final rows = await connection.query(
-        'select timestamp, grader_name from submissions where id=@id',
-        substitutionValues: {
-          'id': request.submission.id.toInt(),
-        }
+          'select users_id, first_name, last_name, mid_name, timestamp, grader_name '
+          'from submissions, users '
+          'where submissions.id=@id and users.id=submissions.users_id',
+          substitutionValues: {
+            'id': submission.id.toInt(),
+          }
       );
       final firstRow = rows.first;
-      final timestamp = Int64(firstRow[0]);
-      final graderName = firstRow[1] as String;
-      final changedSubmission = request.submission.copyWith((s) {
-        s.status = SolutionStatus.SUBMITTED;
-        s.styleErrorLog = '';
-        s.buildErrorLog = '';
-        s.testResults.clear();
-        s.graderScore = 0.0;
-        s.graderName = graderName;
-        s.timestamp = timestamp;
-      });
-      _notifySubmissionResultChanged(changedSubmission);
-      return request.copyWith((r) {
-        r.submission = changedSubmission;
-      });
+      final userId = Int64(firstRow[0] as int);
+      final firstName = (firstRow[1] as String?) ?? '';
+      final lastName = (firstRow[2] as String?) ?? '';
+      final midName = (firstRow[3] as String?) ?? '';
+      final timestamp = Int64(firstRow[4] as int);
+      final graderName = firstRow[5] as String;
+      submission.user = User(id: userId, firstName: firstName, lastName: lastName, midName: midName);
+      submission.status = SolutionStatus.SUBMITTED;
+      submission.styleErrorLog = submission.buildErrorLog = '';
+      submission.testResults.clear();
+      submission.graderScore = 0.0;
+      submission.graderName = graderName;
+      submission.timestamp = timestamp;
+      _notifySubmissionResultChanged(submission);
+    }
+
+    if (request.submission.id != 0) {
+      // rejudge only just one submission
+      await rejudgeSubmission(request.submission.deepCopy());
     }
     else if (request.course.id>0 && request.problemId.isNotEmpty) {
       // rejudge all problem submissions within course
-      await connection.query(
-        'update submissions set status=@new_status where courses_id=@courses_id and problem_id=@problem_id',
+      String query = 'select id from submissions where courses_id=@courses_id and problem_id=@problem_id';
+      if (request.onlyFailedSubmissions) {
+        query += ' and status<>${SolutionStatus.OK.value}';
+        query += ' and status<>${SolutionStatus.DISQUALIFIED.value}';
+        query += ' and status<>${SolutionStatus.CODE_REVIEW_REJECTED.value}';
+        query += ' and status<>${SolutionStatus.PENDING_REVIEW.value}';
+        query += ' and status<>${SolutionStatus.ACCEPTABLE.value}';
+      }
+      final rows = await connection.query(
+        query,
         substitutionValues: {
           'new_status': SolutionStatus.SUBMITTED.value,
           'courses_id': request.course.id.toInt(),
           'problem_id': request.problemId,
         }
       );
+      final submissions = <Submission>[];
+      for (final row in rows) {
+        final submissionId = row[0] as int;
+        submissions.add(Submission(id: Int64(submissionId), problemId: request.problemId).deepCopy());
+      }
+      for (final submission in submissions) {
+        await rejudgeSubmission(submission);
+      }
     }
     return request;
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc_connection_interface.dart';
 import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:intl/intl.dart';
@@ -82,6 +83,11 @@ class SubmissionsListScreenState extends BaseScreenState {
       _updateSubmissionInList(event);
     }, onError: (error) {
       if (!mounted) {
+        return;
+      }
+      if (error is grpc.GrpcError && error.code == grpc.StatusCode.cancelled) {
+        _statusStream?.cancel();
+        _statusStream = null;
         return;
       }
       log.info('got error: $error');
@@ -169,6 +175,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     bool changed = problemId != query.problemIdFilter;
     setState(() {
       query.problemIdFilter = problemId!;
+      FocusManager.instance.primaryFocus?.unfocus();
     });
     if (changed) {
       _sendListQuery(query);
@@ -180,6 +187,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     bool changed = status != query.statusFilter;
     setState(() {
       query.statusFilter = status!;
+      FocusManager.instance.primaryFocus?.unfocus();
     });
     if (changed) {
       _sendListQuery(query);
@@ -188,13 +196,10 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _setShowMineSubmissions(bool? value) {
     value ??= false;
-    bool changed = value != query.showMineSubmissions;
     setState(() {
       query.showMineSubmissions = value!;
     });
-    if (changed) {
-      _sendListQuery(query);
-    }
+    _sendListQuery(query);
   }
 
   void _processSearch(String? userName) {
@@ -232,6 +237,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     setState(() {
       _submissionEntries = listResponse.entries;
     });
+    _subscribeToNotifications();
   }
 
   Widget _createProblemSearchField(BuildContext context) {
