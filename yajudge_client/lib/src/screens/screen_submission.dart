@@ -480,7 +480,11 @@ class SubmissionScreenState extends BaseScreenState {
   }
 
   Widget createFilePreview(BuildContext context, String data, bool withLineNumbers) {
-    return SourceViewWidget(text: data, withLineNumbers: withLineNumbers);
+    final whoCanComment = [
+      Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
+    ];
+    final canComment = screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanComment.contains(screen.role);
+    return SourceViewWidget(text: data, withLineNumbers: withLineNumbers, canEditComments: canComment);
   }
 
   @override
