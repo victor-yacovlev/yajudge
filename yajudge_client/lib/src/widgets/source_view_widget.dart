@@ -285,6 +285,15 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
       style: commentStyle,
       controller: _commentEditor,
       autofocus: true,
+      cursorColor: commentTextColor,
+      decoration: InputDecoration(
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.black12, width: 1)
+        ),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: commentTextColor, width: 1),
+        ),
+      ),
       onEditingComplete: _saveComment,
     );
     double y = lineHeight * _currentCommentEditingLine - 7;
