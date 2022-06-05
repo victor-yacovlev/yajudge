@@ -470,7 +470,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
   ScreenActions? buildSecondaryScreenActions(BuildContext context) => null;
 
   @protected
-  ScreenSubmitAction? submitAction(BuildContext context) => null;
+  List<ScreenSubmitAction> submitActions(BuildContext context) => [];
 
   Widget? buildNavigationWidget(BuildContext context) => null;
 
@@ -510,9 +510,8 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
 
 
   Widget? _buildSubmitBar(BuildContext context) {
-    List<Widget> items = List.empty(growable: true);
-    ScreenSubmitAction? submit = submitAction(context);
-    if (submit != null) {
+    List<Widget> items = [];
+    for (final submit in submitActions(context)) {
       Color buttonColor;
       MouseCursor mouseCursor = SystemMouseCursors.click;
       if (submit.onAction == null) {
@@ -526,7 +525,7 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
         // use default color
         buttonColor = Theme.of(context).primaryColor;
       }
-      items.add(ElevatedButton(
+      final button = ElevatedButton(
         style: ButtonStyle(
           backgroundColor: MaterialStateProperty.all<Color>(buttonColor),
           mouseCursor: MaterialStateProperty.all<MouseCursor>(mouseCursor),
@@ -535,11 +534,17 @@ abstract class BaseScreenState extends State<BaseScreen> with SingleTickerProvid
           height: 48,
           padding: EdgeInsets.all(8),
           child: Center(
-            child: Text(submit.title, style: TextStyle(fontSize: 20, color: Colors.white))
+              child: Text(submit.title, style: TextStyle(fontSize: 20, color: Colors.white))
           ),
         ),
         onPressed: submit.onAction,
-      ));
+      );
+      double leftPadding = items.isEmpty? 0 : 8.0;
+      final buttonOuter = Container(
+        child: button,
+        padding: EdgeInsets.fromLTRB(leftPadding, 0, 0, 0),
+      );
+      items.add(buttonOuter);
     }
     if (items.isEmpty) {
       return null;

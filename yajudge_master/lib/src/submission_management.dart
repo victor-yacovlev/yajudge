@@ -461,12 +461,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     SolutionStatus status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
     String? styleErrorLog = firstSubmissionRow[4];
     String? compileErrorLog = firstSubmissionRow[5];
-    if (styleErrorLog == null) {
-      styleErrorLog = '';
-    }
-    if (compileErrorLog == null) {
-      compileErrorLog = '';
-    }
+    styleErrorLog ??= '';
+    compileErrorLog ??= '';
 
     final enrollmentsService = parent.enrollmentManagementService;
     final enrollmentsResponse = await enrollmentsService.getUserEnrollments(call, currentUser);
@@ -507,7 +503,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
     return Submission(
       id: Int64(submissionId),
-      user: currentUser,
+      user: User(id: Int64(userId)),
       timestamp: Int64(timestamp),
       status: status,
       problemId: problemId,
@@ -515,6 +511,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       testResults: testResults,
       styleErrorLog: styleErrorLog,
       buildErrorLog: compileErrorLog,
+      course: request.course,
     );
   }
 
@@ -673,6 +670,20 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           'grader_name': graderName,
         }
     );
+  }
+
+  @override
+  Future<Submission> updateSubmissionStatus(ServiceCall? call, Submission request) async {
+    log.info('manual submission ${request.id} status update: ${request.status.value} (${request.status.name})');
+    final query = '''
+    update submissions set status=@status where id=@id
+    ''';
+    await connection.query(query, substitutionValues: {
+      'status': request.status.value,
+      'id': request.id.toInt(),
+    });
+    // TODO make notifications
+    return request;
   }
 
   @override
@@ -1141,7 +1152,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         query += ' and status<>${SolutionStatus.DISQUALIFIED.value}';
         query += ' and status<>${SolutionStatus.CODE_REVIEW_REJECTED.value}';
         query += ' and status<>${SolutionStatus.PENDING_REVIEW.value}';
-        query += ' and status<>${SolutionStatus.ACCEPTABLE.value}';
+        query += ' and status<>${SolutionStatus.SUMMON_FOR_DEFENCE.value}';
       }
       final rows = await connection.query(
         query,

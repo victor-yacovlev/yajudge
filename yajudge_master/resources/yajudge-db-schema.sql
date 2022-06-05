@@ -208,3 +208,26 @@ ALTER TABLE ONLY public.submissions
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT submissions_users_id_fk FOREIGN KEY (users_id) REFERENCES public.users(id);
+
+create table code_reviews
+(
+    id             serial
+        constraint code_reviews_pk
+            primary key,
+    submissions_id integer not null,
+    author_id      integer not null,
+    global_comment varchar,
+    timestamp      bigint  not null
+);
+
+create table review_line_comments
+(
+    id              serial
+        constraint review_line_comments_pk
+            primary key,
+    code_reviews_id integer                                   not null,
+    line_number     integer                                   not null,
+    message         varchar                                   not null,
+    context         varchar                                   not null,
+    file_name       varchar(80)                               not null
+);

@@ -227,6 +227,10 @@ class SubmissionsListScreenState extends BaseScreenState {
     _sendListQuery(newQuery);
   }
 
+  void reload() {
+    _sendListQuery(query);
+  }
+
   void _sendListQuery(SubmissionListQuery query) {
     final submissionsService = ConnectionController.instance!.submissionsService;
     final futureList = submissionsService.getSubmissionList(query);
@@ -273,7 +277,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     final styleTheme = Theme.of(context);
     final textTheme = styleTheme.primaryTextTheme;
     bool first = true;
-    for (final entry in StatusesFull.entries) {
+    for (final entry in statusesFull.entries) {
       Color textColor;
       if (first) {
         textColor = styleTheme.hintColor;
@@ -383,7 +387,7 @@ class SubmissionsListScreenState extends BaseScreenState {
           );
         }
     );
-    Navigator.push(context, routeBuilder);
+    Navigator.push(context, routeBuilder).then((_) {reload();});
   }
 
   @protected

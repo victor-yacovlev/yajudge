@@ -226,9 +226,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     } else {
       actionsOnPassed = 'необходимо пройди код ревью и защитить решение';
     }
-    contents.add(Text('Сложность: ' + hardeness));
-    contents.add(Text('Статус: ' + problemStatus));
-    contents.add(Text('После прохождения тестов: ' + actionsOnPassed));
+    contents.add(Text('Сложность: $hardeness'));
+    contents.add(Text('Статус: $problemStatus'));
+    contents.add(Text('После прохождения тестов: $actionsOnPassed'));
     contents.add(SizedBox(height: 20));
     contents.add(Text('Постановка задачи', style: theme.headline6));
     contents.add(
@@ -306,9 +306,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       submissionId: submission.id,
       courseData: _courseData,
     );
-    final pageBuilder = (context, animation, secondaryAnimation) {
+    Widget pageBuilder (context, animation, secondaryAnimation) {
       return submissionScreen;
-    };
+    }
     final routeBuilder = PageRouteBuilder(
         settings: RouteSettings(name: newUrl),
         pageBuilder: pageBuilder,
@@ -389,7 +389,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       List<Submission> submissionsToShow = List.from(submissionsList);
       submissionsToShow.sort((a, b) => b.id.compareTo(a.id));
       for (Submission submission in submissionsToShow) {
-        String firstLine = 'ID = ' + submission.id.toString() + ', ' + formatDateTime(submission.timestamp.toInt());
+        String firstLine = 'ID = ${submission.id}, ${formatDateTime(submission.timestamp.toInt())}';
         Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, submission.status);
         String secondLine = statusView.item1;
         IconData iconData = statusView.item2;
@@ -605,13 +605,9 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
       iconData = Icons.error_outline;
       secondLine = 'Необходимо устранить замечания проверяющего';
       break;
-    case SolutionStatus.ACCEPTABLE:
-      iconData = Icons.check_circle_outline;
-      secondLine = 'Решение допущено до защиты';
-      break;
-    case SolutionStatus.DEFENCE_FAILED:
+    case SolutionStatus.SUMMON_FOR_DEFENCE:
       iconData = Icons.error_outline;
-      secondLine = 'Необходимо повторно защитить решение';
+      secondLine = 'Необходимо защитить решение';
       break;
     case SolutionStatus.PLAGIARISM_DETECTED:
       iconData = Icons.error_outline;

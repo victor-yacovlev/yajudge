@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart' as grpc;
 import 'package:flutter/material.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:tuple/tuple.dart';
 import '../controllers/courses_controller.dart';
 import '../widgets/source_view_widget.dart';
@@ -29,9 +30,7 @@ class SubmissionScreen extends BaseScreen {
     this.role,
     this.courseData,
     Key? key
-  }) : super(loggedUser: user, key: key) {
-
-  }
+  }) : super(loggedUser: user, key: key);
 
   @override
   State<StatefulWidget> createState() => SubmissionScreenState(this);
@@ -52,10 +51,12 @@ class SubmissionScreenState extends BaseScreenState {
   ProblemData? _problemData;
   ProblemMetadata? _problemMetadata;
   Course? _course;
-  Role? _role;
   grpc.ResponseStream<Submission>? _statusStream;
-  Timer? _statusCheckTimer;
   WhatToRejudge _whatToRejudge = WhatToRejudge.thisSubmission;
+  late final LineCommentController _lineCommentController;
+  late final TextEditingController _globalCommentController;
+  ReviewHistory? _reviewHistory;
+  bool _hasUnsavedChanges = false;
 
   SubmissionScreenState(this.screen)
       : super(title: 'Посылка ${screen.submissionId}');
@@ -63,22 +64,45 @@ class SubmissionScreenState extends BaseScreenState {
   @override
   void initState() {
     super.initState();
+    _lineCommentController = LineCommentController(editable: canMakeReview());
+    _lineCommentController.addListener(_checkForUnsavedChanges);
+    _globalCommentController = TextEditingController();
+    _globalCommentController.addListener(_checkForUnsavedChanges);
     if (screen.courseData != null && screen.course != null && screen.role != null) {
       _courseData = screen.courseData;
       _course = screen.course;
-      _role = screen.role;
       _loadSubmission(true);
+      _loadCodeReviews();
     }
     else {
       _loadCourse();
     }
   }
 
-  FutureOr<Null> _handleLoadError(Object error, StackTrace stackTrace) {
+  CodeReview get currentStateCodeReview {
+    final globalMessage = _globalCommentController.text.trim();
+    final lineComments = _lineCommentController.comments;
+    return CodeReview(
+      submissionId: screen.submissionId,
+      globalComment: globalMessage,
+      lineComments: lineComments
+    ).deepCopy();
+  }
+
+  void _checkForUnsavedChanges() {
     setState(() {
-      errorMessage = error;
+      final current = currentStateCodeReview;
+      final saved = _reviewHistory?.findBySubmissionId(screen.submissionId) ?? CodeReview();
+      log.info('checking for unsaved comment changes');
+      log.info('current state: ${current.debugInfo()}');
+      log.info('saved state: ${saved.debugInfo()}');
+      _hasUnsavedChanges = canSaveReviewChanges();
+      if (_hasUnsavedChanges) {
+        log.info('has unsaved comment changes');
+      }
     });
   }
+
 
   void _loadCourse() {
     CoursesController.instance!
@@ -86,11 +110,14 @@ class SubmissionScreenState extends BaseScreenState {
         .then((Tuple2<Course,Role> entry) {
           setState(() {
             _course = entry.item1;
-            _role = entry.item2;
           });
           _loadCourseData();
-        })
-        .onError(_handleLoadError);
+        }).onError((Object error, StackTrace stackTrace) {
+      log.warning('got error while loading course: $error');
+      setState(() {
+        errorMessage = error;
+      });
+    });
   }
 
   void _loadCourseData() {
@@ -101,8 +128,14 @@ class SubmissionScreenState extends BaseScreenState {
             _courseData = courseData;
           });
           _loadSubmission(true);
+          _loadCodeReviews();
         })
-        .onError(_handleLoadError);
+        .onError((Object error, StackTrace stackTrace) {
+      log.warning('got error while loading course data: $error');
+      setState(() {
+        errorMessage = error;
+      });
+    });
   }
 
   void _loadSubmission(bool subscribe) {
@@ -114,7 +147,44 @@ class SubmissionScreenState extends BaseScreenState {
             _subscribeToNotifications();
           }
         })
-        .onError(_handleLoadError);
+        .onError((Object error, StackTrace stackTrace) {
+      log.warning('got error while loading submission result: $error');
+      setState(() {
+        errorMessage = error;
+      });
+    });
+  }
+
+  void _loadCodeReviews() {
+    final service = ConnectionController.instance!.codeReviewService;
+    final submissionId = screen.submissionId;
+    final course = _course!;
+    final courseId = course.id;
+    log.info('requesting code review history for submission $submissionId in course $courseId');
+    final request = Submission(id: submissionId, course: course);
+    service.getReviewHistory(request).then(_updateCodeReviews)
+        .onError((Object error, StackTrace stackTrace) {
+      log.warning('got error while loading code review history: $error');
+      setState(() {
+        errorMessage = error;
+      });
+    });
+  }
+
+  void _updateCodeReviews(ReviewHistory history) {
+    setState(() {
+      log.info('got review history of size ${history.reviews.length}');
+      _reviewHistory = history.deepCopy();
+      _reviewHistory!.reviews.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      CodeReview? currentReview = _reviewHistory!.findBySubmissionId(screen.submissionId);
+      if (currentReview != null) {
+        log.info('current review global comment: ${currentReview.globalComment}');
+        _globalCommentController.text = currentReview.globalComment;
+        log.info('current review has ${currentReview.lineComments.length} line comments');
+        _lineCommentController.comments = currentReview.lineComments;
+        _hasUnsavedChanges = canSaveReviewChanges();
+      }
+    });
   }
 
   void _updateTitle() {
@@ -130,18 +200,8 @@ class SubmissionScreenState extends BaseScreenState {
 
   @override
   void dispose() {
-    _statusCheckTimer?.cancel();
     _statusStream?.cancel();
     super.dispose();
-  }
-
-  void _startLongPollSubscriptions() {
-    if (_statusCheckTimer != null) {
-      return;
-    }
-    _statusCheckTimer = Timer.periodic(Duration(seconds: 2), (timer) {
-      _loadSubmission(false);
-    });
   }
 
   void _subscribeToNotifications() {
@@ -166,8 +226,7 @@ class SubmissionScreenState extends BaseScreenState {
         setState(() {
           _statusStream = null;
         });
-        log.info('falling back to long-poll mode');
-        _startLongPollSubscriptions();
+        Timer(Duration(seconds: 3), _subscribeToNotifications);
       },
       cancelOnError: true,
     );
@@ -179,18 +238,16 @@ class SubmissionScreenState extends BaseScreenState {
     }
     setState(() {
       if (_submission == null) {
-        _submission = submission;
+        _submission = submission.deepCopy();
       }
       else {
-        _submission = _submission!.copyWith((s) {
-          s.status = submission.status;
-          s.graderName = submission.graderName;
-          s.buildErrorLog = submission.buildErrorLog;
-          s.graderScore = submission.graderScore;
-          s.styleErrorLog = submission.styleErrorLog;
-          s.testResults.clear();
-          s.testResults.addAll(submission.testResults);
-        });
+        _submission!.status = submission.status;
+        _submission!.graderName = submission.graderName;
+        _submission!.buildErrorLog = submission.buildErrorLog;
+        _submission!.graderScore = submission.graderScore;
+        _submission!.styleErrorLog = submission.styleErrorLog;
+        _submission!.testResults.clear();
+        _submission!.testResults.addAll(submission.testResults);
       }
       _problemData = findProblemById(_courseData!, _submission!.problemId);
       _problemMetadata = findProblemMetadataById(_courseData!, _submission!.problemId);
@@ -200,6 +257,72 @@ class SubmissionScreenState extends BaseScreenState {
 
   void _saveStatementFile(File file) {
     PlatformsUtils.getInstance().saveLocalFile(file.name, file.data);
+  }
+
+  List<Widget> buildReviewerCommentItems(BuildContext context) {
+    List<Widget> contents = [];
+    if (_reviewHistory == null) {
+      return [];
+    }
+    final codeReview = _reviewHistory!.findBySubmissionId(screen.submissionId);
+    if (codeReview==null) {
+      return [];
+    }
+
+    final theme = Theme.of(context);
+    final headStyle = theme.textTheme.headline6!.merge(TextStyle());
+    final headPadding = EdgeInsets.fromLTRB(8, 4, 8, 4);
+    final mainPadding = EdgeInsets.fromLTRB(8, 4, 8, 4);
+
+    final globalReview = codeReview.globalComment.trim();
+    if (globalReview.isNotEmpty) {
+      contents.add(Container(
+          padding: headPadding,
+          child: Text('Общий комментарий', style: headStyle))
+      );
+      contents.add(Container(
+          padding: mainPadding,
+          child: Text(globalReview))
+      );
+    }
+
+    final fileLines = <String,Set<int>>{};
+    for (final lineComment in codeReview.lineComments) {
+      final fileName = lineComment.fileName;
+      Set<int> numbers = {};
+      if (fileLines.containsKey(fileName)) {
+        numbers = fileLines[fileName]!;
+      }
+      numbers.add(lineComment.lineNumber+1);
+      fileLines[fileName] = numbers;
+    }
+    for (final fileName in fileLines.keys) {
+      contents.add(Container(
+          padding: headPadding,
+          child: Text('Файл $fileName', style: headStyle))
+      );
+      final lineNumbers = List.of(fileLines[fileName]!);
+      lineNumbers.sort();
+      String text = 'Замечания в строк${lineNumbers.length==1? 'е' : 'ах'} ';
+      if (lineNumbers.length == 1) {
+        text += '${lineNumbers.single}';
+      } else {
+        for (int i=0; i<lineNumbers.length; i++) {
+          if (i > 0 && i<lineNumbers.length-1) {
+            text += ', ';
+          }
+          else if (i == lineNumbers.length-1) {
+            text += ' и ';
+          }
+          text += '${lineNumbers[i]}';
+        }
+      }
+      contents.add(Container(
+          padding: mainPadding,
+          child: Text(text))
+      );
+    }
+    return contents;
   }
 
   List<Widget> buildSubmissionCommonItems(BuildContext context) {
@@ -232,7 +355,6 @@ class SubmissionScreenState extends BaseScreenState {
     }
 
     String statusName = statusMessageText(_submission!.status, _submission!.graderName, false);
-    Color statusColor = statusMessageColor(context, _submission!.status);
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
 
     final whoCanRejudge = [
@@ -308,7 +430,6 @@ class SubmissionScreenState extends BaseScreenState {
       id: _course!.id,
       dataId: _course!.dataId
     );
-    final userForRequest = User(id: screen.loggedUser.id);
 
     RejudgeRequest request;
     if (_whatToRejudge == WhatToRejudge.thisSubmission) {
@@ -384,7 +505,7 @@ class SubmissionScreenState extends BaseScreenState {
         } catch (_) {
         }
         if (fileContent != null) {
-          contents.add(createFilePreview(context, fileContent, true));
+          contents.add(createFilePreview(context, file.name, fileContent, true));
         }
         else {
           contents.add(SizedBox(height: 20));
@@ -423,7 +544,7 @@ class SubmissionScreenState extends BaseScreenState {
     }
     else if (_submission!.status == SolutionStatus.RUNTIME_ERROR) {
       final brokenTestCase = findFirstBrokenTest();
-      fileContent = '=== stdout:\n' + brokenTestCase.stdout + '\n\n=== stderr:\n' + brokenTestCase.stderr;
+      fileContent = '=== stdout:\n${brokenTestCase.stdout}\n\n=== stderr:\n${brokenTestCase.stderr}';
       brokenTestNumber = brokenTestCase.testNumber.toInt();
       contents.add(Container(
           padding: fileHeadPadding,
@@ -450,15 +571,12 @@ class SubmissionScreenState extends BaseScreenState {
     }
     if (fileContent != null) {
       if (fileContent.length <= maxFileSizeToShow) {
-        contents.add(createFilePreview(context, fileContent, false));
+        contents.add(createFilePreview(context, '', fileContent, false));
       }
       else {
-        contents.add(Text('Вывод слишком большой, отображается только первые ${maxFileSizeToShow} символов'));
-        contents.add(createFilePreview(context, fileContent.substring(0, maxFileSizeToShow), false));
+        contents.add(Text('Вывод слишком большой, отображается только первые $maxFileSizeToShow символов'));
+        contents.add(createFilePreview(context, '', fileContent.substring(0, maxFileSizeToShow), false));
       }
-    }
-    else {
-      contents.add(SizedBox(height: 20));
     }
     return contents;
   }
@@ -479,12 +597,131 @@ class SubmissionScreenState extends BaseScreenState {
     return TestResult();
   }
 
-  Widget createFilePreview(BuildContext context, String data, bool withLineNumbers) {
-    final whoCanComment = [
+  bool canMakeReview() {
+    final whoCanComment = {
       Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
-    ];
-    final canComment = screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanComment.contains(screen.role);
-    return SourceViewWidget(text: data, withLineNumbers: withLineNumbers, canEditComments: canComment);
+    };
+    final userCanComment = screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanComment.contains(screen.role);
+    return userCanComment;
+  }
+
+  bool canSaveReviewChanges() {
+    if (!canMakeReview() || _reviewHistory==null) {
+      return false;
+    }
+    CodeReview newReview = CodeReview(
+      globalComment: _globalCommentController.text.trim(),
+      lineComments: _lineCommentController.comments
+    );
+    CodeReview? currentReview = _reviewHistory!.findBySubmissionId(screen.submissionId);
+    bool result;
+    if (currentReview == null) {
+      result = newReview.contentIsNotEmpty;
+    }
+    else {
+      result = !newReview.contentEqualsTo(currentReview);
+    }
+    return result;
+  }
+
+  final statusesToAction = {
+    SolutionStatus.PENDING_REVIEW,
+    SolutionStatus.CODE_REVIEW_REJECTED,
+    SolutionStatus.PLAGIARISM_DETECTED,
+    SolutionStatus.SUMMON_FOR_DEFENCE,
+  };
+
+  @override
+  List<ScreenSubmitAction> submitActions(BuildContext context) {
+    if (_submission==null || !canMakeReview()) {
+      return [];
+    }
+    bool hasUnsavedComments = _hasUnsavedChanges;
+    List<ScreenSubmitAction> result = [];
+    final status = _submission?.status ?? SolutionStatus.ANY_STATUS_OR_NULL;
+    bool reviewableStatus =
+        status == SolutionStatus.PENDING_REVIEW ||
+        status == SolutionStatus.SUMMON_FOR_DEFENCE ||
+        status == SolutionStatus.CODE_REVIEW_REJECTED
+    ;
+    bool hasComments = _globalCommentController.text.trim().isNotEmpty ||
+        _lineCommentController.comments.isNotEmpty;
+
+    if (reviewableStatus) {
+      result.add(
+        ScreenSubmitAction(
+          title: status==SolutionStatus.SUMMON_FOR_DEFENCE ? 'Зачесть решение' : 'Одобрить решение',
+          onAction: _acceptSolution,
+          color: Colors.green,
+        )
+      );
+    }
+
+    if (hasUnsavedComments && result.isEmpty) {
+      result.add(
+        ScreenSubmitAction(
+          title: 'Сохранить замечания',
+          onAction: _saveReviewComments,
+        )
+      );
+    }
+    if (hasUnsavedComments && hasComments) {
+      result.add(
+          ScreenSubmitAction(
+            title: status==SolutionStatus.CODE_REVIEW_REJECTED? 'Сохранить замечания' : 'Отклонить решение',
+            onAction: _rejectSolution,
+            color: status==SolutionStatus.CODE_REVIEW_REJECTED? null : Colors.red,
+          )
+      );
+    }
+    return result;
+  }
+
+  void _acceptSolution() {
+    SolutionStatus status;
+    bool reviewPassed = {SolutionStatus.CODE_REVIEW_REJECTED, SolutionStatus.PENDING_REVIEW}.contains(_submission!.status);
+    if (!_problemMetadata!.skipSolutionDefence && reviewPassed) {
+      status = SolutionStatus.SUMMON_FOR_DEFENCE;
+    }
+    else {
+      status = SolutionStatus.OK;
+    }
+    _applyCodeReview(status);
+  }
+
+  void _saveReviewComments() {
+    _applyCodeReview(_submission!.status);
+  }
+
+  void _rejectSolution() {
+    SolutionStatus status = _submission!.status;
+    if (status != SolutionStatus.SUMMON_FOR_DEFENCE) {
+      status = SolutionStatus.CODE_REVIEW_REJECTED;
+    }
+    _applyCodeReview(status);
+  }
+
+  void _applyCodeReview(SolutionStatus status) {
+    final codeReview = currentStateCodeReview..newStatus = status;
+    log.info('sending new review state: ${codeReview.debugInfo()}');
+    final service = ConnectionController.instance!.codeReviewService;
+    service.applyCodeReview(codeReview)
+        .then((CodeReview approvedCodeReview) {
+      setState(() {
+        _submission!.status = approvedCodeReview.newStatus;
+      });
+      _loadCodeReviews();
+    });
+  }
+
+
+  Widget createFilePreview(BuildContext context, String fileName, String data, bool withLineNumbers) {
+    return SourceViewWidget(
+      text: data,
+      fileName: fileName,
+      withLineNumbers: withLineNumbers,
+      lineCommentController: _lineCommentController,
+    );
   }
 
   @override
@@ -497,14 +734,31 @@ class SubmissionScreenState extends BaseScreenState {
     final mainHeadStyle = theme.textTheme.headline4!.merge(TextStyle(color: theme.primaryColor));
     final mainHeadPadding = EdgeInsets.fromLTRB(0, 10, 0, 20);
     final dividerColor = Colors.black38;
+    void addDivider() {
+      contents.add(Divider(
+        height: 40,
+        thickness: 2,
+        color: dividerColor,
+      ));
+    }
 
     contents.addAll(buildSubmissionCommonItems(context));
-    contents.add(Divider(
-      height: 40,
-      thickness: 2,
-      color: dividerColor,
-    ));
 
+    bool commentsAreReadOnly = !canMakeReview();
+
+    if (commentsAreReadOnly) {
+      final commentItems = buildReviewerCommentItems(context);
+      if (commentItems.isNotEmpty) {
+        addDivider();
+        contents.add(Container(
+            padding: mainHeadPadding,
+            child: Text('Недоработки решения', style: mainHeadStyle))
+        );
+        contents.addAll(commentItems);
+      }
+    }
+
+    addDivider();
     contents.add(Container(
         padding: mainHeadPadding,
         child: Text('Файлы решения', style: mainHeadStyle))
@@ -513,13 +767,25 @@ class SubmissionScreenState extends BaseScreenState {
 
     final submissionErrors = buildSubmissionErrors(context);
     if (submissionErrors.isNotEmpty) {
-      contents.add(Divider(
-        height: 40,
-        thickness: 2,
-        color: dividerColor,
-      ));
+      addDivider();
       contents.addAll(submissionErrors);
     }
+
+    if (canMakeReview()) {
+      addDivider();
+      contents.add(Container(
+          padding: mainHeadPadding,
+          child: Text('Комментарий к решению', style: mainHeadStyle))
+      );
+      final globalCommentEditor = TextField(
+        controller: _globalCommentController,
+        keyboardType: TextInputType.multiline,
+        maxLines: null,
+      );
+      contents.add(globalCommentEditor);
+    }
+
+    contents.add(SizedBox(height: 50));
 
     Column visible = Column(children: contents, crossAxisAlignment: CrossAxisAlignment.start);
     double screenWidth = MediaQuery.of(context).size.width;
@@ -541,13 +807,13 @@ class SubmissionScreenState extends BaseScreenState {
 
 }
 
-const StatusesFull = {
+const statusesFull = {
   SolutionStatus.ANY_STATUS_OR_NULL: 'Любой статус',
   SolutionStatus.PENDING_REVIEW: 'Ожидает ревью',
   SolutionStatus.OK: 'Решение зачтено',
   SolutionStatus.PLAGIARISM_DETECTED: 'Подозрение на плагиат',
   SolutionStatus.CODE_REVIEW_REJECTED: 'Отправлено на доработку',
-  SolutionStatus.DEFENCE_FAILED: 'Неуспешная защита',
+  SolutionStatus.SUMMON_FOR_DEFENCE: 'Требуется защита',
   SolutionStatus.SUBMITTED: 'В очереди на тестирование',
   SolutionStatus.GRADER_ASSIGNED: 'Тестируется',
   SolutionStatus.DISQUALIFIED: 'Дисквалификация',
@@ -559,7 +825,7 @@ const StatusesFull = {
   SolutionStatus.TIME_LIMIT: 'Лимит времени',
 };
 
-const StatusesShort = {
+const statusesShort = {
   SolutionStatus.ANY_STATUS_OR_NULL: 'ANY',
   SolutionStatus.SUBMITTED: 'NEW',
   SolutionStatus.PENDING_REVIEW: 'PR',
@@ -573,7 +839,7 @@ const StatusesShort = {
   SolutionStatus.TIME_LIMIT: 'TL',
   SolutionStatus.PLAGIARISM_DETECTED: 'CHEAT?',
   SolutionStatus.CODE_REVIEW_REJECTED: 'REJ',
-  SolutionStatus.DEFENCE_FAILED: '!DEF',
+  SolutionStatus.SUMMON_FOR_DEFENCE: 'SM',
 };
 
 String statusMessageText(SolutionStatus status, String graderName, bool shortVariant) {
@@ -581,16 +847,16 @@ String statusMessageText(SolutionStatus status, String graderName, bool shortVar
   String message = '';
 
   if (!shortVariant) {
-    if (StatusesFull.containsKey(status)) {
-      message = StatusesFull[status]!;
+    if (statusesFull.containsKey(status)) {
+      message = statusesFull[status]!;
     }
     else {
       message = status.name;
     }
   }
   else {
-    if (StatusesShort.containsKey(status)) {
-      message = StatusesShort[status]!;
+    if (statusesShort.containsKey(status)) {
+      message = statusesShort[status]!;
     }
     else {
       message = status.name.substring(0, math.min(4, status.name.length)).toUpperCase();
@@ -609,11 +875,10 @@ Color statusMessageColor(BuildContext buildContext, SolutionStatus status) {
   const needActionStatuses = {
     SolutionStatus.PLAGIARISM_DETECTED,
     SolutionStatus.PENDING_REVIEW,
-    SolutionStatus.ACCEPTABLE,
+    SolutionStatus.SUMMON_FOR_DEFENCE,
   };
   const badStatuses = {
     SolutionStatus.CODE_REVIEW_REJECTED,
-    SolutionStatus.DEFENCE_FAILED,
     SolutionStatus.WRONG_ANSWER,
     SolutionStatus.RUNTIME_ERROR,
     SolutionStatus.VALGRIND_ERRORS,

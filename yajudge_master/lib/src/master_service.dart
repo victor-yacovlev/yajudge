@@ -8,11 +8,12 @@ import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart';
-import './course_management.dart';
-import './submission_management.dart';
-import './user_management.dart';
+import 'course_management.dart';
+import 'submission_management.dart';
+import 'user_management.dart';
 import 'enrollment_management.dart';
 import 'grpc_web_proxy.dart';
+import 'code_review_management.dart';
 
 const notLoggedMethods = ['StartSession', 'Authorize'];
 const privateMethods = [
@@ -26,7 +27,8 @@ const studentsMethods = [
   'CheckCourseStatus', 'CheckProblemStatus', 'GetSubmissionResult',
   'SubscribeToProblemStatusNotifications',
   'SubscribeToCourseStatusNotifications',
-  'SubscribeToSubmissionResultNotifications'
+  'SubscribeToSubmissionResultNotifications',
+  'GetReviewHistory',
 ];
 
 const maxErrorsPerMinute = 3;
@@ -42,6 +44,7 @@ class MasterService {
   late final CourseManagementService courseManagementService;
   late final SubmissionManagementService submissionManagementService;
   late final EnrollmentManagementService enrollmentManagementService;
+  late final CodeReviewManagementService codeReviewManagementService;
   late final Server grpcServer;
   final DemoModeProperties? demoModeProperties;
   final AbstractGrpcWebProxyService? grpcWebProxyService;
@@ -69,14 +72,22 @@ class MasterService {
     );
     submissionManagementService = SubmissionManagementService(
         parent: this,
-        connection: connection
+        connection: connection,
     );
     enrollmentManagementService = EnrollmentManagementService(
         parent: this,
-        connection: connection
+        connection: connection,
+    );
+    codeReviewManagementService = CodeReviewManagementService(
+        parent: this,
+        connection: connection,
     );
     grpcServer = Server(
-        [userManagementService, courseManagementService, submissionManagementService, enrollmentManagementService],
+        [
+          userManagementService, courseManagementService,
+          submissionManagementService, enrollmentManagementService,
+          codeReviewManagementService,
+        ],
         [checkAuth]
     );
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));

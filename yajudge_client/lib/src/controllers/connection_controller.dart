@@ -38,7 +38,8 @@ class ConnectionController {
   late CourseManagementClient coursesService;
   late SubmissionManagementClient submissionsService;
   late EnrollmentsManagerClient enrollmentsService;
-  late Uri _connectionUri;
+  late CodeReviewManagementClient codeReviewService;
+  late final Uri _connectionUri;
 
   Session _session = Session();
 
@@ -68,22 +69,27 @@ class ConnectionController {
 
     usersService = UserManagementClient(
       _clientChannel!,
-      interceptors: [_authGrpcInterceptor]
+      interceptors: [_authGrpcInterceptor],
     );
 
     coursesService = CourseManagementClient(
       _clientChannel!,
-      interceptors: [_authGrpcInterceptor]
+      interceptors: [_authGrpcInterceptor],
     );
 
     submissionsService = SubmissionManagementClient(
       _clientChannel!,
-      interceptors: [_authGrpcInterceptor]
+      interceptors: [_authGrpcInterceptor],
     );
 
     enrollmentsService = EnrollmentsManagerClient(
       _clientChannel!,
-      interceptors: [_authGrpcInterceptor]
+      interceptors: [_authGrpcInterceptor],
+    );
+
+    codeReviewService = CodeReviewManagementClient(
+      _clientChannel!,
+      interceptors: [_authGrpcInterceptor],
     );
 
     String sessionId = sessionCookie;

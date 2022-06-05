@@ -174,10 +174,9 @@ enum SolutionStatus {
   STYLE_CHECK_ERROR   = 3;
   COMPILATION_ERROR   = 4;
   WRONG_ANSWER        = 5;
-  ACCEPTABLE          = 6;  // grade score > 0 (if accept partial solution) or score is full
+  SUMMON_FOR_DEFENCE  = 6;
   PENDING_REVIEW      = 7;
   CODE_REVIEW_REJECTED= 8;
-  DEFENCE_FAILED      = 10;
   PLAGIARISM_DETECTED = 11;
   DISQUALIFIED        = 12;
   CHECK_FAILED        = 13;
@@ -239,21 +238,6 @@ message CourseStatus {
   int32               problems_required = 9;
   int32               problems_solved = 10;
   int32               problems_required_solved = 11;
-}
-
-message LineComment {
-  int32 line_number = 1;  // starting from 0
-  string context = 2;     // short line text to be shown in history
-  string message = 3;     // actual comment
-  string file_name = 4;   // might be empty in case of single solution file
-}
-
-message CodeReview {
-  int64                   id            = 1;
-  int64                   submission_id = 2;
-  User                    author        = 3;
-  repeated LineComment    line_comments = 4;
-  string                  global_comment= 5;
 }
 
 message TestResult {
@@ -613,5 +597,36 @@ service SubmissionManagement {
   rpc TakeSubmissionToGrade(GraderProperties) returns (Submission) {}
   // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
   rpc UpdateGraderOutput(Submission) returns (Submission) {}
+  // manual submission status update
+  rpc UpdateSubmissionStatus(Submission) returns (Submission);
+}
+
+message LineComment {
+  int32 line_number = 1;  // starting from 0
+  string context = 2;     // short line text to be shown in history
+  string message = 3;
+  string file_name = 4;
+}
+
+message CodeReview {
+  int64                   id            = 1;
+  int64                   timestamp     = 2;
+  int64                   submission_id = 3;
+  User                    author        = 4;
+  repeated LineComment    line_comments = 5;
+  string                  global_comment= 6;
+  SolutionStatus          new_status    = 7;
+}
+
+message ReviewHistory {
+  repeated CodeReview   reviews = 1;
+}
+
+service CodeReviewManagement {
+  // add or modify review comments
+  rpc ApplyCodeReview(CodeReview) returns (CodeReview);
+
+  // get code reviews for requested submission and all submissions before for the same problem
+  rpc GetReviewHistory(Submission) returns (ReviewHistory);
 }
 

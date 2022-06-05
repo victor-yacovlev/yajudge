@@ -388,11 +388,12 @@ class UsersImportCSVScreenState extends BaseScreenState {
     });
   }
 
-  ScreenSubmitAction? submitAction(BuildContext context) {
-    return ScreenSubmitAction(
+  @override
+  List<ScreenSubmitAction> submitActions(BuildContext context) {
+    return [ScreenSubmitAction(
       title: _submitInProgress? 'Сохранение...' : 'Сохранить',
       onAction: _users==null || _submitInProgress ? null : _submit
-    );
+    )];
   }
 
 

@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../client_app.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
 import '../widgets/unified_widgets.dart';
@@ -250,7 +249,7 @@ class UserEditScreenState extends BaseScreenState {
   }
 
   void _pickRole() {
-    var builder = (BuildContext context) {
+    Widget builder (BuildContext context) {
       List<Widget> roleItems = List.empty(growable: true);
       for (MapEntry<Role,String> e in RoleNames.entries) {
         if (e.key != Role.ROLE_ANY) {
@@ -274,7 +273,7 @@ class UserEditScreenState extends BaseScreenState {
           ),
           actions: []
       );
-    };
+    }
     showDialog(context: context, builder: builder);
   }
 
@@ -465,15 +464,16 @@ class UserEditScreenState extends BaseScreenState {
     _canSubmit = canSubmit;
   }
 
-  ScreenSubmitAction? submitAction(BuildContext context) {
+  @override
+  List<ScreenSubmitAction> submitActions(BuildContext context) {
     if (!_canSubmit) {
-      return null;
+      return [];
     }
     ScreenSubmitAction action = ScreenSubmitAction(
       title: 'Сохранить',
       onAction: _isSubmitting ? null : _submit
     );
-    return action;
+    return [action];
   }
 
 }
