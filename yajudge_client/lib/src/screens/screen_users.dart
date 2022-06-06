@@ -22,7 +22,7 @@ class UsersScreenState extends BaseScreenState {
   static final Map<Role, String> RoleNames = {
     Role.ROLE_ANY: '[ любая роль ]',
     Role.ROLE_ADMINISTRATOR: 'Администратор',
-    Role.ROLE_LECTUER: 'Лектор',
+    Role.ROLE_LECTURER: 'Лектор',
     Role.ROLE_TEACHER: 'Семинарист',
     Role.ROLE_TEACHER_ASSISTANT: 'Учебный ассистент',
     Role.ROLE_STUDENT: 'Студент',

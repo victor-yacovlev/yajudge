@@ -69,7 +69,7 @@ class DashboardScreenState extends BaseScreenState {
           ),
         ]);
       }
-      if (e.role == Role.ROLE_LECTUER || e.role == Role.ROLE_ADMINISTRATOR || isAdministrator) {
+      if (e.role == Role.ROLE_LECTURER || e.role == Role.ROLE_ADMINISTRATOR || isAdministrator) {
         subactions.add(
             IconButton(
               icon: const Icon(Icons.people),

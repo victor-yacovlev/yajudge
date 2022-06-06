@@ -358,7 +358,7 @@ class SubmissionScreenState extends BaseScreenState {
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
 
     final whoCanRejudge = [
-      Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
+      Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTURER,
     ];
 
     final rightColumn = <Widget>[];
@@ -599,7 +599,7 @@ class SubmissionScreenState extends BaseScreenState {
 
   bool canMakeReview() {
     final whoCanComment = {
-      Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTUER,
+      Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTURER,
     };
     final userCanComment = screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanComment.contains(screen.role);
     return userCanComment;
