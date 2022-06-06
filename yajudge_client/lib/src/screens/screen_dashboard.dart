@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'screen_base.dart';
 import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -38,18 +40,18 @@ class DashboardScreenState extends BaseScreenState {
 
     for (final e in courses) {
       String title = e.course.name;
-      final progressAction = () {
+      void progressAction() {
         Navigator.pushNamed(context, '/progress/${e.course.urlPrefix}');
-      };
-      final submissionsAction = () {
+      }
+      void submissionsAction() {
         Navigator.pushNamed(context, '/submissions/${e.course.urlPrefix}');
-      };
-      final enrollmentsAction = () {
+      }
+      void enrollmentsAction() {
         Navigator.pushNamed(context, '/enrollments/${e.course.urlPrefix}');
-      };
-      final settingsAction = () {
+      }
+      void settingsAction() {
         Navigator.pushNamed(context, '/courses/${e.course.urlPrefix}');
-      };
+      }
       String? roleTitle;
       List<Widget> subactions = [];
       if (e.role != Role.ROLE_STUDENT || isAdministrator) {
@@ -87,10 +89,10 @@ class DashboardScreenState extends BaseScreenState {
         //   )
         // );
       }
-      String link = '/' + e.course.urlPrefix + '/';
-      final action = () {
+      String link = '/${e.course.urlPrefix}/';
+      void action() {
         Navigator.pushNamed(context, link);
-      };
+      }
       YCardLikeButton button = YCardLikeButton(title, action, subtitle: roleTitle, subactions: subactions);
       final buttonWrapper = Padding(
         child: button,
@@ -115,9 +117,9 @@ class DashboardScreenState extends BaseScreenState {
       String title = 'Управление пользователями';
       String subtitle = 'Добавление, удаление и сброс паролей';
       String link = '/users';
-      VoidCallback action = () {
+      void action() {
         Navigator.pushNamed(context, link);
-      };
+      }
       YCardLikeButton button = YCardLikeButton(
           title, action, subtitle: subtitle);
       result.add(button);

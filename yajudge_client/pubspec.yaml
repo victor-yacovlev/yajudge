@@ -10,6 +10,7 @@ dependencies:
   fixnum: ^1.0.1
   protobuf: ^2.0.1
   grpc: ^3.0.2
+  path: ^1.8.1
   yaml: ^3.1.0
   yaml_writer: ^1.0.1
   visibility_detector: ^0.3.3

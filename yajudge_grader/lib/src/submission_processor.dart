@@ -702,11 +702,11 @@ class SubmissionProcessor {
     final limitsFile = io.File(limitsPath);
     if (limitsFile.existsSync()) {
       final conf = parseYamlConfig(limitsPath);
-      final problemLimits = limitsFromYaml(conf);
-      limits = mergeLimits(limits, problemLimits);
+      final problemLimits = GradingLimitsExtension.fromYaml(conf);
+      limits = limits.mergedWith(problemLimits);
     }
     if (overrideLimits != null) {
-      limits = mergeLimits(limits, overrideLimits!);
+      limits = limits.mergedWith(overrideLimits!);
     }
     return limits;
   }

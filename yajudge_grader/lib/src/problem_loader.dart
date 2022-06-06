@@ -118,7 +118,7 @@ class ProblemLoader {
       }
 
       GradingLimits limits = opts.limits;
-      String limitsYaml = limitsToYamlString(limits);
+      String limitsYaml = limits.toYamlString();
       if (limitsYaml
           .trim()
           .isNotEmpty) {

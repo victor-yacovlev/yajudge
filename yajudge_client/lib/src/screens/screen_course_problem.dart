@@ -72,9 +72,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       .then((CourseData courseData) {
         setState(() {
           _courseData = courseData;
-          _problemData = findProblemById(courseData, screen.problemId);
+          _problemData = courseData.findProblemById(screen.problemId);
           title = _problemData.title;
-          _problemMetadata = findProblemMetadataById(courseData, screen.problemId);
+          _problemMetadata = courseData.findProblemMetadataById(screen.problemId);
           _submissionFiles = List.from(_problemData.solutionFiles.files);
           clearStatusMessage();
         });
@@ -622,6 +622,10 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
       iconData = Icons.check_circle;
       secondLine = 'Решение зачтено';
       iconColor = Theme.of(context).primaryColor;
+      break;
+    case SolutionStatus.ANY_STATUS_OR_NULL:
+      break;
+    case SolutionStatus.CHECK_FAILED:
       break;
   }
   return Tuple3(secondLine, iconData, iconColor);

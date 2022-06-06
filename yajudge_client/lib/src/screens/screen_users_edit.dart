@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'dart:math';
 
 import 'package:fixnum/fixnum.dart';
@@ -73,7 +75,7 @@ class UserEditScreenState extends BaseScreenState {
     UsersFilter usersFilter = UsersFilter();
     usersFilter.user = User()..id=Int64(userId!);
     service.getUsers(usersFilter).then((UsersList usersList) {
-      if (usersList.users.length == 0) {
+      if (usersList.users.isEmpty) {
         setState(() {
           _errorString = 'Нет пользователя с таким ID';
           _user = User();
@@ -107,15 +109,15 @@ class UserEditScreenState extends BaseScreenState {
     _loadUserProfile();
   }
 
-  TextEditingController _userIdController = TextEditingController();
-  TextEditingController _loginController = TextEditingController();
-  TextEditingController _lastNameController = TextEditingController();
-  TextEditingController _firstNameController = TextEditingController();
-  TextEditingController _midNameController = TextEditingController();
-  TextEditingController _groupNameController = TextEditingController();
-  TextEditingController _emailController = TextEditingController();
-  TextEditingController _passwordController = TextEditingController();
-  static final Map<Role, String> RoleNames = {
+  final TextEditingController _userIdController = TextEditingController();
+  final TextEditingController _loginController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _midNameController = TextEditingController();
+  final TextEditingController _groupNameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  static final Map<Role, String> roleNames = {
     Role.ROLE_ANY: '[ не назначена ]',
     Role.ROLE_ADMINISTRATOR: 'Администратор',
     Role.ROLE_LECTURER: 'Лектор',
@@ -123,7 +125,7 @@ class UserEditScreenState extends BaseScreenState {
     Role.ROLE_TEACHER_ASSISTANT: 'Учебный ассистент',
     Role.ROLE_STUDENT: 'Студент',
   };
-  TextEditingController _roleController = TextEditingController();
+  final TextEditingController _roleController = TextEditingController();
 
   Widget _buildFieldItem(
       BuildContext context, String label, Widget child,
@@ -133,7 +135,7 @@ class UserEditScreenState extends BaseScreenState {
     rowItems.add(Container(
       width: 150,
       margin: EdgeInsets.fromLTRB(0, 0, 10, 0),
-      child: Text(label+':', textAlign: TextAlign.end),
+      child: Text('$label:', textAlign: TextAlign.end),
     ));
     rowItems.add(Expanded(child: child));
     if (actionWidgets.isNotEmpty) {
@@ -239,8 +241,8 @@ class UserEditScreenState extends BaseScreenState {
   }
 
   Role _roleByName(String name) {
-    assert (RoleNames.containsValue(name));
-    for (MapEntry<Role,String> e in RoleNames.entries) {
+    assert (roleNames.containsValue(name));
+    for (MapEntry<Role,String> e in roleNames.entries) {
       if (e.value == name) {
         return e.key;
       }
@@ -251,7 +253,7 @@ class UserEditScreenState extends BaseScreenState {
   void _pickRole() {
     Widget builder (BuildContext context) {
       List<Widget> roleItems = List.empty(growable: true);
-      for (MapEntry<Role,String> e in RoleNames.entries) {
+      for (MapEntry<Role,String> e in roleNames.entries) {
         if (e.key != Role.ROLE_ANY) {
           roleItems.add(YTextButton(e.value, () {
             setState(() {
@@ -360,20 +362,21 @@ class UserEditScreenState extends BaseScreenState {
     //   roleActionButton = YTextButton('Изменить', _pickRole);
     // }
     if (_user.id == 0) {
-      if (_roleController.text.trim().isNotEmpty)
+      if (_roleController.text.trim().isNotEmpty) {
         roleName = _roleController.text.trim();
-      else
-        roleName = RoleNames[Role.ROLE_STUDENT]!;
+      } else {
+        roleName = roleNames[Role.ROLE_STUDENT]!;
+      }
     }
     else {
-      roleName = RoleNames[_user.defaultRole]!;
+      roleName = roleNames[_user.defaultRole]!;
     }
     // items.add(_buildTextFieldItem(context, 'Роль по умолчанию',
     //     _roleController, roleName, false,
     //     actionWidgets: [roleActionButton!]
     // ));
     items.add(_buildDropdownFieldItem(
-        context, 'Роль по умолчанию', RoleNames.values.toList().sublist(1),
+        context, 'Роль по умолчанию', roleNames.values.toList().sublist(1),
         _roleController, roleName, isAdministrator,
     ));
     if (_errorString.isNotEmpty) {
@@ -417,8 +420,9 @@ class UserEditScreenState extends BaseScreenState {
         Navigator.pop(context);
       });
       Future.delayed(Duration(milliseconds: 500), () {
-        if (!mounted)
+        if (!mounted) {
           return;
+        }
         setState(() {
           _isSubmitting = false;
         });
@@ -428,8 +432,9 @@ class UserEditScreenState extends BaseScreenState {
         _errorString = error.toString();
       });
       Future.delayed(Duration(milliseconds: 500), () {
-        if (!mounted)
+        if (!mounted) {
           return;
+        }
         setState(() {
           _isSubmitting = false;
         });

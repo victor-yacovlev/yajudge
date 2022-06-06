@@ -249,8 +249,8 @@ class SubmissionScreenState extends BaseScreenState {
         _submission!.testResults.clear();
         _submission!.testResults.addAll(submission.testResults);
       }
-      _problemData = findProblemById(_courseData!, _submission!.problemId);
-      _problemMetadata = findProblemMetadataById(_courseData!, _submission!.problemId);
+      _problemData = _courseData!.findProblemById(_submission!.problemId);
+      _problemMetadata = _courseData!.findProblemMetadataById(submission.problemId);
     });
     _updateTitle();
   }

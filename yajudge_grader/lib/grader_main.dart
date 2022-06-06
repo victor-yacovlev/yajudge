@@ -21,7 +21,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   if (parsedArguments.command!.name=='run' && parsedArguments.command!['limits'] != null) {
     final limitsFileName = expandPathEnvVariables(parsedArguments.command!['limits']!, '');
     final limitsConf = loadYaml(io.File(limitsFileName).readAsStringSync());
-    overrideLimits = limitsFromYaml(limitsConf);
+    overrideLimits = GradingLimitsExtension.fromYaml(limitsConf);
   }
 
   if (!io.File(configFileName).existsSync()) {
@@ -77,7 +77,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   GradingLimits defaultLimits;
   if (config['default_limits'] is YamlMap) {
     YamlMap limitsConf = config['default_limits'];
-    defaultLimits = limitsFromYaml(limitsConf);
+    defaultLimits = GradingLimitsExtension.fromYaml(limitsConf);
   }
   else {
     defaultLimits = GradingLimits();
@@ -421,7 +421,7 @@ Future<void> toolMain(ArgResults mainArguments) async {
     String limitsFileName = subcommandArguments['limits'];
     final conf = loadYaml(io.File(limitsFileName).readAsStringSync());
     if (conf is YamlMap) {
-      limits = limitsFromYaml(conf);
+      limits = GradingLimitsExtension.fromYaml(conf);
     }
   }
 

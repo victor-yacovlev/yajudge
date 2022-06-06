@@ -1,3 +1,5 @@
+// ignore_for_file: unused_field
+
 import 'generated/yajudge.pb.dart';
 import 'package:path/path.dart' as path;
 import 'package:yaml/yaml.dart';
@@ -46,8 +48,8 @@ class CourseLoader {
 
   TextReading _textReading = TextReading();
 
-  DateTime _softDeadLine = DateTime.fromMicrosecondsSinceEpoch(0);
-  DateTime _hardDeadLine = DateTime.fromMicrosecondsSinceEpoch(0);
+  final DateTime _softDeadLine = DateTime.fromMicrosecondsSinceEpoch(0);
+  final DateTime _hardDeadLine = DateTime.fromMicrosecondsSinceEpoch(0);
 
   CourseLoader({required this.courseId, required this.coursesRootPath, required this.separateProblemsRootPath});
 
@@ -153,7 +155,7 @@ class CourseLoader {
     if (defaultLimitsFile.existsSync()) {
       updateCourseLastModified(defaultLimitsFile);
       YamlMap limitsMap = loadYaml(defaultLimitsFile.readAsStringSync());
-      _defaultLimits = limitsFromYaml(limitsMap);
+      _defaultLimits = GradingLimitsExtension.fromYaml(limitsMap);
     }
     final submissionPropertiesFile = io.File('${problemPath('')}/submission-properties.yaml');
     if (submissionPropertiesFile.existsSync()) {
@@ -365,7 +367,7 @@ class CourseLoader {
     else if (solutionTemplateFileName.isNotEmpty) {
       final solutionTemplateFile = io.File('${problemPath(problemId)}/$solutionTemplateFileName');
       final templateData = solutionTemplateFile.readAsBytesSync();
-      final description = 'Шаблон решения'; // TODO i18n
+      final description = 'Шаблон решения';
       updateCourseLastModified(solutionTemplateFile);
       publicFiles = FileSet(files: [File(
         name: solutionTemplateFileName,
@@ -483,7 +485,7 @@ class CourseLoader {
     GradingLimits limits = GradingLimits();
     if (data['limits'] is YamlMap) {
       YamlMap yamlMap = data['limits'];
-      limits = limitsFromYaml(yamlMap);
+      limits = GradingLimitsExtension.fromYaml(yamlMap);
     }
     SecurityContext securityContext = SecurityContext();
     if (data['security_context'] is YamlMap) {

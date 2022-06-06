@@ -113,8 +113,8 @@ class CourseScreenState extends BaseScreenState {
           expanded = selectedKey.startsWith(sectionKey);
         }
         firstLevelNumber ++;
-        String sectionPrefix = 'Часть ' + sectionNumber.toString();
-        String sectionTitle = sectionPrefix + ':\n' + section.name;
+        String sectionPrefix = 'Часть $sectionNumber';
+        String sectionTitle = '$sectionPrefix:\n${section.name}';
         IconData? sectionIcon;
 
         if (sectionStatus != null && sectionStatus.completed) {
@@ -143,7 +143,7 @@ class CourseScreenState extends BaseScreenState {
 
         String lessonKey = lesson.id;
         if (sectionKey.isNotEmpty) {
-          lessonKey = selectedKey + '/' + lessonKey;
+          lessonKey = '$selectedKey/$lessonKey';
         }
         IconData? lessonIcon;
         Color? lessonIconColor;
@@ -273,10 +273,10 @@ class CourseScreenState extends BaseScreenState {
     if (!key.startsWith('#')) {
       subroute = path.normalize(key);
     }
-    url += '/' + subroute;
+    url += '/$subroute';
     PageRouteBuilder routeBuilder = PageRouteBuilder(
       settings: RouteSettings(name: url),
-      pageBuilder: (_a, _b, _c) {
+      pageBuilder: (_, __, ___) {
         return CourseScreen(
           user: widget.loggedUser,
           course: screen.course,
@@ -541,7 +541,7 @@ class CourseScreenState extends BaseScreenState {
       items.addAll(_createCommonCourseInformation(context));
     }
     else {
-      Lesson lesson = findLessonByKey(screen.courseData, screen.selectedKey);
+      Lesson lesson = screen.courseData.findLessonByKey(screen.selectedKey);
       items.addAll(_createCommonLessonInformation(context, lesson));
       items.addAll(_createReadingsIndex(context, lesson));
       items.addAll(_createProblemsIndex(context, lesson));

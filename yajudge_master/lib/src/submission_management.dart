@@ -254,7 +254,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
     }
     final courseData = parent.courseManagementService.getCourseData(course.dataId);
-    final problemData = findProblemById(courseData, problemId);
+    final problemData = courseData.findProblemById(problemId);
     int limit = problemData.maxSubmissionsPerHour>0 ? problemData.maxSubmissionsPerHour : courseData.maxSubmissionsPerHour;
     limit -= submissionsCount;
     if (limit < 0) {
@@ -650,12 +650,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         'grader_name': graderName,
       }
     );
-    _notifySubmissionResultChanged(
-      submission.copyWith((s) {
-        s.graderName = graderName;
-        s.status = SolutionStatus.GRADER_ASSIGNED;
-      })
-    );
+    final assignedSubmission = submission.deepCopy();
+    assignedSubmission.graderName = graderName;
+    assignedSubmission.status = SolutionStatus.GRADER_ASSIGNED;
+    _notifySubmissionResultChanged(assignedSubmission);
   }
 
   void unassignGrader(String graderName) {
@@ -990,7 +988,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   @override
   Future<ProblemStatus> checkProblemStatus(ServiceCall call, ProblemStatusRequest request) async {
     final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
-    final problemMetadata = findProblemMetadataById(courseData, request.problemId);
+    final problemMetadata = courseData.findProblemMetadataById(request.problemId);
     final futureProblemStatus = _getProblemStatus(
       user: request.user,
       course: request.course,
@@ -1061,7 +1059,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
 
     final courseData = parent.courseManagementService.getCourseData(course.dataId);
-    final problemMetadata = findProblemMetadataById(courseData, problemId);
+    final problemMetadata = courseData.findProblemMetadataById(problemId);
 
     final futureProblemStatus = _getProblemStatus(
       user: user,

@@ -1,3 +1,5 @@
+// ignore_for_file: unused_local_variable
+
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -104,7 +106,7 @@ class AppState extends State<App> {
           loggedInUser: loggedUser, userIdOrNewOrMyself: arg);
     }
 
-    final RegExp submissionsWithNumber = RegExp(r'/submissions/([a-z_-]+)/([0-9]+)');
+    final RegExp submissionsWithNumber = RegExp(r'/submissions/([a-z_-]+)/(\d+)');
     if (submissionsWithNumber.hasMatch(fullPath)) {
       final match = submissionsWithNumber.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
@@ -301,7 +303,7 @@ class AppState extends State<App> {
       // no more parts in path - return course content with tree
       String selectedKey = '';
       if (section.id.isNotEmpty) {
-        selectedKey += sectionId + '/';
+        selectedKey += '$sectionId/';
       }
       if (lesson.id.isNotEmpty) {
         selectedKey += lesson.id;
@@ -322,8 +324,8 @@ class AppState extends State<App> {
     String problemOrReadingId = parts[0];
     parts = parts.sublist(1);
 
-    ProblemData problemData = findProblemById(courseData, problemOrReadingId);
-    ProblemMetadata problemMetadata = findProblemMetadataById(courseData, problemOrReadingId);
+    ProblemData problemData = courseData.findProblemById(problemOrReadingId);
+    ProblemMetadata problemMetadata = courseData.findProblemMetadataById(problemOrReadingId);
     TextReading textReading = TextReading();
     for (final entry in lesson.readings) {
       if (entry.id == problemOrReadingId) {
@@ -383,14 +385,14 @@ class AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) {
-    final onGenerateRoute = (RouteSettings settings) {
+    MaterialPageRoute onGenerateRoute(RouteSettings settings) {
       return MaterialPageRoute(
           settings: settings,
           builder: (BuildContext context) {
             return generateWidgetForRoute(context, settings);
           }
       );
-    };
+    }
     String initialRoute = widget.initialSession.initialRoute;
     if (initialRoute.isEmpty) {
       initialRoute = '/';

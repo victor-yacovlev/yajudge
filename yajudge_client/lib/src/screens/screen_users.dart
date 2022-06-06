@@ -16,10 +16,10 @@ class UsersScreenState extends BaseScreenState {
   List<User>? _usersToShow;
   List<bool>? _usersSelected;
   String? _loadError;
-  RegExp _rxNumbers = RegExp(r'[0..9]+');
+  final RegExp _rxNumbers = RegExp(r'\d+');
   late TextEditingController _searchField;
 
-  static final Map<Role, String> RoleNames = {
+  static final Map<Role, String> roleNames = {
     Role.ROLE_ANY: '[ любая роль ]',
     Role.ROLE_ADMINISTRATOR: 'Администратор',
     Role.ROLE_LECTURER: 'Лектор',
@@ -27,8 +27,8 @@ class UsersScreenState extends BaseScreenState {
     Role.ROLE_TEACHER_ASSISTANT: 'Учебный ассистент',
     Role.ROLE_STUDENT: 'Студент',
   };
-  static final Map<String, Role> NamedRoles =
-      RoleNames.map((key, value) => MapEntry(value, key));
+  static final Map<String, Role> namedRoles =
+      roleNames.map((key, value) => MapEntry(value, key));
   final String searchPlaceholderText = 'Имя или группа';
 
   UsersScreenState() : super(title: 'Управление пользователями') ;
@@ -76,17 +76,9 @@ class UsersScreenState extends BaseScreenState {
     _searchField = TextEditingController();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-
   void processSearch(String? search) {
     UsersFilter filter = UsersFilter()..role = Role.ROLE_ANY..user = User();
-    if (search == null) {
-      search = _searchField.text;
-    }
+    search ??= _searchField.text;
     if (_rxNumbers.hasMatch(search)) {
       filter.user.groupName = search.trim();
     } else {
@@ -135,9 +127,9 @@ class UsersScreenState extends BaseScreenState {
   }
 
   static String getUserFullName(User user) {
-    String result = user.lastName + ' ' + user.firstName;
+    String result = '${user.lastName} ${user.firstName}';
     if (user.midName.isNotEmpty) {
-      result += ' ' + user.midName;
+      result += ' ${user.midName}';
     }
     return result;
   }
@@ -164,7 +156,7 @@ class UsersScreenState extends BaseScreenState {
               cursor: SystemMouseCursors.click,
             )),
             TableCell(child: Text(groupText)),
-            TableCell(child: Text(RoleNames[user.defaultRole]!)),
+            TableCell(child: Text(roleNames[user.defaultRole]!)),
           ]
         );
         items.add(item);
@@ -173,7 +165,7 @@ class UsersScreenState extends BaseScreenState {
     if (_loadError != null) {
       return Text(_loadError!, style: TextStyle(color: Theme.of(context).errorColor));
     }
-    if (_usersToShow != null && _usersToShow!.length ==0) {
+    if (_usersToShow != null && _usersToShow!.isEmpty) {
       return Text('Ничего не найдено');
     }
     BorderSide borderSide = BorderSide(
@@ -288,13 +280,14 @@ class UsersScreenState extends BaseScreenState {
   }
 
   void _navigateToUser(int userId) {
-    Navigator.pushNamed(context, '/users/' + userId.toString()).then((_) => _reloadCurrentFilter());
+    Navigator.pushNamed(context, '/users/$userId').then((_) => _reloadCurrentFilter());
   }
 
   void _navigateToImportFromCSV() {
     Navigator.pushNamed(context, '/users/import_csv').then((_) => _reloadCurrentFilter());
   }
 
+  @override
   ScreenActions? buildPrimaryScreenActions(BuildContext context) {
     return ScreenActions(
         rootIcon: const Icon(Icons.add),
@@ -315,6 +308,7 @@ class UsersScreenState extends BaseScreenState {
     );
   }
 
+  @override
   ScreenActions? buildSecondaryScreenActions(BuildContext context) {
     if (_usersSelected!=null && _usersSelected!.any((element) => element)) {
       return ScreenActions(
