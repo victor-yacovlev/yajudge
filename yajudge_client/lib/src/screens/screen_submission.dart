@@ -665,7 +665,7 @@ class SubmissionScreenState extends BaseScreenState {
         )
       );
     }
-    if (hasUnsavedComments && hasComments) {
+    if (hasUnsavedComments && hasComments && reviewableStatus) {
       result.add(
           ScreenSubmitAction(
             title: status==SolutionStatus.CODE_REVIEW_REJECTED? 'Сохранить замечания' : 'Отклонить решение',
