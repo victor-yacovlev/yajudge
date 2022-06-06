@@ -111,6 +111,41 @@ message TestCase {
   File            directory_bundle            = 7;
 }
 
+enum ExecutableTarget {
+  AutodetectExecutable = 0;
+
+  // text scripts
+  BashScript = 1;
+  PythonScript = 2;
+
+  // ELF files
+  Native = 11;
+  NativeWithSanitizers = 12;
+  NativeWithValgrind = 13;
+  NativeWithSanitizersAndValgrind = 14;
+
+  // jre code
+  JavaClass = 21;
+  JavaJar = 22;
+
+  // QEMU disk images
+  QemuX86DiskImage = 31;
+  QemuArmDiskImage = 32;
+}
+
+enum BuildSystem {
+  AutodetectBuild = 0;
+  SkipBuild = 1;
+
+  PythonCheckers = 10;   // Python language
+  ClangToolchain = 20;   // C, C++, ASM
+  MakefileProject = 30;  // custom projects
+  CMakeProject = 40;     // custom projects
+  GoLangProject = 50;    // Go
+  JavaPlainProject = 60; // Java
+  JavaMavenProject = 61; // Java + pom.xml
+}
+
 message GradingOptions {
   GradingPlatform     platform_required     = 1; // to match corresponding grader client
   repeated string     extra_compile_options = 4;
@@ -127,7 +162,8 @@ message GradingOptions {
   repeated string     disable_sanitizers    = 15;
   File                tests_generator       = 16;
   File                coprocess             = 17;// supplementary program or script running the same unshare namespace
-
+  ExecutableTarget    executable_target     = 20;
+  BuildSystem         build_system          = 21;
   SecurityContext     security_context      = 30;
 }
 

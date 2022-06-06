@@ -686,7 +686,8 @@ class CourseLoader {
   }
 
   String problemPath(String problemId) {
-    return path.normalize(path.absolute('$separateProblemsRootPath/$problemId/'));
+    final problemRelativePath = problemId.replaceAll(':', '/');
+    return path.normalize(path.absolute('$separateProblemsRootPath/$problemRelativePath/'));
   }
 
   void updateCourseLastModified(io.File file) {
