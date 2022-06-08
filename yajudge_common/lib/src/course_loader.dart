@@ -332,6 +332,7 @@ class CourseLoader {
     int maxSubmissionFileSize = data['max_submission_file_size'] is int
         ? data['max_submission_file_size'] : _maxSubmissionFileSize;
     List<File> solutionFiles = [];
+    String solutionTemplateName = '';
     String solutionTemplateFileName = '';
     if (data['solution_files'] is YamlList) {
       YamlList yamlList = data['solution_files'];
@@ -341,13 +342,19 @@ class CourseLoader {
     }
     else {
       final problemDir = io.Directory(problemPath(problemId));
-      List<String> candidates = [];
+      final problemIdLastPart = problemId.split(':').last;
+      final problemIdAllParts = problemId.replaceAll(':', '-');
+      List<List<String>> candidates = [];
       for (final entry in problemDir.listSync(recursive: false, followLinks: true)) {
         final entryPath = entry.path;
         final baseName = path.basenameWithoutExtension(entryPath);
         final fileName = path.basename(entryPath);
-        if (baseName == problemId) {
-          candidates.add(fileName);
+        final fileSuffix = path.extension(fileName);
+        if (baseName == problemIdLastPart || baseName == problemIdAllParts) {
+          candidates.add([fileName, fileName]);
+        }
+        else if (baseName == 'template') {
+          candidates.add(['$problemIdAllParts$fileSuffix', fileName]);
         }
       }
       if (candidates.length > 1) {
@@ -356,21 +363,22 @@ class CourseLoader {
       else if (candidates.isEmpty) {
         throw Exception('no solution template file in $problemId. Set explicit solution_files entry in problem.yaml');
       }
-      solutionTemplateFileName = candidates.single;
-      solutionFiles.add(File(name: solutionTemplateFileName));
+      solutionTemplateName = candidates.single.first;
+      solutionTemplateFileName = candidates.single.last;
+      solutionFiles.add(File(name: solutionTemplateName));
     }
     FileSet publicFiles = FileSet();
     if (data['public_files'] is YamlList) {
       YamlList yamlList = data['public_files'];
       publicFiles = _loadFileSet(problemId, yamlList, true, false);
     }
-    else if (solutionTemplateFileName.isNotEmpty) {
+    else if (solutionTemplateName.isNotEmpty) {
       final solutionTemplateFile = io.File('${problemPath(problemId)}/$solutionTemplateFileName');
       final templateData = solutionTemplateFile.readAsBytesSync();
       final description = 'Шаблон решения';
       updateCourseLastModified(solutionTemplateFile);
       publicFiles = FileSet(files: [File(
-        name: solutionTemplateFileName,
+        name: solutionTemplateName,
         data: templateData,
         description: description,
       )]);
