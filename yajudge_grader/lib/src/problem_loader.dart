@@ -29,7 +29,7 @@ class ProblemLoader {
     final courseId = submission.course.dataId;
     final problemId = submission.problemId;
     String root = locationProperties.cacheDir;
-    final problemDir = io.Directory(path.absolute(root, courseId, problemId));
+    final problemDir = io.Directory(path.absolute(root, courseId, problemId.replaceAll(':', '/')));
     final problemTimeStampFile = io.File('${problemDir.path}/.timestamp');
     int timeStamp = 0;
     if (problemTimeStampFile.existsSync()) {

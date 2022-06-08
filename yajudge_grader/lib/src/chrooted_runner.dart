@@ -36,7 +36,7 @@ class ChrootedRunner extends AbstractRunner {
     log.info('using cache dir for course data ${locationProperties.cacheDir}');
     io.Directory(locationProperties.cacheDir).createSync(recursive: true);
     String problemCachePath = path.normalize(path.absolute(
-      '${locationProperties.cacheDir}/$courseId/$problemId'
+      '${locationProperties.cacheDir}/$courseId/${problemId.replaceAll(':', '/')}'
     ));
     problemDir = io.Directory(problemCachePath);
   }
@@ -129,7 +129,7 @@ class ChrootedRunner extends AbstractRunner {
   void createProblemTemporaryDirs() {
     // to build helpers
     overlayUpperDir = io.Directory(problemDir.path);
-    String base = path.absolute(locationProperties.workDir, courseId, problemId);
+    String base = path.absolute(locationProperties.workDir, courseId, problemId.replaceAll(':', '/'));
     overlayWorkDir = io.Directory('$base/workdir');
     overlayMergeDir = io.Directory('$base/mergedir');
     overlayWorkDir!.createSync(recursive: true);
