@@ -1,8 +1,0 @@
-title: Пример задачи Hello World на ассемблере x86-64
-
-arch: x86-64
-
-solution_files:
-  - simple-asm-x86-64-hello.S
-
-link_options: -nostdlib

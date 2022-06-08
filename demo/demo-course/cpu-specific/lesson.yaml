@@ -4,5 +4,5 @@ readings:
   - grader-config.md
 
 problems:
-  - simple-asm-aarch64-hello
-  - simple-asm-x86-64-hello
+  - asm-arm:syscalls:hello
+  - asm-x86:syscalls:hello

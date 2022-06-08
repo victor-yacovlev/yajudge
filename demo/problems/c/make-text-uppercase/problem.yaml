@@ -1,6 +1,6 @@
 title: Пример задачи с вводом и выводом
 
-solution_files: make-text-uppercase-c.c
+solution_files: make-text-uppercase.c
 
 checker: text
 checker_options: strict

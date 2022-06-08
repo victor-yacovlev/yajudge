@@ -6,10 +6,10 @@ readings:
 
 problems:
   # Задача на простой ввод-вывод
-  - make-text-uppercase-c
+  - c:make-text-uppercase
   # Задача с использованием аргументов командной строки
-  - print-command-line-arguments-c
+  - c:print-arguments
   # Задача в которой ответом является файл, а не вывод на стандартный поток
-  - create-hello-world-file-c
+  - c:create-file
   # Задача в которой ответом являются целые числа, а тесты генерируются рандомно
-  - make-integers-squared
+  - c:make-integers-squared

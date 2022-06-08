@@ -8,4 +8,6 @@ readings:
   - problems.md
 
 problems:
-  - hello-world-in-c-language
+  # Если задачи располагаются в подкаталогах,
+  # символ : является разделителем
+  - c:hello-world
