@@ -16,15 +16,15 @@ enum Role {
 
 message User {
   int64           id = 1;
-  optional string first_name = 2;
-  optional string last_name = 3;
-  optional string mid_name = 4;
-  optional string email = 5;
+  string first_name = 2;
+  string last_name = 3;
+  string mid_name = 4;
+  string email = 5;
   string          password = 6;
-  optional string group_name = 7;
+  string group_name = 7;
   Role            default_role= 8;
   bool            disabled = 9;
-  optional string login = 10;   // alternate way to log in instead of id and email
+  string login = 10;   // alternate way to log in instead of id and email
 }
 
 message Session {
