@@ -222,7 +222,7 @@ class SubmissionsListScreenState extends BaseScreenState {
       });
     }
     setState(() {
-      query = newQuery;
+      query = newQuery.deepCopy();
     });
     _sendListQuery(newQuery);
   }
@@ -375,7 +375,7 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _navigateToSubmission(Int64 submissionId, String problemId) {
     final routeBuilder = PageRouteBuilder(
-        settings: RouteSettings(name: '/submissions/${screen.courseUrlPrefix}/${submissionId}'),
+        settings: RouteSettings(name: '/submissions/${screen.courseUrlPrefix}/$submissionId'),
         pageBuilder: (context, animation, secondaryAnimation) {
           return SubmissionScreen(
             courseUrlPrefix: _course.urlPrefix,
@@ -390,6 +390,7 @@ class SubmissionsListScreenState extends BaseScreenState {
     Navigator.push(context, routeBuilder).then((_) {reload();});
   }
 
+  @override
   @protected
   Widget buildCentralWidget(BuildContext context) {
 
@@ -498,7 +499,7 @@ class SubmissionsListScreenState extends BaseScreenState {
           0: FixedColumnWidth(narrow? 35 : 50),
           1: FixedColumnWidth(narrow? 80 : (aboutNarrow? 100 : 180)),
           2: FlexColumnWidth(),
-          3: FixedColumnWidth(narrow? 150 : 180),
+          3: FixedColumnWidth(narrow? 180 : 230),
           4: FixedColumnWidth(narrow? 50 : 180),
         },
         children: [headerRow] + tableItems,

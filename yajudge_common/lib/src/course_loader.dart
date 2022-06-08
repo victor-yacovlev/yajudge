@@ -401,7 +401,7 @@ class CourseLoader {
       gradingOptions: gradingOptions,
       maxSubmissionsPerHour: maxSubmissionsPerHour,
       maxSubmissionFileSize: maxSubmissionFileSize,
-    );
+    ).deepCopy();
   }
 
   FileSet _loadFileSet(String problemId, YamlList yamlList, bool updateCourseCache, bool updateProblemCache) {
