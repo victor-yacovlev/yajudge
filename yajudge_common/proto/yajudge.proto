@@ -118,11 +118,12 @@ enum ExecutableTarget {
   BashScript = 1;
   PythonScript = 2;
 
-  // ELF files
-  Native = 11;
-  NativeWithSanitizers = 12;
-  NativeWithValgrind = 13;
-  NativeWithSanitizersAndValgrind = 14;
+  // native executables
+  Native = 10;
+  NativeWithSanitizers = 11;
+  NativeWithValgrind = 12;
+
+  NativeWithSanitizersAndValgrind = 13; // expands to two targets: sanitizers and valgrind
 
   // jre code
   JavaClass = 21;
@@ -143,13 +144,11 @@ enum BuildSystem {
   CMakeProject = 40;     // custom projects
   GoLangProject = 50;    // Go
   JavaPlainProject = 60; // Java
-  JavaMavenProject = 61; // Java + pom.xml
+  MavenProject = 61;     // maven using pom.xml
 }
 
 message GradingOptions {
   GradingPlatform     platform_required     = 1; // to match corresponding grader client
-  repeated string     extra_compile_options = 4;
-  repeated string     extra_link_options    = 5;
   GradingLimits       limits                = 6;
   repeated TestCase   test_cases            = 7;
   string              standard_checker      = 8; // named by ejudge checkers name
@@ -158,12 +157,12 @@ message GradingOptions {
   File                interactor            = 11;// interactor source file
   repeated CodeStyle  code_styles           = 12;// just copied from parent course for convince
   FileSet             extra_build_files     = 13;
-  bool                disable_valgrind      = 14;
-  repeated string     disable_sanitizers    = 15;
   File                tests_generator       = 16;
   File                coprocess             = 17;// supplementary program or script running the same unshare namespace
   ExecutableTarget    executable_target     = 20;
   BuildSystem         build_system          = 21;
+  map<string,string>  build_properties      = 22;
+  map<string,string>  target_properties     = 23;
   SecurityContext     security_context      = 30;
 }
 

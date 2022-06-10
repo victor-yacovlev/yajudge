@@ -11,10 +11,10 @@ import 'grader_service.dart';
 class WorkerRequest {
   final Submission submission;
   final GraderLocationProperties locationProperties;
-  final CompilersConfig compilersConfig;
   final SecurityContext defaultSecurityContext;
+  final DefaultBuildProperties defaultBuildProperties;
+  final DefaultRuntimeProperties defaultRuntimeProperties;
   final GradingLimits defaultLimits;
-  final GradingLimits? overrideLimits;
   late final String cgroupRoot;
   late final String logFilePath;
   late final SendPort sendPort;
@@ -22,10 +22,10 @@ class WorkerRequest {
   WorkerRequest({
     required this.submission,
     required this.locationProperties,
-    required this.compilersConfig,
     required this.defaultSecurityContext,
+    required this.defaultBuildProperties,
+    required this.defaultRuntimeProperties,
     required this.defaultLimits,
-    required this.overrideLimits,
   });
 }
 
@@ -88,9 +88,9 @@ class Worker {
       runner: runner,
       locationProperties: request.locationProperties,
       defaultLimits: request.defaultLimits,
-      defaultSecurityContext: request.defaultSecurityContext,
-      compilersConfig: request.compilersConfig,
-      overrideLimits: request.overrideLimits,
+      defaultSecurityContext: request.defaultSecurityContext, 
+      defaultBuildProperties: request.defaultBuildProperties,
+      defaultRuntimeProperties: request.defaultRuntimeProperties,
     );
     WorkerResponse response;
     try {

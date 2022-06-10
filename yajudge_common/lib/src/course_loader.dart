@@ -446,21 +446,11 @@ class CourseLoader {
     String interactorName = data['interactor'] is String? data['interactor'] : '';
     String coprocessName = data['coprocess'] is String? data['coprocess'] : '';
     String testsGeneratorName = data['tests_generator'] is String? data['tests_generator'] : '';
-    String compileOptions = data['compile_options'] is String? data['compile_options'] : '';
-    String linkOptions = data['link_options'] is String? data['link_options'] : '';
-    bool disableValgrind = data['disable_valgrind'] is bool? data['disable_valgrind'] : false;
-    List<String> disableSanitizers = [];
-    if (data['disable_sanitizers'] is YamlList) {
-      YamlList yamlList = data['disable_sanitizers'];
-      for (final entry in yamlList) {
-        String disabledSanitizerName = entry.toString();
-        disableSanitizers.add(disabledSanitizerName);
-      }
-    }
-    else if (data['disable_sanitizers'] is String) {
-      String line = data['disable_sanitizers'];
-      disableSanitizers = line.split(' ');
-    }
+    ExecutableTarget executableTarget = executableTargetFromString(data['target']);
+    BuildSystem buildSystem = buildSystemFromString(data['build']);
+    Map<String,String> buildProperties = propertiesFromYaml(data['build_properties']);
+    Map<String,String> targetProperties = propertiesFromYaml(data['target_properties']);
+
     File customChecker = File();
     if (customCheckerName.isNotEmpty) {
       final checkerFile = io.File('${problemPath(problemId)}/$customCheckerName');
@@ -512,13 +502,13 @@ class CourseLoader {
       codeStyles: codeStyles,
       extraBuildFiles: FileSet(files: publicFiles.files + privateFiles.files),
       testCases: testCases,
-      extraCompileOptions: compileOptions.split(' '),
-      extraLinkOptions: linkOptions.split(' '),
       limits: limits,
       securityContext: securityContext,
-      disableSanitizers: disableSanitizers,
-      disableValgrind: disableValgrind,
       testsGenerator: testsGenerator,
+      executableTarget: executableTarget,
+      targetProperties: targetProperties,
+      buildSystem: buildSystem,
+      buildProperties: buildProperties,
     );
   }
 

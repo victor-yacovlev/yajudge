@@ -83,21 +83,22 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     defaultLimits = GradingLimits();
   }
 
-  SecurityContext defaultSecurityContext;
-  if (config['default_security_context'] is YamlMap) {
-    YamlMap securityContextConf = config['default_security_context'];
-    defaultSecurityContext = securityContextFromYaml(securityContextConf);
-  }
-  else {
-    defaultSecurityContext = SecurityContext();
+  SecurityContext defaultSecurityContext = SecurityContext();
+  final defaultSecurityContextNode = config['default_security_context'];
+  if (defaultSecurityContextNode is YamlMap) {
+    defaultSecurityContext = securityContextFromYaml(defaultSecurityContextNode);
   }
 
-  CompilersConfig compilersConfig;
-  if (config['compilers'] is YamlMap) {
-    YamlMap compilersConf = config['compilers'];
-    compilersConfig = CompilersConfig.fromYaml(compilersConf);
-  } else {
-    compilersConfig = CompilersConfig.createDefault();
+  DefaultBuildProperties defaultBuildProperties = DefaultBuildProperties({});
+  final defaultBuildPropertiesNode = config['default_build_properties'];
+  if (defaultBuildPropertiesNode is YamlMap) {
+    defaultBuildProperties = DefaultBuildProperties.fromYaml(defaultBuildPropertiesNode);
+  }
+
+  DefaultRuntimeProperties defaultRuntimeProperties = DefaultRuntimeProperties({});
+  final defaultRuntimePropertiesNode = config['default_runtime_properties'];
+  if (defaultRuntimeProperties is YamlMap) {
+    defaultRuntimeProperties = DefaultRuntimeProperties.fromYaml(defaultRuntimePropertiesNode);
   }
 
   JobsConfig jobsConfig;
@@ -146,7 +147,8 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     jobsConfig: jobsConfig,
     defaultLimits: defaultLimits,
     defaultSecurityContext: defaultSecurityContext,
-    compilersConfig: compilersConfig,
+    defaultBuildProperties: defaultBuildProperties,
+    defaultRuntimeProperties: defaultRuntimeProperties,
     overrideLimits: overrideLimits,
     serviceProperties: serviceProperties,
     usePidFile: usePidFile,

@@ -56,8 +56,9 @@ class GraderService {
   final GradingLimits defaultLimits;
   final GradingLimits? overrideLimits;
   final SecurityContext defaultSecurityContext;
-  final CompilersConfig compilersConfig;
   final ServiceProperties serviceProperties;
+  final DefaultBuildProperties defaultBuildProperties;
+  final DefaultRuntimeProperties defaultRuntimeProperties;
   final bool usePidFile;
   final bool processLocalInboxOnly;
   int _idleWorkersCount = 0;
@@ -84,9 +85,10 @@ class GraderService {
     required this.serviceProperties,
     required this.usePidFile,
     required this.defaultLimits,
+    required this.defaultBuildProperties,
+    required this.defaultRuntimeProperties,
     this.overrideLimits,
     required this.defaultSecurityContext,
-    required this.compilersConfig,
     this.processLocalInboxOnly = false,
   }) {
     masterServer = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
@@ -252,7 +254,7 @@ class GraderService {
         final doneFile = io.File('${localDoneDir.path}/$name');
         final inboxData = inboxFile.readAsBytesSync();
         final localSubmission = LocalGraderSubmission.fromBuffer(inboxData);
-        final futureResult = processSubmission(localSubmission.submission, localSubmission.gradingLimits);
+        final futureResult = processSubmission(localSubmission.submission);
         futureResult.then((result) {
           doneFile.writeAsBytesSync(result.writeToBuffer());
           inboxFile.deleteSync();
@@ -358,7 +360,7 @@ class GraderService {
           log.info('processing local inbox submission $name');
           final inboxData = inboxFile.readAsBytesSync();
           final localSubmission = LocalGraderSubmission.fromBuffer(inboxData);
-          final submission = await processSubmission(localSubmission.submission, localSubmission.gradingLimits);
+          final submission = await processSubmission(localSubmission.submission);
           doneFile.writeAsBytesSync(submission.writeToBuffer());
           inboxFile.deleteSync();
           await pushGraderStatus();
@@ -425,7 +427,7 @@ class GraderService {
     }
   }
 
-  Future<Submission> processSubmission(Submission submission, [GradingLimits? overrideLimits]) async {
+  Future<Submission> processSubmission(Submission submission) async {
     final courseId = submission.course.dataId;
     final problemId = submission.problemId;
 
@@ -436,8 +438,8 @@ class GraderService {
       coursesService: coursesService,
       runner: createRunner(submission, locationProperties),
       locationProperties: locationProperties,
-      compilersConfig: compilersConfig,
       defaultSecurityContext: defaultSecurityContext,
+      buildProperties: defaultBuildProperties,
     );
 
     await problemLoader.loadProblemData();
@@ -450,10 +452,10 @@ class GraderService {
     final job = WorkerRequest(
       submission: submission,
       locationProperties: locationProperties,
-      compilersConfig: compilersConfig,
       defaultSecurityContext: defaultSecurityContext,
+      defaultBuildProperties: defaultBuildProperties,
+      defaultRuntimeProperties: defaultRuntimeProperties,
       defaultLimits: defaultLimits,
-      overrideLimits: overrideLimits,
     );
 
     final worker = Worker(submission);

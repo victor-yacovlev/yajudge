@@ -2,6 +2,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:yaml/yaml.dart';
 import './generated/yajudge.pb.dart';
+import 'dart:io' as io;
 
 class CourseDataCacheItem {
   CourseData? data;
@@ -153,6 +154,175 @@ ProblemStatus findProblemStatus(CourseStatus course, String problemId) {
 
 bool submissionsCountLimitIsValid(SubmissionsCountLimit countLimit) {
   return countLimit.attemptsLeft!=0 || countLimit.nextTimeReset!=0;
+}
+
+ExecutableTarget executableTargetFromString(dynamic conf) {
+  String c = '';
+  if (conf is String) {
+    c = conf.toLowerCase().replaceAll('-', '_');
+  }
+  switch (c) {
+    case 'bash_script':
+    case 'bash':
+    case 'shell':
+      return ExecutableTarget.BashScript;
+    case 'python_script':
+    case 'python':
+      return ExecutableTarget.PythonScript;
+    case 'native':
+    case 'unchecked':
+      return ExecutableTarget.Native;
+    case 'valgrind':
+      return ExecutableTarget.NativeWithValgrind;
+    case 'sanitizers':
+    case 'sanitized':
+      return ExecutableTarget.NativeWithSanitizers;
+    case 'checked':
+      return ExecutableTarget.NativeWithSanitizersAndValgrind;
+    case 'java':
+    case 'jre':
+    case 'java_class':
+    case 'class':
+      return ExecutableTarget.JavaClass;
+    case 'java_jar':
+    case 'jar':
+      return ExecutableTarget.JavaJar;
+    case 'qemu_image_x86':
+    case 'qemu_x86':
+      return ExecutableTarget.QemuX86DiskImage;
+    case 'qemu_image_arm':
+    case 'qemu_arm':
+      return ExecutableTarget.QemuArmDiskImage;
+    default:
+      return ExecutableTarget.AutodetectExecutable;
+  }
+}
+
+String executableTargetToString(ExecutableTarget target) {
+  switch (target) {
+    case ExecutableTarget.AutodetectExecutable:
+      return 'auto';
+    case ExecutableTarget.BashScript:
+      return 'bash';
+    case ExecutableTarget.JavaClass:
+      return 'java';
+    case ExecutableTarget.JavaJar:
+      return 'java-jar';
+    case ExecutableTarget.Native:
+      return 'native';
+    case ExecutableTarget.NativeWithSanitizers:
+      return 'sanitizers';
+    case ExecutableTarget.NativeWithValgrind:
+      return 'valgrind';
+    case ExecutableTarget.NativeWithSanitizersAndValgrind:
+      return 'checked';
+    case ExecutableTarget.PythonScript:
+      return 'python';
+    case ExecutableTarget.QemuArmDiskImage:
+      return 'qemu-arm';
+    case ExecutableTarget.QemuX86DiskImage:
+      return 'qemu-x86';
+    default:
+      return 'auto';
+  }
+}
+
+enum ProgrammingLanguage {
+  unknown,
+  c,
+  cxx,
+  java,
+  python,
+  bash,
+  go,
+  gnuAsm,
+}
+
+BuildSystem buildSystemFromString(dynamic conf) {
+  String c = '';
+  if (conf is String) {
+    c = conf.toLowerCase().replaceAll('-', '_');
+  }
+  switch (c) {
+    case 'none':
+    case 'no':
+    case 'skip':
+      return BuildSystem.SkipBuild;
+    case 'c':
+    case 'cpp':
+    case 'cxx':
+    case 'c++':
+    case 'gcc':
+    case 'clang':
+      return BuildSystem.ClangToolchain;
+    case 'make':
+    case 'makefile':
+      return BuildSystem.MakefileProject;
+    case 'go':
+    case 'golang':
+      return BuildSystem.GoLangProject;
+    case 'cmake':
+    case 'cmakelists':
+    case 'cmakelists.txt':
+      return BuildSystem.CMakeProject;
+    case 'java':
+    case 'javac':
+      return BuildSystem.JavaPlainProject;
+    case 'maven':
+    case 'mvn':
+    case 'pom':
+    case 'pom.xml':
+      return BuildSystem.MavenProject;
+    default:
+      return BuildSystem.AutodetectBuild;
+  }
+}
+
+String buildSystemToString(BuildSystem buildSystem) {
+  switch (buildSystem) {
+    case BuildSystem.AutodetectBuild:
+      return 'auto';
+    case BuildSystem.CMakeProject:
+      return 'cmake';
+    case BuildSystem.ClangToolchain:
+      return 'clang';
+    case BuildSystem.GoLangProject:
+      return 'go';
+    case BuildSystem.JavaPlainProject:
+      return 'javac';
+    case BuildSystem.MakefileProject:
+      return 'make';
+    case BuildSystem.MavenProject:
+      return 'mvn';
+    case BuildSystem.PythonCheckers:
+      return 'pylint';
+    case BuildSystem.SkipBuild:
+      return 'none';
+    default:
+      return 'auto';
+  }
+}
+
+Map<String,String> propertiesFromYaml(dynamic conf) {
+  Map<String,String> result = {};
+  if (conf is YamlMap) {
+    final props = conf;
+    for (final property in props.entries) {
+      final propertyName = property.key.toString();
+      final propertyValue = property.value.toString();
+      result[propertyName] = propertyValue;
+    }
+  }
+  return result;
+}
+
+String propertiesToYaml(Map<String,String> props) {
+  String result = '';
+  for (final key in props.keys) {
+    final value = props[key];
+    result += '$key: \'$value\'\n';
+  }
+  return result;
 }
 
 extension GradingLimitsExtension on GradingLimits {
@@ -507,4 +677,229 @@ extension CodeReviewExtension on CodeReview {
     }
     return true;
   }
+}
+
+extension GradingOptionsExtension on GradingOptions {
+
+  static const buildName = '.build';
+  static const buildPropertiesName = '.build_properties';
+  static const targetName = '.target';
+  static const targetPropertiesName = '.target_properties';
+  static const styleNamePrefix = '.style_';
+  static const checkerName = '.checker';
+  static const interactorName = '.interactor';
+  static const coprocessName = '.coprocess';
+  static const testsGeneratorName = '.tests_generator';
+  static const limitsName = '.limits';
+  static const securityContextName = '.security_context';
+  static const testsCountName = '.tests_count';
+
+
+  void saveToPlainFiles(io.Directory targetDirectory) {
+    final dirPath = targetDirectory.path;
+    _saveBuild(io.File('$dirPath/$buildName'));
+    _saveBuildProperties(io.File('$dirPath/$buildPropertiesName'));
+    _saveTarget(io.File('$dirPath/$targetName'));
+    _saveTargetProperties(io.File('$dirPath/$targetName'));
+    _saveCodeStyles(targetDirectory);
+    _saveChecker(targetDirectory);
+    _saveInteractor(targetDirectory);
+    _saveCoprocess(targetDirectory);
+    _saveTestsGenerator(targetDirectory);
+    _saveLimits(io.File('$dirPath/$limitsName'));
+    _saveSecurityContext(io.File('$dirPath/$securityContextName'));
+  }
+
+  static GradingOptions loadFromPlainFiles(io.Directory sourceDirectory) {
+    GradingOptions result = GradingOptions().deepCopy();
+    final dirPath = sourceDirectory.path;
+    result._loadBuild(io.File('$dirPath/$buildName'));
+    result._loadBuildProperties(io.File('$dirPath/$buildPropertiesName'));
+    result._loadTarget(io.File('$dirPath/$targetName'));
+    result._loadTargetProperties(io.File('$dirPath/$targetPropertiesName'));
+    result._loadCodeStyles(sourceDirectory);
+    result._loadChecker(sourceDirectory);
+    result._loadInteractor(sourceDirectory);
+    result._loadCoprocess(sourceDirectory);
+    result._loadTestsGenerator(sourceDirectory);
+    result._loadLimits(io.File('$dirPath/$limitsName'));
+    result._loadSecurityContext(io.File('$dirPath/$securityContextName'));
+    return result;
+  }
+
+  _saveBuild(io.File file) => file.writeAsStringSync(buildSystemToString(buildSystem));
+  _loadBuild(io.File file) {
+    buildSystem = buildSystemFromString(
+        file.existsSync() ? file.readAsStringSync().trim() : null
+    );
+  }
+  _saveBuildProperties(io.File file) => file.writeAsStringSync(propertiesToYaml(buildProperties));
+  _loadBuildProperties(io.File file) {
+    buildProperties.addAll(propertiesFromYaml(
+        file.existsSync() ? loadYaml(file.readAsStringSync()) : null
+    ));
+  }
+  _saveTarget(io.File file) => file.writeAsStringSync(executableTargetToString(executableTarget));
+  _loadTarget(io.File file) {
+    executableTarget = executableTargetFromString(
+      file.existsSync() ? file.readAsStringSync().trim() : null
+    );
+  }
+  _saveTargetProperties(io.File file) => file.writeAsStringSync(propertiesToYaml(targetProperties));
+  _loadTargetProperties(io.File file) {
+    targetProperties.addAll(propertiesFromYaml(
+        file.existsSync() ? loadYaml(file.readAsStringSync()) : null
+    ));
+  }
+  _saveCodeStyles(io.Directory targetDirectory) {
+    for (final codeStyle in codeStyles) {
+      final styleFile = codeStyle.styleFile;
+      final codeStyleFileName = styleFile.name;
+      final suffix = codeStyle.sourceFileSuffix.replaceAll('.', '');
+      io.File('${targetDirectory.path}/$codeStyleFileName').writeAsBytesSync(styleFile.data);
+      io.File('${targetDirectory.path}/$styleNamePrefix$suffix').writeAsStringSync(styleFile.name);
+    }
+  }
+  _loadCodeStyles(io.Directory sourceDirectory) {
+    sourceDirectory.list().forEach((final entity) {
+      if (entity.path.startsWith(styleNamePrefix)) {
+        final suffix = entity.path.substring(styleNamePrefix.length);
+        final codeStyleFileName = io.File('${sourceDirectory.path}/${entity.path}')
+            .readAsStringSync().trim();
+        final codeStyleData = io.File('${sourceDirectory.path}/$codeStyleFileName}')
+            .readAsBytesSync().toList();
+        codeStyles.add(CodeStyle(
+          sourceFileSuffix: suffix,
+          styleFile: File(name: codeStyleFileName, data: codeStyleData),
+        ));
+      }
+    });
+  }
+  _saveChecker(io.Directory targetDirectory) {
+    final checkerOpts = standardCheckerOpts;
+    if (customChecker.name.isNotEmpty) {
+      final checkerFileName = customChecker.name;
+      io.File('${targetDirectory.path}/$checkerFileName')
+          .writeAsBytesSync(customChecker.data);
+      io.File('${targetDirectory.path}/$checkerName')
+          .writeAsStringSync('$checkerFileName\n$checkerOpts\n');
+    }
+    else {
+      final standardCheckerName = standardChecker;
+      io.File('${targetDirectory.path}/$checkerName')
+          .writeAsStringSync('=$standardCheckerName\n$checkerOpts\n');
+    }
+  }
+  _loadChecker(io.Directory sourceDirectory) {
+    final checkerLines = io.File('${sourceDirectory.path}/$checkerName')
+        .readAsLinesSync();
+    checkerLines.removeWhere((element) => element.isEmpty);
+    final checkerFileOrStandardName = checkerLines.first.trim();
+    if (checkerFileOrStandardName.startsWith('=')) {
+      standardChecker = checkerFileOrStandardName.substring(1);
+    }
+    else {
+      final checkerData = io.File('${sourceDirectory.path}/$checkerFileOrStandardName')
+          .readAsBytesSync().toList();
+      customChecker = File(name: checkerFileOrStandardName, data: checkerData);
+    }
+    final checkerOptions = checkerLines.length > 1? checkerLines[1].split(' ') : [];
+    standardCheckerOpts = checkerOptions.join(' ');
+  }
+  _saveInteractor(io.Directory targetDirectory) {
+    if (interactor.name.isNotEmpty) {
+      io.File('${targetDirectory.path}/$interactorName').writeAsStringSync(interactor.name);
+      io.File('${targetDirectory.path}/${interactor.name}').writeAsBytesSync(interactor.data);
+    }
+  }
+  _loadInteractor(io.Directory sourceDirectory) {
+    final interactorFile = io.File('${sourceDirectory.path}/$interactorName');
+    if (interactorFile.existsSync()) {
+      final interactorFileName = interactorFile.readAsStringSync().trim();
+      final interactorData = io.File('${sourceDirectory.path}/$interactorFileName').readAsBytesSync();
+      interactor = File(name: interactorFileName, data: interactorData);
+    }
+  }
+  _saveCoprocess(io.Directory targetDirectory) {
+    if (coprocess.name.isNotEmpty) {
+      io.File('${targetDirectory.path}/$coprocessName').writeAsStringSync(coprocess.name);
+      io.File('${targetDirectory.path}/${coprocess.name}').writeAsBytesSync(coprocess.data);
+    }
+  }
+  _loadCoprocess(io.Directory sourceDirectory) {
+    final coprocessFile = io.File('${sourceDirectory.path}/$coprocessName');
+    if (coprocessFile.existsSync()) {
+      final coprocessFileName = coprocessFile.readAsStringSync().trim();
+      final coprocessData = io.File('${sourceDirectory.path}/$coprocessFileName').readAsBytesSync();
+      coprocess = File(name: coprocessFileName, data: coprocessData);
+    }
+  }
+  _saveTestsGenerator(io.Directory targetDirectory) {
+    if (testsGenerator.name.isNotEmpty) {
+      io.File('${targetDirectory.path}/$testsGeneratorName').writeAsStringSync(testsGenerator.name);
+      io.File('${targetDirectory.path}/${testsGenerator.name}').writeAsBytesSync(testsGenerator.data);
+    }
+  }
+  _loadTestsGenerator(io.Directory sourceDirectory) {
+    final testsGeneratorFile = io.File('${sourceDirectory.path}/$testsGeneratorName');
+    if (testsGeneratorFile.existsSync()) {
+      final testsGeneratorFileName = testsGeneratorFile.readAsStringSync().trim();
+      final testsGeneratorData = io.File('${sourceDirectory.path}/$testsGeneratorFileName').readAsBytesSync();
+      testsGenerator = File(name: testsGeneratorFileName, data: testsGeneratorData);
+    }
+  }
+  _saveLimits(io.File file) => file.writeAsStringSync(limits.toYamlString());
+  _loadLimits(io.File file) {
+    GradingLimitsExtension.fromYaml(loadYaml(file.readAsStringSync()));
+  }
+  _saveSecurityContext(io.File file) =>
+      file.writeAsStringSync(securityContextToYamlString(securityContext));
+  _loadSecurityContext(io.File file) {
+    securityContext = securityContextFromYaml(
+      loadYaml(file.readAsStringSync())
+    );
+  }
+  saveTests(io.Directory targetDirectory) {
+    final testsDir = targetDirectory.path;
+    final gzip = io.gzip;
+    int testNumber = 1;
+    int testsCount = 0;
+    for (final testCase in testCases) {
+      final stdin = testCase.stdinData;
+      final stdout = testCase.stdoutReference;
+      final stderr = testCase.stderrReference;
+      final bundle = testCase.directoryBundle;
+      final args = testCase.commandLineArguments;
+      if (stdin.name.isNotEmpty) {
+        io.File('$testsDir/${stdin.name}').writeAsBytesSync(
+            gzip.decode(stdin.data));
+      }
+      if (stdout.name.isNotEmpty) {
+        io.File('$testsDir/${stdout.name}').writeAsBytesSync(
+            gzip.decode(stdout.data));
+      }
+      if (stderr.name.isNotEmpty) {
+        io.File('$testsDir/${stderr.name}').writeAsBytesSync(
+            gzip.decode(stderr.data));
+      }
+      if (bundle.name.isNotEmpty) {
+        io.File('$testsDir/${bundle.name}').writeAsBytesSync(bundle.data);
+      }
+      if (args.isNotEmpty) {
+        String testBaseName = _testNumberToString(testNumber);
+        io.File('$testsDir/$testBaseName.args').writeAsStringSync(args);
+      }
+      testNumber ++;
+      testsCount ++;
+    }
+    io.File("$testsDir/.tests_count").writeAsStringSync('$testsCount\n');
+  }
+  static String _testNumberToString(int number) {
+    String result = '$number';
+    while (result.length < 3) {
+      result = '0$result';
+    }
+    return result;
+  }
+
 }

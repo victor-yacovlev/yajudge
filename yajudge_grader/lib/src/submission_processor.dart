@@ -3,17 +3,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
-import 'package:posix/posix.dart' as posix;
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'assets_loader.dart';
+import 'builders.dart';
 import 'checkers.dart';
 import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
 import 'package:yaml/yaml.dart';
 
 import 'interactors.dart';
+import 'runtimes.dart';
 
 class SubmissionProcessor {
   Submission submission;
@@ -21,10 +23,12 @@ class SubmissionProcessor {
   final Logger log = Logger('SubmissionProcessor');
   final GraderLocationProperties locationProperties;
   final GradingLimits defaultLimits;
-  final GradingLimits? overrideLimits;
+  final DefaultBuildProperties defaultBuildProperties;
+  final DefaultRuntimeProperties defaultRuntimeProperties;
   final SecurityContext defaultSecurityContext;
-  final CompilersConfig compilersConfig;
-  final InteractorFactory interactorFactory;
+  late final InteractorFactory interactorFactory;
+  late final BuilderFactory builderFactory;
+  late final RuntimeFactory runtimeFactory;
 
   String plainBuildTarget = '';
   String sanitizersBuildTarget = '';
@@ -37,26 +41,113 @@ class SubmissionProcessor {
     required this.runner,
     required this.locationProperties,
     required this.defaultLimits,
-    this.overrideLimits,
+    required this.defaultBuildProperties,
+    required this.defaultRuntimeProperties,
     required this.defaultSecurityContext,
-    required this.compilersConfig,
-  }): interactorFactory = InteractorFactory(locationProperties: locationProperties);
+  }) {
+    interactorFactory = InteractorFactory(
+        locationProperties: locationProperties
+    );
+    builderFactory = BuilderFactory(
+        defaultBuildProperties, runner
+    );
+    runtimeFactory = RuntimeFactory(
+        defaultRuntimeProperties: defaultRuntimeProperties,
+        runner: runner,
+        interactorFactory: interactorFactory
+    );
+  }
 
+  Future<void> _processSubmissionGuarded() async {
+    runner.createDirectoryForSubmission(submission);
+
+    final gradingOptions = GradingOptionsExtension.loadFromPlainFiles(
+      submissionOptionsDirectory
+    );
+
+    final builder = builderFactory.createBuilder(submission, gradingOptions);
+    assert (builder.canBuild(submission));
+
+    if (builder.canCheckCodeStyle(submission)) {
+      final checkStyleResult = await builder.checkStyle(
+        submission: submission,
+        buildDirRelativePath: '/build',
+      );
+      final failedFiles = checkStyleResult.where((element) => !element.acceptable);
+      if (failedFiles.isNotEmpty) {
+        String errorMessage = '';
+        for (final checkResult in failedFiles) {
+          errorMessage += '${checkResult.fileName}:\n${checkResult.message}\n\n';
+        }
+        errorMessage = errorMessage.trim();
+        submission.styleErrorLog = errorMessage;
+        submission.status = SolutionStatus.STYLE_CHECK_ERROR;
+        return;
+      }
+    }
+
+    final extraBuildProperties = TargetProperties(
+        properties: gradingOptions.buildProperties
+    );
+    final executableTargetToBuild = gradingOptions.executableTarget;
+
+    Iterable<BuildArtifact> buildArtifacts = [];
+
+    try {
+      buildArtifacts = await builder.build(
+        submission: submission,
+        buildDirRelativePath: '/build',
+        extraBuildProperties: extraBuildProperties,
+        target: executableTargetToBuild,
+      );
+    }
+    catch (error) {
+      if (error is BuildError) {
+        submission.buildErrorLog = error.buildMessage;
+        submission.status = SolutionStatus.COMPILATION_ERROR;
+        return;
+      }
+      else {
+        rethrow;
+      }
+    }
+
+    if (buildArtifacts.isEmpty) {
+      throw Exception('Nothing to run in this submission');
+    }
+
+    await processSolutionArtifacts(buildArtifacts);
+    bool hasRuntimeError = submission.testResults.any((e) => e.status==SolutionStatus.RUNTIME_ERROR);
+    bool hasValgrindError = submission.testResults.any((e) => e.status==SolutionStatus.VALGRIND_ERRORS);
+    bool hasTimeLimit = submission.testResults.any((e) => e.status==SolutionStatus.TIME_LIMIT);
+    bool hasWrongAnswer = submission.testResults.any((e) => e.status==SolutionStatus.WRONG_ANSWER);
+    if (hasRuntimeError) {
+      submission.status = SolutionStatus.RUNTIME_ERROR;
+    }
+    else if (hasValgrindError) {
+      submission.status = SolutionStatus.VALGRIND_ERRORS;
+    }
+    else if (hasTimeLimit) {
+      submission.status = SolutionStatus.TIME_LIMIT;
+    }
+    else if (hasWrongAnswer) {
+      submission.status = SolutionStatus.WRONG_ANSWER;
+    }
+    else {
+      submission.status = SolutionStatus.OK;
+    }
+  }
 
   Future<void> processSubmission() async {
+    submission = submission.deepCopy();
     try {
       log.fine('started processing ${submission.id}');
-      runner.createDirectoryForSubmission(submission);
-      if (!await checkCodeStyles()) {
-        return;
-      }
-      if (!await buildSolution()) {
-        return;
-      }
-      await runTests();
+      _processSubmissionGuarded();
       log.fine('submission ${submission.id} done with status ${submission.status.value} (${submission.status.name})');
-    } catch (error) {
-      log.severe(error);
+    } catch (error, stackTrace) {
+      log.severe('submission ${submission.id} failed: $error');
+      submission.status = SolutionStatus.CHECK_FAILED;
+      submission.buildErrorLog = '$error\n$stackTrace';
     } finally {
       runner.releaseDirectoryForSubmission(submission);
     }
@@ -157,322 +248,6 @@ class SubmissionProcessor {
     return '';
   }
 
-  Future<bool> checkCodeStyles() async {
-    final solutionFiles = solutionFileNames();
-    for (final fileName in solutionFiles) {
-      String fileSuffix = path.extension(fileName);
-      String styleFile = styleFileName(fileSuffix);
-      if (styleFile == '.clang-format') {
-        // Run clang-format to check
-        final clangProcess = await runner.start(
-          submission,
-          ['clang-format', '-style=file', fileName],
-          workingDirectory: '/build',
-        );
-        bool clangFormatOk = await clangProcess.ok;
-        if (!clangFormatOk) {
-          String message = await clangProcess.outputAsString;
-          log.severe('clang-format failed: $message');
-        }
-
-        String submissionPath = runner.submissionPrivateDirectory(submission);
-        String sourcePath = path.normalize('$submissionPath/build/$fileName');
-        String formattedPath = '$sourcePath.formatted';
-        final formattedFile = io.File(formattedPath);
-        formattedFile.writeAsStringSync(await clangProcess.outputAsString);
-
-        final diffProcess = await runner.start(
-          submission,
-          ['diff', fileName, '$fileName.formatted'],
-          workingDirectory: '/build',
-        );
-        bool diffOk = await diffProcess.ok;
-        String diffOut = await diffProcess.outputAsString;
-        if (!diffOk) {
-          submission = submission.copyWith((s) {
-            s.styleErrorLog = diffOut;
-            s.status = SolutionStatus.STYLE_CHECK_ERROR;
-          });
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  List<String> getSanitizersList() {
-    if (disableValgrindAndSanitizers) {
-      return [];
-    }
-    List<String> sanitizers = List.from(compilersConfig.enableSanitizers);
-    List<String> disabledSanitizers = disableProblemSanitizers();
-    for (String sanitizer in disabledSanitizers) {
-      sanitizers.remove(sanitizer);
-    }
-    return sanitizers;
-  }
-
-  Future<bool> buildSolution() async {
-    bool hasCMakeLists = false;
-    bool hasMakefile = false;
-    bool hasGoFiles = false;
-    for (final file in submission.solutionFiles.files) {
-      if (file.name.toLowerCase() == 'makefile') {
-        hasMakefile = true;
-      }
-      if (file.name.toLowerCase() == 'cmakelists.txt') {
-        hasCMakeLists = true;
-      }
-      if (file.name.toLowerCase().endsWith('.go')) {
-        hasGoFiles = true;
-      }
-    }
-    if (hasCMakeLists) {
-      return buildCMakeProject();
-    } else if (hasMakefile) {
-      return buildMakeProject();
-    } else if (hasGoFiles) {
-      return buildGoProject();
-    } else {
-      bool plainOk = await buildProjectFromFiles([]);
-      bool sanitizersOk = true;
-      if (getSanitizersList().isNotEmpty) {
-        final buildOptions = compileOptions() + linkOptions();
-        if (!buildOptions.contains('-nostdlib')) {
-          sanitizersOk = await buildProjectFromFiles(getSanitizersList());
-        }
-      }
-      return plainOk && sanitizersOk;
-    }
-  }
-
-  Future<bool> buildCMakeProject() {
-    throw UnimplementedError('CMake project not implemented yet');
-  }
-
-  Future<bool> buildMakeProject() async {
-    final buildDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/build');
-    DateTime beforeMake = DateTime.now();
-    io.sleep(Duration(milliseconds: 250));
-    final makeProcess = await runner.start(
-      submission,
-      ['make'],
-      workingDirectory: '/build',
-    );
-    bool makeOk = await makeProcess.ok;
-    if (!makeOk) {
-      String message = await makeProcess.outputAsString;
-      log.fine('cant build Makefile project from ${submission.id}:\n$message');
-      io.File('${buildDir.path}/make.log').writeAsStringSync(message);
-      submission = submission.copyWith((changed) {
-        changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrorLog = message;
-      });
-      return false;
-    } else {
-      log.fine('successfully compiled Makefile project from ${submission.id}');
-    }
-    final entriesAfterMake = buildDir.listSync(recursive: true);
-    List<String> newExecutables = [];
-    for (final entry in entriesAfterMake) {
-      String entryPath = entry.path;
-      DateTime modified = entry.statSync().modified;
-      if (modified.millisecondsSinceEpoch <= beforeMake.millisecondsSinceEpoch) {
-        continue;
-      }
-      if (0 == posix.access(entryPath, posix.X_OK)) {
-        entryPath = entryPath.substring(buildDir.path.length+1);
-        newExecutables.add(entryPath);
-      }
-    }
-    if (newExecutables.isEmpty) {
-      String message = 'no executables created by make in Makefile project from ${submission.id}';
-      log.fine(message);
-      io.File('${buildDir.path}/make.log').writeAsStringSync(message);
-      submission = submission.copyWith((changed) {
-        changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrorLog = message;
-      });
-      return false;
-    }
-    if (newExecutables.length > 1) {
-      String message = 'several executables created by make in Makefile project from ${submission.id}: $newExecutables}';
-      log.fine(message);
-      io.File('${buildDir.path}/make.log').writeAsStringSync(message);
-      submission = submission.copyWith((changed) {
-        changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrorLog = message;
-      });
-      return false;
-    }
-    plainBuildTarget = '/build/${newExecutables.first}';
-    disableValgrindAndSanitizers = true;
-    return true;
-  }
-
-  Future<bool> buildGoProject() {
-    throw UnimplementedError('golang project not implemented yet');
-  }
-
-  GradingLimits getLimits(bool withValgrindAjustment) {
-    GradingLimits limits = getLimitsForProblem();
-    if (withValgrindAjustment) {
-      return compilersConfig.applyValgrindToGradingLimits(limits);
-    }
-    else {
-      return limits;
-    }
-  }
-
-  Future<bool> buildProjectFromFiles(List<String> sanitizersToUse) async {
-    bool hasCFiles = false;
-    bool hasGnuAsmFiles = false;
-    bool hasCXXFiles = false;
-    List<String> scriptFiles = [];
-    for (final file in submission.solutionFiles.files) {
-      if (file.name.endsWith('.S') || file.name.endsWith('.s')) {
-        hasGnuAsmFiles = true;
-      }
-      if (file.name.endsWith('.c')) {
-        hasCFiles = true;
-      }
-      if (file.name.endsWith('.cxx') ||
-          file.name.endsWith('.cc') ||
-          file.name.endsWith('.cpp')) {
-        hasCXXFiles = true;
-      }
-      if (file.name.endsWith('.sh') || file.name.endsWith('.py')) {
-        scriptFiles.add('/build/${file.name}');
-      }
-    }
-    String compiler = '';
-    List<String> compilerBaseOptions = [];
-    List<String> sanitizerOptions = [];
-    for (String sanitizer in sanitizersToUse) {
-      sanitizerOptions.add('-fsanitize=$sanitizer');
-    }
-    if (sanitizersToUse.isNotEmpty) {
-      sanitizerOptions.add('-fno-sanitize-recover=all');
-    }
-    String objectSuffix = sanitizerOptions.isNotEmpty? '.san.o' : '.o';
-    String targetName = sanitizerOptions.isNotEmpty? 'solution-san' : 'solution';
-    if (hasCXXFiles) {
-      compiler = compilersConfig.cxxCompiler;
-      compilerBaseOptions = compilersConfig.cBaseOptions;
-    } else if (hasCFiles || hasGnuAsmFiles) {
-      compiler = compilersConfig.cCompiler;
-      compilerBaseOptions = compilersConfig.cxxBaseOptions;
-    }
-    if (compiler.isEmpty && scriptFiles.isEmpty) {
-      throw UnimplementedError('dont know how to build files out of ASM/C/C++');
-    }
-    if (compiler.isEmpty && scriptFiles.isNotEmpty) {
-      if (scriptFiles.length > 1) {
-        throw Exception('several script files present, dont know which to run');
-      }
-      String scriptName = scriptFiles.first;
-      final scriptFile = io.File(
-          path.normalize(path.absolute('${runner.submissionPrivateDirectory(submission)}/$scriptName'
-          )));
-      final lines = scriptFile.readAsLinesSync();
-      String interpreter = '';
-      if (lines.isNotEmpty) {
-        String firstLine = lines.first;
-        if (firstLine.startsWith('#!')) {
-          interpreter = firstLine.substring(2);
-        }
-      }
-      if (interpreter.isEmpty) {
-        if (scriptName.endsWith('.sh')) {
-          interpreter = '/usr/bin/env bash';
-        }
-        if (scriptName.endsWith('.py')) {
-          interpreter = '/usr/bin/env python3';
-        }
-      }
-      if (interpreter.isEmpty) {
-        throw UnimplementedError('dont know how to run $scriptName');
-      }
-      plainBuildTarget = path.normalize(path.absolute('${runner.submissionRootPrefix(submission)}/$scriptName'));
-      targetInterpreter = interpreter;
-      runTargetIsScript = true;
-      return true;
-    }
-    List<String> objectFiles = [];
-    final buildDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/build');
-    for (final sourceFile in submission.solutionFiles.files) {
-      String suffix = path.extension(sourceFile.name);
-      if (!['.S', '.s', '.c', '.cpp', '.cxx', '.cc'].contains(suffix)) continue;
-      String objectFileName = sourceFile.name + objectSuffix;
-      final compilerArguments =
-              ['-c'] +
-              compilerBaseOptions +
-              sanitizerOptions +
-              ['-o', objectFileName] +
-              compileOptions() +
-              [sourceFile.name];
-      final compilerCommand = [compiler] + compilerArguments;
-      final compilerProcess = await runner.start(
-        submission,
-        compilerCommand,
-        workingDirectory: '/build',
-      );
-      bool compilerOk = await compilerProcess.ok;
-      if (!compilerOk) {
-        String message = await compilerProcess.outputAsString;
-        io.File('${buildDir.path}/compile.log').writeAsStringSync(message);
-        log.fine('cant compile ${sourceFile.name} from ${submission.id}: ${compilerCommand.join(' ')}\n$message');
-        submission = submission.copyWith((changed) {
-          changed.status = SolutionStatus.COMPILATION_ERROR;
-          changed.buildErrorLog = message;
-        });
-        return false;
-      } else {
-        log.fine('successfully compiled ${sourceFile.name} from ${submission.id}');
-        objectFiles.add(objectFileName);
-      }
-    }
-    List<String> wrapOptionsPre = [];
-    List<String> wrapOptionsPost = [];
-    if (!linkOptions().contains('-nostdlib') && io.Platform.isLinux) {
-      final security = securityContext();
-      if (security.forbiddenFunctions.isNotEmpty) {
-        for (final name in security.forbiddenFunctions) {
-          wrapOptionsPre.add('-Wl,--wrap=$name');
-        }
-        wrapOptionsPost.add('.forbidden-functions-wrapper.o');
-      }
-    }
-    final linkerArguments = ['-o', targetName] +
-        sanitizerOptions +
-        wrapOptionsPre + linkOptions() + wrapOptionsPost +
-        objectFiles;
-    final linkerCommand = [compiler] + linkerArguments;
-    final linkerProcess = await runner.start(
-      submission,
-      linkerCommand,
-      workingDirectory: '/build'
-    );
-    bool linkerOk = await linkerProcess.ok;
-    if (!linkerOk) {
-      String message = await linkerProcess.outputAsString;
-      log.fine('cant link ${submission.id}: ${linkerCommand.join(' ')}\n$message');
-      io.File('${buildDir.path}/compile.log').writeAsStringSync(message);
-      submission = submission.copyWith((changed) {
-        changed.status = SolutionStatus.COMPILATION_ERROR;
-        changed.buildErrorLog = message;
-      });
-      return false;
-    } else {
-      log.fine('successfully linked target $targetName for ${submission.id}');
-    }
-    if (sanitizersToUse.isNotEmpty) {
-      sanitizersBuildTarget = '/build/$targetName';
-    } else {
-      plainBuildTarget = '/build/$targetName';
-    }
-    return true;
-  }
 
   int prepareSubmissionTests(String targetPrefix) {
     String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
@@ -534,182 +309,159 @@ class SubmissionProcessor {
     }
   }
 
-  Future<void> runTests() async {
-    bool hasRuntimeError = false;
-    bool hasTimeLimit = false;
-    bool hasWrongAnswer = false;
-    bool hasValgrindErrors = false;
+  Future<void> processSolutionArtifacts(Iterable<BuildArtifact> buildArtifacts) async {
     List<TestResult> testResults = [];
-    GradingLimits plainLimits = getLimits(false);
-    GradingLimits valgrindLimits = getLimits(true);
-
-    int testsCount = 0;
-
-    bool runSanitizersTarget =
-        !disableValgrindAndSanitizers &&
-        getSanitizersList().isNotEmpty &&
-        !runTargetIsScript &&
-        sanitizersBuildTarget.isNotEmpty
-    ;
-    final sanitizersTargetPrefix = 'with-sanitizers';
-    if (runSanitizersTarget) {
-      testsCount = prepareSubmissionTests(sanitizersTargetPrefix);
-    }
-
-    bool runValgrindTarget =
-        !disableValgrindAndSanitizers &&
-        !disableProblemValgrind() &&
-        !runTargetIsScript &&
-        compilersConfig.enableValgrind &&
-        plainBuildTarget.isNotEmpty
-    ;
-    final valgrindTargetPrefix = 'valgrind';
-    if (runValgrindTarget) {
-      testsCount = prepareSubmissionTests(valgrindTargetPrefix);
-    }
-
-    bool runScriptTarget = runTargetIsScript;
-    final scriptTargetPrefix = 'script';
-    if (runScriptTarget) {
-      testsCount = prepareSubmissionTests(scriptTargetPrefix);
-    }
-
-    bool runPlainTarget = !runSanitizersTarget && !runValgrindTarget && !runScriptTarget;
-    final plainTargetPrefix = 'plain';
-    if (runPlainTarget) {
-      testsCount = prepareSubmissionTests(plainTargetPrefix);
-    }
-
-    for (int i=1; i<=testsCount; i++) {
-      String baseName = '$i';
-      if (i < 10) {
-        baseName = '0$baseName';
-      }
-      if (i < 100) {
-        baseName = '0$baseName';
-      }
-
-      List<TestResult> targetResults = [];
-      bool hasFailedTests() {
-        for (final result in targetResults) {
-          if (result.status == SolutionStatus.RUNTIME_ERROR) {
-            return true;
-          }
-        }
-        return false;
-      }
-
-      bool hasFailed = false;
-
-      if (runPlainTarget) {
-        TestResult result = await processTest(
-          testNumber: i,
-          runsDirPrefix: plainTargetPrefix,
-          firstArgs: [plainBuildTarget],
-          description: 'no sanitizers, no valgrind',
-          testBaseName: baseName,
-          limits: plainLimits,
-        );
-        targetResults.add(result);
-        hasFailed = hasFailedTests();
-      }
-
-
-      if (runSanitizersTarget && !hasFailed) {
-        TestResult result = await processTest(
-          testNumber: i,
-          runsDirPrefix: sanitizersTargetPrefix,
-          firstArgs: [sanitizersBuildTarget],
-          description: 'with sanitizers',
-          testBaseName: baseName,
-          limits: plainLimits,
-          checkSanitizersErrors: true,
-        );
-        targetResults.add(result);
-        hasFailed = hasFailedTests();
-      }
-
-      if (runValgrindTarget && !hasFailed) {
-        final valgrindCommandLine = [
-          'valgrind', '--tool=memcheck', '--leak-check=full',
-          '--show-leak-kinds=all', '--track-origins=yes',
-          '--log-file=/runs/valgrind/$baseName.valgrind',
-          plainBuildTarget
-        ];
-        TestResult result = await processTest(
-          testNumber: i,
-          runsDirPrefix: valgrindTargetPrefix,
-          firstArgs: valgrindCommandLine,
-          description: 'with valgrind',
-          testBaseName: baseName,
-          limits: valgrindLimits,
-          checkValgrindErrors: true,
-        );
-
-        targetResults.add(result);
-      }
-
-      if (runTargetIsScript) {
-        TestResult result = await processTest(
-          testNumber: i,
-          runsDirPrefix: scriptTargetPrefix,
-          firstArgs: targetInterpreter.split(' ') + [plainBuildTarget],
-          description: 'script run',
-          testBaseName: baseName,
-          limits: plainLimits,
-        );
-        targetResults.add(result);
-      }
-
-      hasWrongAnswer = hasWrongAnswer || targetResults.any((element) => element.status==SolutionStatus.WRONG_ANSWER);
-      hasTimeLimit = hasTimeLimit || targetResults.any((element) => element.status==SolutionStatus.TIME_LIMIT);
-      hasRuntimeError = hasRuntimeError || targetResults.any((element) => element.status==SolutionStatus.RUNTIME_ERROR);
-      hasValgrindErrors = hasValgrindErrors || targetResults.any((element) => element.status==SolutionStatus.VALGRIND_ERRORS);
-      testResults.addAll(targetResults);
-      if (hasWrongAnswer||hasTimeLimit||hasRuntimeError||hasValgrindErrors) {
-        break;
-      }
-    }
-
-    SolutionStatus newStatus = submission.status;
-    if (hasRuntimeError) {
-      newStatus = SolutionStatus.RUNTIME_ERROR;
-    }
-    else if (hasValgrindErrors) {
-      newStatus = SolutionStatus.VALGRIND_ERRORS;
-    }
-    else if (hasTimeLimit) {
-      newStatus = SolutionStatus.TIME_LIMIT;
-    }
-    else if (hasWrongAnswer) {
-      newStatus = SolutionStatus.WRONG_ANSWER;
-    } else {
-      newStatus = SolutionStatus.OK;
-    }
-    submission = submission.copyWith((s) {
-      s.status = newStatus;
-      s.testResults.addAll(testResults);
-    });
-  }
-
-
-
-  GradingLimits getLimitsForProblem() {
-    String limitsPath = path.absolute(
-      '${locationProperties.cacheDir}/${submission.course.dataId}/${submission.problemId}/build/.limits'
+    final gradingOptions = GradingOptionsExtension.loadFromPlainFiles(
+        submissionOptionsDirectory
     );
-    GradingLimits limits = defaultLimits;
-    final limitsFile = io.File(limitsPath);
-    if (limitsFile.existsSync()) {
-      final conf = parseYamlConfig(limitsPath);
-      final problemLimits = GradingLimitsExtension.fromYaml(conf);
-      limits = limits.mergedWith(problemLimits);
+    for (final artifact in buildArtifacts) {
+      final gradingLimits = defaultLimits.mergedWith(gradingOptions.limits);
+      final extraRuntimeProperties = TargetProperties(
+          properties: gradingOptions.targetProperties
+      );
+      final runtime = runtimeFactory.createRuntime(
+          gradingLimits: gradingLimits,
+          submission: submission,
+          artifact: artifact,
+          extraTargetProperties: extraRuntimeProperties,
+      );
+      final testsCount = prepareSubmissionTests(runtime.runtimeName);
+      for (int testNumber=1; testNumber<=testsCount; testNumber++) {
+        final testBaseName = generateTestBaseName(testNumber);
+        final runTestArtifact = await runtime.runTargetOnTest(testBaseName);
+        final runTestResult = runTestArtifact.toTestResult();
+        runTestResult.testNumber = testNumber;
+        runTestResult.target = runtime.runtimeName;
+        bool checkAnswer = runTestResult.status==SolutionStatus.ANY_STATUS_OR_NULL;
+        if (checkAnswer) {
+          final checkedTestResult = await processCheckAnswer(testBaseName, runTestResult);
+          testResults.add(checkedTestResult);
+        }
+        else {
+          testResults.add(runTestResult);
+        }
+      }
     }
-    if (overrideLimits != null) {
-      limits = limits.mergedWith(overrideLimits!);
-    }
-    return limits;
+    submission.testResults.addAll(testResults);
   }
+
+  Future<TestResult> processCheckAnswer(String testBaseName, TestResult testResult) async {
+    final testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
+    final runsDir = io.Directory(
+      '${runner.submissionPrivateDirectory(submission)}/runs/${testResult.target}/'
+    );
+    List<int> referenceStdout = [];
+    final problemAnsFile = io.File('$testsPath/$testBaseName.ans');
+    final targetAnsFile = io.File('${runsDir.path}/$testBaseName.ans');
+    String referencePath = '';
+    if (targetAnsFile.existsSync()) {
+      referenceStdout = targetAnsFile.readAsBytesSync();
+      referencePath = targetAnsFile.path;
+    }
+    else if (problemAnsFile.existsSync()) {
+      referenceStdout = problemAnsFile.readAsBytesSync();
+      referencePath = problemAnsFile.path;
+    }
+    // Check for checker_options that overrides input files
+    final checkerData = problemChecker().trim().split('\n');
+    final checkerOpts = checkerData.length > 1? checkerData[1].split(' ') : [];
+    List<int> stdinData = [];
+    final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
+    final targetStdinFile = io.File('${runsDir.path}/$testBaseName.dat');
+    String stdinFilePath = '';
+    String wd;
+    if (io.Directory('${runsDir.path}/$testBaseName.dir').existsSync()) {
+      wd = '/runs/${testResult.target}/$testBaseName.dir';
+    }
+    else {
+      wd = '/runs/${testResult.target}';
+    }
+    if (targetStdinFile.existsSync()) {
+      stdinData = targetStdinFile.readAsBytesSync();
+      stdinFilePath = targetStdinFile.path;
+    }
+    else if (problemStdinFile.existsSync()) {
+      stdinData = problemStdinFile.readAsBytesSync();
+      stdinFilePath = problemStdinFile.path;
+    }
+    String stdoutFilePath = '${runsDir.path}/$testBaseName.stdout';
+    for (String opt in checkerOpts) {
+      if (opt.startsWith('stdin=')) {
+        stdinFilePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(6)}';
+        final stdinFile = io.File(stdinFilePath);
+        stdinData = stdinFile.existsSync()? stdinFile.readAsBytesSync() : [];
+      }
+      if (opt.startsWith('stdout=')) {
+        stdoutFilePath = '${runner.submissionPrivateDirectory(submission)}/$wd/${opt.substring(7)}';
+      }
+      if (opt.startsWith('reference=')) {
+        referencePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(10)}';
+        final referenceFile = io.File(referencePath);
+        referenceStdout = referenceFile.existsSync()? referenceFile.readAsBytesSync() : [];
+      }
+    }
+    final stdoutFile = io.File(stdoutFilePath);
+    List<int> stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
+    final resultCheckerMessage = runChecker(
+        [], // TODO ???
+        stdinData, stdinFilePath,
+        stdout, stdoutFilePath,
+        referenceStdout, referencePath,
+        wd
+    );
+    final checkerOutFile = io.File('${runsDir.path}/$testBaseName.checker');
+    checkerOutFile.writeAsStringSync(resultCheckerMessage);
+
+    if (resultCheckerMessage.isNotEmpty) {
+      String waMessage = '=== Checker output:\n$resultCheckerMessage\n';
+      List<int> stdinBytesToShow = [];
+      if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
+        stdinBytesToShow = stdinData.sublist(0, RunTestArtifact.maxDataSizeToShow);
+      } else {
+        stdinBytesToShow = stdinData;
+      }
+      String inputDataToShow = '';
+      bool inputIsBinary = false;
+      try {
+        inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: false);
+      }
+      catch (e) {
+        if (e is FormatException) {
+          inputIsBinary = true;
+        }
+      }
+      if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
+        inputDataToShow += '  \n(input is too big, truncated to ${RunTestArtifact.maxDataSizeToShow} bytes)\n';
+      }
+      else if (inputIsBinary) {
+        inputDataToShow = '(input is binary file)\n';
+      }
+      if (inputDataToShow.isNotEmpty) {
+        waMessage += '=== Input data: $inputDataToShow';
+      }
+      testResult.checkerOutput = waMessage;
+      testResult.status = SolutionStatus.WRONG_ANSWER;
+    }
+    else {
+      testResult.status = SolutionStatus.OK;
+    }
+    return testResult;
+  }
+
+  static String generateTestBaseName(int number) {
+    String baseName = '$number';
+    if (number < 10) {
+      baseName = '0$baseName';
+    }
+    if (number < 100) {
+      baseName = '0$baseName';
+    }
+    return baseName;
+  }
+
+  io.Directory get submissionOptionsDirectory =>
+    io.Directory('${locationProperties.cacheDir}/${submission.course.dataId}/${submission.problemId}/build');
+
 
   List<String> parseTestInfArgumentsLine(String line) {
     String quoteSymbol = '';
@@ -1086,5 +838,6 @@ class SubmissionProcessor {
       return checker.matchData(args, stdin, stdout, reference, wd, root, checkerOpts);
     }
   }
+
 
 }

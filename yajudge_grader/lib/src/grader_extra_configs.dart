@@ -4,109 +4,6 @@ import 'package:yaml/yaml.dart';
 import 'package:protobuf/protobuf.dart';
 import 'dart:io';
 
-class CompilersConfig {
-  final String cCompiler;
-  final String cxxCompiler;
-  final List<String> cBaseOptions;
-  final List<String> cxxBaseOptions;
-  final List<String> enableSanitizers;
-  final bool enableValgrind;
-  final int extraValgrindMemory;
-  final double scaleValgrindTime;
-
-  CompilersConfig({
-    required this.cCompiler,
-    required this.cxxCompiler,
-    required this.cBaseOptions,
-    required this.cxxBaseOptions,
-    required this.enableSanitizers,
-    required this.enableValgrind,
-    required this.extraValgrindMemory,
-    required this.scaleValgrindTime
-  });
-
-  factory CompilersConfig.createDefault() {
-    return CompilersConfig(
-      cCompiler: 'gcc',
-      cxxCompiler: 'g++',
-      cBaseOptions: [],
-      cxxBaseOptions: [],
-      enableSanitizers: [],
-      enableValgrind: false,
-      extraValgrindMemory: 0,
-      scaleValgrindTime: 1.0,
-    );
-  }
-
-  factory CompilersConfig.fromYaml(YamlMap conf) {
-    String cCompiler = 'gcc';
-    String cxxCompiler = 'g++';
-    List<String> cBaseOptions = [];
-    List<String> cxxBaseOptions = [];
-    List<String> enableSanitizers = [];
-    bool enableValgrind = false;
-    int extraValgrindMemory = 0;
-    double scaleValgrindTime = 1.0;
-    if (conf['c_compiler'] is String) {
-      cCompiler = conf['c_compiler'];
-    }
-    if (conf['cxx_compiler'] is String) {
-      cxxCompiler = conf['cxx_compiler'];
-    }
-    if (conf['c_base_options'] is String) {
-      cBaseOptions = conf['c_base_options'].toString().split(' ');
-    }
-    if (conf['cxx_base_options'] is String) {
-      cxxBaseOptions = conf['cxx_base_options'].toString().split(' ');
-    }
-    if (conf['enable_sanitizers'] is YamlList) {
-      YamlList yamlList = conf['enable_sanitizers'];
-      for (final sanitizerEntry in yamlList) {
-        enableSanitizers.add(sanitizerEntry.toString());
-      }
-    }
-    if (conf['enable_sanitizers'] is String) {
-      String sanitizersLine = conf['enable_sanitizers'];
-      enableSanitizers = sanitizersLine.split(' ');
-    }
-    if (conf['enable_valgrind'] is bool) {
-      enableValgrind = Platform.isLinux && conf['enable_valgrind'].toString().toLowerCase()=='true';
-    }
-    if (conf['valgrind_extra_memory_limit_mb'] is int) {
-      extraValgrindMemory = int.parse(conf['valgrind_extra_memory_limit_mb'].toString());
-    }
-    if (conf['valgrind_cpu_time_scale'] is double) {
-      scaleValgrindTime = double.parse(conf['valgrind_cpu_time_scale'].toString());
-    }
-    return CompilersConfig(cCompiler: cCompiler, cxxCompiler: cxxCompiler,
-        cBaseOptions: cBaseOptions, cxxBaseOptions: cxxBaseOptions,
-        enableSanitizers: enableSanitizers,
-        enableValgrind: enableValgrind,
-        extraValgrindMemory: extraValgrindMemory,
-        scaleValgrindTime: scaleValgrindTime);
-  }
-
-  GradingLimits applyValgrindToGradingLimits(GradingLimits base) {
-    GradingLimits result = base.deepCopy();
-    double cpuTime = base.cpuTimeLimitSec.toDouble();
-    double realTime = base.realTimeLimitSec.toDouble();
-    int memoryMax = base.memoryMaxLimitMb.toInt();
-    if (cpuTime > 0 && scaleValgrindTime > 0) {
-      cpuTime *= scaleValgrindTime;
-      result.cpuTimeLimitSec = Int64(cpuTime.toInt());
-    }
-    if (realTime > 0 && scaleValgrindTime > 0) {
-      realTime *= scaleValgrindTime;
-      result.realTimeLimitSec = Int64(realTime.toInt());
-    }
-    if (memoryMax > 0 && extraValgrindMemory > 0) {
-      result.memoryMaxLimitMb = Int64(memoryMax + extraValgrindMemory);
-    }
-    return result;
-  }
-
-}
-
 class JobsConfig {
   final bool archSpecificOnly;
   final int workers;
@@ -138,4 +35,220 @@ class JobsConfig {
     );
   }
 
+}
+
+class TargetProperties {
+  final String compiler;
+  final String executable;
+  final Map<String,String> properties;
+
+  TargetProperties({
+    this.compiler = '',
+    this.executable = '',
+    required this.properties
+  });
+
+  factory TargetProperties.createDefaultForCompiler(String compiler) {
+    return TargetProperties(compiler: compiler, properties: {});
+  }
+
+  factory TargetProperties.createDefaultForRuntime(String executable) {
+    return TargetProperties(executable: executable, properties: {});
+  }
+
+  factory TargetProperties.fromMap(Map<String,String> properties) {
+    return TargetProperties(properties: properties);
+  }
+
+  factory TargetProperties.fromYaml(YamlMap conf) {
+    String compiler = '';
+    String executable = '';
+    Map<String,String> properties = {};
+    for (final property in conf.entries) {
+      final key = property.key.toString();
+      final value = property.value.toString();
+      if (key == 'compiler') {
+        compiler = value;
+      }
+      else if (key == 'executable') {
+        executable = value;
+      }
+      else {
+        properties[key] = value;
+      }
+    }
+    return TargetProperties(
+      compiler: compiler,
+      executable: executable,
+      properties: properties
+    );
+  }
+
+  TargetProperties mergeWith(TargetProperties other) {
+    Map<String,String> newProperties = Map.from(properties);
+    for (final otherEntry in other.properties.entries) {
+      final key = otherEntry.key;
+      if (newProperties.containsKey(otherEntry.key)) {
+        final String oldValue = newProperties[key]!;
+        Set<String> items = oldValue.split(' ').toSet();
+        final String otherValue = otherEntry.value;
+        Set<String> newItems = otherValue.split(' ').toSet();
+        items = items.union(newItems);
+        final newValue = items.join(' ');
+        newProperties[key] = newValue;
+      }
+      else {
+        newProperties[key] = otherEntry.value;
+      }
+    }
+    return TargetProperties(compiler: compiler, properties: newProperties);
+  }
+
+  List<String> property(String name) {
+    if (properties.containsKey(name)) {
+      return properties[name]!.split(' ');
+    }
+    else {
+      return [];
+    }
+  }
+
+}
+
+
+class DefaultBuildProperties {
+  final Map<ProgrammingLanguage,TargetProperties> properties;
+
+  DefaultBuildProperties(this.properties);
+
+  factory DefaultBuildProperties.fromYaml(YamlMap conf) {
+    Map<ProgrammingLanguage,TargetProperties> result = {};
+    for (final entry in conf.entries) {
+      final key = entry.key.toString();
+      final value = entry.value;
+      final language = _guessLanguageByName(key);
+      if (value is YamlMap && language != ProgrammingLanguage.unknown) {
+        final properties = TargetProperties.fromYaml(value);
+        result[language] = properties;
+      }
+    }
+    return DefaultBuildProperties(result);
+  }
+
+  TargetProperties propertiesForLanguage(ProgrammingLanguage language) {
+    if (properties.containsKey(language)) {
+      return properties[language]!;
+    }
+    else {
+      return _defaultForLanguage(language);
+    }
+  }
+
+  TargetProperties _defaultForLanguage(ProgrammingLanguage language) {
+    switch (language) {
+      case ProgrammingLanguage.c:
+        return TargetProperties.createDefaultForCompiler('gcc');
+      case ProgrammingLanguage.cxx:
+        return TargetProperties.createDefaultForCompiler('g++');
+      case ProgrammingLanguage.java:
+        return TargetProperties.createDefaultForCompiler('javac');
+      case ProgrammingLanguage.python:
+        return TargetProperties.createDefaultForCompiler('');
+      case ProgrammingLanguage.bash:
+        return TargetProperties.createDefaultForCompiler('');
+      case ProgrammingLanguage.go:
+        return TargetProperties.createDefaultForCompiler('go');
+      case ProgrammingLanguage.gnuAsm:
+        return TargetProperties.createDefaultForCompiler('gcc');
+      default:
+        throw Exception('dont know how to handle unknown programming language');
+    }
+  }
+
+  static ProgrammingLanguage _guessLanguageByName(String name) {
+    switch (name.toLowerCase().replaceAll('_', '').replaceAll('-', '')) {
+      case 'c':
+        return ProgrammingLanguage.c;
+      case 'cpp':
+      case 'cxx':
+      case 'c++':
+      case 'cc':
+        return ProgrammingLanguage.cxx;
+      case 'java':
+        return ProgrammingLanguage.java;
+      case 'python':
+        return ProgrammingLanguage.python;
+      case 'shell':
+      case 'bash':
+        return ProgrammingLanguage.bash;
+      case 'go':
+      case 'golang':
+        return ProgrammingLanguage.go;
+      case 's':
+      case 'gnuasm':
+        return ProgrammingLanguage.gnuAsm;
+      default:
+        return ProgrammingLanguage.unknown;
+    }
+  }
+}
+
+class DefaultRuntimeProperties {
+  final Map<ExecutableTarget,TargetProperties> properties;
+
+  DefaultRuntimeProperties(this.properties);
+
+  factory DefaultRuntimeProperties.fromYaml(YamlMap conf) {
+    Map<ExecutableTarget,TargetProperties> result = {};
+    for (final entry in conf.entries) {
+      final key = entry.key.toString();
+      final value = entry.value;
+      final target = _guessTargetByName(key);
+      if (value is YamlMap && target != ExecutableTarget.AutodetectExecutable) {
+        final properties = TargetProperties.fromYaml(value);
+        result[target] = properties;
+      }
+    }
+    return DefaultRuntimeProperties(result);
+  }
+
+  TargetProperties propertiesForRuntime(ExecutableTarget target) {
+    if (properties.containsKey(target)) {
+      return properties[target]!;
+    }
+    else {
+      return _defaultForTarget(target);
+    }
+  }
+
+  static ExecutableTarget _guessTargetByName(key) {
+    return executableTargetFromString(key);
+  }
+
+  TargetProperties _defaultForTarget(ExecutableTarget target) {
+    switch (target) {
+      case ExecutableTarget.BashScript:
+        return TargetProperties.createDefaultForRuntime('bash');
+      case ExecutableTarget.JavaClass:
+        return TargetProperties.createDefaultForRuntime('java');
+      case ExecutableTarget.JavaJar:
+        return TargetProperties.createDefaultForRuntime('java');
+      case ExecutableTarget.Native:
+        return TargetProperties.createDefaultForRuntime('');
+      case ExecutableTarget.NativeWithSanitizers:
+        return TargetProperties.createDefaultForRuntime('');
+      case ExecutableTarget.NativeWithSanitizersAndValgrind:
+        return TargetProperties.createDefaultForRuntime('valgrind');
+      case ExecutableTarget.NativeWithValgrind:
+        return TargetProperties.createDefaultForRuntime('valgrind');
+      case ExecutableTarget.PythonScript:
+        return TargetProperties.createDefaultForRuntime('python3');
+      case ExecutableTarget.QemuArmDiskImage:
+        return TargetProperties.createDefaultForRuntime('qemu-system-aarch64');
+      case ExecutableTarget.QemuX86DiskImage:
+        return TargetProperties.createDefaultForRuntime('qemu-system-x86_64');
+      default:
+        throw Exception('cant get properties for unknown runtime');
+    }
+  }
 }
