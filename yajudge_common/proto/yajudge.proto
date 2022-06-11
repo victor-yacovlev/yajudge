@@ -115,7 +115,7 @@ enum ExecutableTarget {
   AutodetectExecutable = 0;
 
   // text scripts
-  BashScript = 1;
+  ShellScript = 1;
   PythonScript = 2;
 
   // native executables
@@ -130,8 +130,7 @@ enum ExecutableTarget {
   JavaJar = 22;
 
   // QEMU disk images
-  QemuX86DiskImage = 31;
-  QemuArmDiskImage = 32;
+  QemuSystemImage = 31;
 }
 
 enum BuildSystem {

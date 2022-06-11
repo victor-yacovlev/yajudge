@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
@@ -14,11 +13,11 @@ class BuildError extends Error {
 
 class BuildArtifact {
   final ExecutableTarget executableTarget;
-  final String fileName;
+  final List<String> fileNames;
 
   BuildArtifact({
     required this.executableTarget,
-    required this.fileName,
+    required this.fileNames,
   });
 }
 
@@ -43,6 +42,7 @@ abstract class AbstractBuilder {
 
   bool canBuild(Submission submission);
   bool canCheckCodeStyle(Submission submission) => false;
+  ExecutableTarget get defaultBuildTarget => ExecutableTarget.AutodetectExecutable;
 
   Future<Iterable<BuildArtifact>> build({
     required Submission submission,
@@ -231,7 +231,7 @@ class CLangBuilder extends AbstractBuilder {
       log.fine('successfully linked target $binaryTargetName for ${submission.id}');
       return BuildArtifact(
           executableTarget: target,
-          fileName: '$buildDirRelativePath/$binaryTargetName',
+          fileNames: ['$buildDirRelativePath/$binaryTargetName'],
       );
     }
   }
@@ -333,6 +333,11 @@ class CLangBuilder extends AbstractBuilder {
           ExecutableTarget.NativeWithValgrind,
           ExecutableTarget.NativeWithSanitizersAndValgrind,
         }.contains(target);
+    bool enableValgrind = io.Platform.isLinux &&
+        {
+          ExecutableTarget.NativeWithValgrind,
+          ExecutableTarget.NativeWithSanitizersAndValgrind,
+        }.contains(target);
 
     assert(buildPlainTarget || buildSanitizersTarget);
 
@@ -341,7 +346,7 @@ class CLangBuilder extends AbstractBuilder {
           submission: submission,
           buildDirRelativePath: buildDirRelativePath,
           buildProperties: buildProperties,
-          target: ExecutableTarget.Native,
+          target: enableValgrind? ExecutableTarget.NativeWithValgrind : ExecutableTarget.Native,
           sanitizerOptions: [],
       );
       artifacts.add(plainTarget);
@@ -360,6 +365,9 @@ class CLangBuilder extends AbstractBuilder {
 
     return artifacts;
   }
+
+  @override
+  ExecutableTarget get defaultBuildTarget => ExecutableTarget.NativeWithSanitizersAndValgrind;
 }
 
 class VoidBuilder extends AbstractBuilder {
@@ -374,9 +382,10 @@ class VoidBuilder extends AbstractBuilder {
   }) async {
     final fileSet = submission.solutionFiles;
     final scriptFileNames = fileSet.files.map((file) => '$buildDirRelativePath/${file.name}');
-    return scriptFileNames.map((e) => BuildArtifact(
-        executableTarget: target, fileName: e
-    ));
+    return [BuildArtifact(
+      executableTarget: target,
+      fileNames: scriptFileNames.toList(),
+    )];
   }
 
   @override
@@ -428,7 +437,7 @@ class MakefileBuilder extends AbstractBuilder {
       io.File('${buildDir.path}/make.log').writeAsStringSync(message);
       throw BuildError(message);
     }
-    List<BuildArtifact> artifacts = [];
+    List<String> artifactFileNames = [];
     for (final entry in newEntriesForTarget) {
       String relativePath = entry.path;
       if (relativePath.startsWith(buildDir.path)) {
@@ -436,13 +445,13 @@ class MakefileBuilder extends AbstractBuilder {
       }
       relativePath = '$buildDirRelativePath/$relativePath';
       relativePath = path.normalize(relativePath);
-      final artifact = BuildArtifact(
-          executableTarget: target,
-          fileName: relativePath
-      );
-      artifacts.add(artifact);
+      artifactFileNames.add(relativePath);
     }
-    return artifacts;
+    final artifact = BuildArtifact(
+      executableTarget: target,
+      fileNames: artifactFileNames,
+    );
+    return [artifact];
   }
 
   bool _artifactMatchesTarget(io.FileSystemEntity entity, ExecutableTarget target) {
@@ -458,8 +467,7 @@ class MakefileBuilder extends AbstractBuilder {
         final mode = entity.statSync().mode;
         final isExecutable = mode & 0x1 > 0;
         return isExecutable;
-      case ExecutableTarget.QemuArmDiskImage:
-      case ExecutableTarget.QemuX86DiskImage:
+      case ExecutableTarget.QemuSystemImage:
         return entity.path.endsWith('.img');
       default:
         return true;

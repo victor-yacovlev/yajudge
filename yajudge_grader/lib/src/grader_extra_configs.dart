@@ -65,7 +65,7 @@ class TargetProperties {
     String executable = '';
     Map<String,String> properties = {};
     for (final property in conf.entries) {
-      final key = property.key.toString();
+      final key = property.key.toString().replaceAll('-', '_');
       final value = property.value.toString();
       if (key == 'compiler') {
         compiler = value;
@@ -105,7 +105,7 @@ class TargetProperties {
   }
 
   List<String> property(String name) {
-    if (properties.containsKey(name)) {
+    if (properties.containsKey(name.replaceAll('-', '_'))) {
       return properties[name]!.split(' ');
     }
     else {
@@ -227,7 +227,7 @@ class DefaultRuntimeProperties {
 
   TargetProperties _defaultForTarget(ExecutableTarget target) {
     switch (target) {
-      case ExecutableTarget.BashScript:
+      case ExecutableTarget.ShellScript:
         return TargetProperties.createDefaultForRuntime('bash');
       case ExecutableTarget.JavaClass:
         return TargetProperties.createDefaultForRuntime('java');
@@ -242,11 +242,9 @@ class DefaultRuntimeProperties {
       case ExecutableTarget.NativeWithValgrind:
         return TargetProperties.createDefaultForRuntime('valgrind');
       case ExecutableTarget.PythonScript:
-        return TargetProperties.createDefaultForRuntime('python3');
-      case ExecutableTarget.QemuArmDiskImage:
-        return TargetProperties.createDefaultForRuntime('qemu-system-aarch64');
-      case ExecutableTarget.QemuX86DiskImage:
-        return TargetProperties.createDefaultForRuntime('qemu-system-x86_64');
+        throw UnimplementedError('python runtime not implemented yet');
+      case ExecutableTarget.QemuSystemImage:
+        throw UnimplementedError('qemu system image runtime not implemented yet');
       default:
         throw Exception('cant get properties for unknown runtime');
     }

@@ -165,7 +165,8 @@ ExecutableTarget executableTargetFromString(dynamic conf) {
     case 'bash_script':
     case 'bash':
     case 'shell':
-      return ExecutableTarget.BashScript;
+    case 'shell_script':
+      return ExecutableTarget.ShellScript;
     case 'python_script':
     case 'python':
       return ExecutableTarget.PythonScript;
@@ -187,12 +188,10 @@ ExecutableTarget executableTargetFromString(dynamic conf) {
     case 'java_jar':
     case 'jar':
       return ExecutableTarget.JavaJar;
-    case 'qemu_image_x86':
-    case 'qemu_x86':
-      return ExecutableTarget.QemuX86DiskImage;
-    case 'qemu_image_arm':
-    case 'qemu_arm':
-      return ExecutableTarget.QemuArmDiskImage;
+    case 'qemu_system':
+    case 'qemu_image':
+    case 'qemu_system_image':
+      return ExecutableTarget.QemuSystemImage;
     default:
       return ExecutableTarget.AutodetectExecutable;
   }
@@ -202,8 +201,8 @@ String executableTargetToString(ExecutableTarget target) {
   switch (target) {
     case ExecutableTarget.AutodetectExecutable:
       return 'auto';
-    case ExecutableTarget.BashScript:
-      return 'bash';
+    case ExecutableTarget.ShellScript:
+      return 'shell';
     case ExecutableTarget.JavaClass:
       return 'java';
     case ExecutableTarget.JavaJar:
@@ -218,10 +217,8 @@ String executableTargetToString(ExecutableTarget target) {
       return 'checked';
     case ExecutableTarget.PythonScript:
       return 'python';
-    case ExecutableTarget.QemuArmDiskImage:
-      return 'qemu-arm';
-    case ExecutableTarget.QemuX86DiskImage:
-      return 'qemu-x86';
+    case ExecutableTarget.QemuSystemImage:
+      return 'qemu-system';
     default:
       return 'auto';
   }
@@ -327,7 +324,11 @@ String propertiesToYaml(Map<String,String> props) {
 
 extension GradingLimitsExtension on GradingLimits {
 
-  static GradingLimits fromYaml(YamlMap conf) {
+  static GradingLimits fromYaml(dynamic confOrNull) {
+    if (confOrNull is! YamlMap) {
+      return GradingLimits();
+    }
+    YamlMap conf = confOrNull;
     int stackSize = 0;
     int memoryMax = 0;
     int cpuTime = 0;
@@ -453,7 +454,11 @@ extension GradingLimitsExtension on GradingLimits {
 
 }
 
-SecurityContext securityContextFromYaml(YamlMap conf) {
+SecurityContext securityContextFromYaml(dynamic confOrNull) {
+  if (confOrNull == null || confOrNull !is YamlMap) {
+    return SecurityContext();
+  }
+  YamlMap conf = confOrNull;
   List<String> forbiddenFunctions = [];
   List<String> allowedFunctions = [];
 
@@ -700,7 +705,7 @@ extension GradingOptionsExtension on GradingOptions {
     _saveBuild(io.File('$dirPath/$buildName'));
     _saveBuildProperties(io.File('$dirPath/$buildPropertiesName'));
     _saveTarget(io.File('$dirPath/$targetName'));
-    _saveTargetProperties(io.File('$dirPath/$targetName'));
+    _saveTargetProperties(io.File('$dirPath/$targetPropertiesName'));
     _saveCodeStyles(targetDirectory);
     _saveChecker(targetDirectory);
     _saveInteractor(targetDirectory);
@@ -727,31 +732,34 @@ extension GradingOptionsExtension on GradingOptions {
     return result;
   }
 
-  _saveBuild(io.File file) => file.writeAsStringSync(buildSystemToString(buildSystem));
-  _loadBuild(io.File file) {
+  void _saveBuild(io.File file) => file.writeAsStringSync(buildSystemToString(buildSystem));
+  void _loadBuild(io.File file) {
     buildSystem = buildSystemFromString(
         file.existsSync() ? file.readAsStringSync().trim() : null
     );
   }
-  _saveBuildProperties(io.File file) => file.writeAsStringSync(propertiesToYaml(buildProperties));
-  _loadBuildProperties(io.File file) {
+  void _saveBuildProperties(io.File file) => file.writeAsStringSync(propertiesToYaml(buildProperties));
+  void _loadBuildProperties(io.File file) {
     buildProperties.addAll(propertiesFromYaml(
         file.existsSync() ? loadYaml(file.readAsStringSync()) : null
     ));
   }
-  _saveTarget(io.File file) => file.writeAsStringSync(executableTargetToString(executableTarget));
-  _loadTarget(io.File file) {
+  void _saveTarget(io.File file) {
+    final executableTargetName = executableTargetToString(executableTarget);
+    file.writeAsStringSync(executableTargetName);
+  }
+  void _loadTarget(io.File file) {
     executableTarget = executableTargetFromString(
       file.existsSync() ? file.readAsStringSync().trim() : null
     );
   }
-  _saveTargetProperties(io.File file) => file.writeAsStringSync(propertiesToYaml(targetProperties));
-  _loadTargetProperties(io.File file) {
+  void _saveTargetProperties(io.File file) => file.writeAsStringSync(propertiesToYaml(targetProperties));
+  void _loadTargetProperties(io.File file) {
     targetProperties.addAll(propertiesFromYaml(
         file.existsSync() ? loadYaml(file.readAsStringSync()) : null
     ));
   }
-  _saveCodeStyles(io.Directory targetDirectory) {
+  void _saveCodeStyles(io.Directory targetDirectory) {
     for (final codeStyle in codeStyles) {
       final styleFile = codeStyle.styleFile;
       final codeStyleFileName = styleFile.name;
@@ -760,7 +768,7 @@ extension GradingOptionsExtension on GradingOptions {
       io.File('${targetDirectory.path}/$styleNamePrefix$suffix').writeAsStringSync(styleFile.name);
     }
   }
-  _loadCodeStyles(io.Directory sourceDirectory) {
+  void _loadCodeStyles(io.Directory sourceDirectory) {
     sourceDirectory.list().forEach((final entity) {
       if (entity.path.startsWith(styleNamePrefix)) {
         final suffix = entity.path.substring(styleNamePrefix.length);
@@ -775,7 +783,7 @@ extension GradingOptionsExtension on GradingOptions {
       }
     });
   }
-  _saveChecker(io.Directory targetDirectory) {
+  void _saveChecker(io.Directory targetDirectory) {
     final checkerOpts = standardCheckerOpts;
     if (customChecker.name.isNotEmpty) {
       final checkerFileName = customChecker.name;
@@ -790,7 +798,7 @@ extension GradingOptionsExtension on GradingOptions {
           .writeAsStringSync('=$standardCheckerName\n$checkerOpts\n');
     }
   }
-  _loadChecker(io.Directory sourceDirectory) {
+  void _loadChecker(io.Directory sourceDirectory) {
     final checkerLines = io.File('${sourceDirectory.path}/$checkerName')
         .readAsLinesSync();
     checkerLines.removeWhere((element) => element.isEmpty);
@@ -806,13 +814,13 @@ extension GradingOptionsExtension on GradingOptions {
     final checkerOptions = checkerLines.length > 1? checkerLines[1].split(' ') : [];
     standardCheckerOpts = checkerOptions.join(' ');
   }
-  _saveInteractor(io.Directory targetDirectory) {
+  void _saveInteractor(io.Directory targetDirectory) {
     if (interactor.name.isNotEmpty) {
       io.File('${targetDirectory.path}/$interactorName').writeAsStringSync(interactor.name);
       io.File('${targetDirectory.path}/${interactor.name}').writeAsBytesSync(interactor.data);
     }
   }
-  _loadInteractor(io.Directory sourceDirectory) {
+  void _loadInteractor(io.Directory sourceDirectory) {
     final interactorFile = io.File('${sourceDirectory.path}/$interactorName');
     if (interactorFile.existsSync()) {
       final interactorFileName = interactorFile.readAsStringSync().trim();
@@ -820,13 +828,13 @@ extension GradingOptionsExtension on GradingOptions {
       interactor = File(name: interactorFileName, data: interactorData);
     }
   }
-  _saveCoprocess(io.Directory targetDirectory) {
+  void _saveCoprocess(io.Directory targetDirectory) {
     if (coprocess.name.isNotEmpty) {
       io.File('${targetDirectory.path}/$coprocessName').writeAsStringSync(coprocess.name);
       io.File('${targetDirectory.path}/${coprocess.name}').writeAsBytesSync(coprocess.data);
     }
   }
-  _loadCoprocess(io.Directory sourceDirectory) {
+  void _loadCoprocess(io.Directory sourceDirectory) {
     final coprocessFile = io.File('${sourceDirectory.path}/$coprocessName');
     if (coprocessFile.existsSync()) {
       final coprocessFileName = coprocessFile.readAsStringSync().trim();
@@ -834,13 +842,13 @@ extension GradingOptionsExtension on GradingOptions {
       coprocess = File(name: coprocessFileName, data: coprocessData);
     }
   }
-  _saveTestsGenerator(io.Directory targetDirectory) {
+  void _saveTestsGenerator(io.Directory targetDirectory) {
     if (testsGenerator.name.isNotEmpty) {
       io.File('${targetDirectory.path}/$testsGeneratorName').writeAsStringSync(testsGenerator.name);
       io.File('${targetDirectory.path}/${testsGenerator.name}').writeAsBytesSync(testsGenerator.data);
     }
   }
-  _loadTestsGenerator(io.Directory sourceDirectory) {
+  void _loadTestsGenerator(io.Directory sourceDirectory) {
     final testsGeneratorFile = io.File('${sourceDirectory.path}/$testsGeneratorName');
     if (testsGeneratorFile.existsSync()) {
       final testsGeneratorFileName = testsGeneratorFile.readAsStringSync().trim();
@@ -848,18 +856,18 @@ extension GradingOptionsExtension on GradingOptions {
       testsGenerator = File(name: testsGeneratorFileName, data: testsGeneratorData);
     }
   }
-  _saveLimits(io.File file) => file.writeAsStringSync(limits.toYamlString());
-  _loadLimits(io.File file) {
-    GradingLimitsExtension.fromYaml(loadYaml(file.readAsStringSync()));
+  void _saveLimits(io.File file) => file.writeAsStringSync(limits.toYamlString());
+  void _loadLimits(io.File file) {
+    limits = GradingLimitsExtension.fromYaml(loadYaml(file.readAsStringSync()));
   }
-  _saveSecurityContext(io.File file) =>
+  void _saveSecurityContext(io.File file) =>
       file.writeAsStringSync(securityContextToYamlString(securityContext));
-  _loadSecurityContext(io.File file) {
+  void _loadSecurityContext(io.File file) {
     securityContext = securityContextFromYaml(
       loadYaml(file.readAsStringSync())
     );
   }
-  saveTests(io.Directory targetDirectory) {
+  void saveTests(io.Directory targetDirectory) {
     final testsDir = targetDirectory.path;
     final gzip = io.gzip;
     int testNumber = 1;
@@ -902,4 +910,24 @@ extension GradingOptionsExtension on GradingOptions {
     return result;
   }
 
+}
+
+extension FileExtension on File {
+  void save(io.Directory targetDirectory) {
+    if (name.isEmpty) {
+      return;
+    }
+    targetDirectory.createSync(recursive: true);
+    final fullPath = '${targetDirectory.path}/$name';
+    io.File(fullPath).createSync(recursive: true);
+    io.File(fullPath).writeAsBytesSync(data);
+  }
+}
+
+extension FileSetExtension on FileSet {
+  void saveAll(io.Directory targetDirectory) {
+    for (final file in files) {
+      file.save(targetDirectory);
+    }
+  }
 }

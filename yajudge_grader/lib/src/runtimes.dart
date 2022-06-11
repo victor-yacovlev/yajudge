@@ -114,7 +114,7 @@ abstract class AbstractRuntime {
   final BuildArtifact artifact;
   final String runtimeName;
   GradingLimits gradingLimits;
-  final String coprocessFileName;
+  late final String coprocessFileName;
   final log = Logger('Runtime');
   final AbstractInteractor? interactor;
 
@@ -124,7 +124,7 @@ abstract class AbstractRuntime {
     required this.submission,
     required this.runtimeName,
     required this.gradingLimits,
-    required this.coprocessFileName,
+    required String coprocessFileName,
     required this.artifact,
     required this.interactor,
   }) {
@@ -142,6 +142,12 @@ abstract class AbstractRuntime {
       double scale = double.parse(cpuTimeScale);
       int newLimit = (oldLimit * scale).floor();
       gradingLimits.cpuTimeLimitSec = Int64(newLimit);
+    }
+    if (coprocessFileName.isNotEmpty && !coprocessFileName.startsWith('/')) {
+      this.coprocessFileName = '/build/$coprocessFileName';
+    }
+    else {
+      this.coprocessFileName = coprocessFileName;
     }
   }
 
@@ -363,9 +369,10 @@ class NativeRuntime extends AbstractRuntime {
     required List<String> arguments,
     required String testBaseName,
   }) {
+    assert(artifact.fileNames.length == 1);
     return runner.start(
       submission,
-      [artifact.fileName] + arguments,
+      [artifact.fileNames.single] + arguments,
       workingDirectory: workDir,
       limits: gradingLimits,
       coprocessFileName: coprocessFileName,
@@ -411,6 +418,7 @@ class ValgrindRuntime extends AbstractRuntime {
     required List<String> arguments,
     required String testBaseName,
   }) {
+    assert(artifact.fileNames.length == 1);
     String valgrindExecutable = runtimeProperties.executable;
     if (valgrindExecutable.isEmpty) {
       valgrindExecutable = 'valgrind';
@@ -422,7 +430,7 @@ class ValgrindRuntime extends AbstractRuntime {
     valgrindOptions.add(logOption);
     return runner.start(
       submission,
-      [valgrindExecutable] + valgrindOptions + [artifact.fileName] + arguments,
+      [valgrindExecutable] + valgrindOptions + [artifact.fileNames.single] + arguments,
       workingDirectory: workDir,
       limits: gradingLimits,
       coprocessFileName: coprocessFileName,
@@ -455,7 +463,18 @@ class JavaRuntime extends AbstractRuntime {
     List<String> javaOptions = runtimeProperties.property('runtime_options');
     List<String> entryPoint = [];
     if (artifact.executableTarget == ExecutableTarget.JavaClass) {
-      String fileName = artifact.fileName;
+      String fileName = '';
+      if (artifact.fileNames.length == 1) {
+        fileName = artifact.fileNames.single;
+      }
+      else {
+        if (runtimeProperties.property('main_class').length != 1) {
+          throw ArgumentError('wrong java main class', 'main_class');
+        }
+        final mainClassName = runtimeProperties.property('main_class').single;
+        final mainClassFileName = '$mainClassName.class';
+        fileName = mainClassFileName;
+      }
       if (fileName.startsWith('/build/')) {
         fileName = fileName.substring('/build/'.length);
       }
@@ -466,7 +485,8 @@ class JavaRuntime extends AbstractRuntime {
       entryPoint = ['-classpath', '/build', className];
     }
     else if (artifact.executableTarget == ExecutableTarget.JavaJar) {
-      String fileName = artifact.fileName;
+      assert(artifact.fileNames.length == 1);
+      String fileName = artifact.fileNames.single;
       if (fileName.startsWith('/build/')) {
         fileName = fileName.substring('/build/'.length);
       }
@@ -481,8 +501,79 @@ class JavaRuntime extends AbstractRuntime {
       runTargetIsScript: true,
     );
   }
+}
+
+abstract class InterpreterRuntime extends AbstractRuntime {
+  late final String interpreterExecutable;
+
+  InterpreterRuntime({
+    required super.runtimeProperties,
+    required super.runner,
+    required super.submission,
+    required super.runtimeName,
+    required super.gradingLimits,
+    required super.coprocessFileName,
+    required super.artifact,
+    required super.interactor
+  });
+
+  @override
+  Future<YajudgeProcess> startSolutionProcess({
+    required String workDir,
+    required List<String> arguments,
+    required String testBaseName
+  }) {
+    String javaExecutable = runtimeProperties.executable;
+    if (javaExecutable.isEmpty) {
+      javaExecutable = 'java';
+    }
+    List<String> interpreterOptions = runtimeProperties.property('runtime_options');
+    String fileName = '';
+    if (artifact.fileNames.length == 1) {
+      fileName = artifact.fileNames.single;
+    }
+    else {
+      final mainValue = runtimeProperties.property('main-file');
+      if (mainValue.length != 1) {
+        throw ArgumentError('wrong main file property', 'main_file');
+      }
+      fileName = mainValue.single;
+    }
+    return runner.start(
+      submission,
+      [interpreterExecutable] + interpreterOptions + [fileName] + arguments,
+      workingDirectory: workDir,
+      limits: gradingLimits,
+      coprocessFileName: coprocessFileName,
+      runTargetIsScript: true,
+    );
+  }
+}
+
+class ShellRuntime extends InterpreterRuntime {
+  ShellRuntime({
+    required super.runtimeProperties,
+    required super.runner,
+    required super.submission,
+    required super.gradingLimits,
+    required super.coprocessFileName,
+    required super.artifact,
+    required super.interactor
+  }) : super(runtimeName: 'shell') {
+    String executable = runtimeProperties.executable;
+    if (executable.isEmpty) {
+      executable = 'bash';
+    }
+    super.interpreterExecutable = executable;
+  }
+
+  @override
+  RunTestArtifact postProcessArtifact(RunTestArtifact artifact, String testBaseName) {
+    return artifact;
+  }
 
 }
+
 
 class RuntimeFactory {
   final DefaultRuntimeProperties defaultRuntimeProperties;
@@ -496,84 +587,75 @@ class RuntimeFactory {
   });
 
   AbstractRuntime createRuntime({
-    required TargetProperties extraTargetProperties,
+    required GradingOptions gradingOptions,
     required GradingLimits gradingLimits,
     required Submission submission,
     required BuildArtifact artifact,
   }) {
     final target = artifact.executableTarget;
-    final runtimeProperties = defaultRuntimeProperties.propertiesForRuntime(target).mergeWith(extraTargetProperties);
-    final coprocessFileName = _coprocessFilePath(submission);
-    final interactorName = _interactorFilePath(submission);
+    final extraRuntimeProperties = TargetProperties(
+        properties: gradingOptions.targetProperties
+    );
+    final runtimeProperties = defaultRuntimeProperties
+        .propertiesForRuntime(target).mergeWith(extraRuntimeProperties);
+    final coprocessFileName = gradingOptions.coprocess.name;
+    final interactorName = gradingOptions.interactor.name;
     AbstractInteractor? interactor;
     if (interactorName.isNotEmpty) {
       interactor = interactorFactory.getInteractor(interactorName);
     }
+    final javaRuntime = JavaRuntime(
+        runtimeProperties: runtimeProperties,
+        runner: runner,
+        submission: submission,
+        gradingLimits: gradingLimits,
+        coprocessFileName: coprocessFileName,
+        artifact: artifact,
+        interactor: interactor
+    );
+    final nativeRuntime = NativeRuntime(
+        runtimeProperties: runtimeProperties,
+        runner: runner,
+        submission: submission,
+        gradingLimits: gradingLimits,
+        coprocessFileName: coprocessFileName,
+        artifact: artifact,
+        interactor: interactor
+    );
+    final valgrindRuntime = ValgrindRuntime(
+        runtimeProperties: runtimeProperties,
+        runner: runner,
+        submission: submission,
+        gradingLimits: gradingLimits,
+        coprocessFileName: coprocessFileName,
+        artifact: artifact,
+        interactor: interactor
+    );
+    final shellRuntime = ShellRuntime(
+        runtimeProperties: runtimeProperties,
+        runner: runner,
+        submission: submission,
+        gradingLimits: gradingLimits,
+        coprocessFileName: coprocessFileName,
+        artifact: artifact, interactor: interactor
+    );
     switch (target) {
-      case ExecutableTarget.BashScript:
-        throw UnimplementedError('bash support not implemented yet');
+      case ExecutableTarget.ShellScript:
+        return shellRuntime;
       case ExecutableTarget.JavaClass:
       case ExecutableTarget.JavaJar:
-        return JavaRuntime(
-            runtimeProperties: runtimeProperties,
-            runner: runner,
-            submission: submission,
-            gradingLimits: gradingLimits,
-            coprocessFileName: coprocessFileName,
-            artifact: artifact,
-            interactor: interactor
-        );
+        return javaRuntime;
       case ExecutableTarget.Native:
-        return NativeRuntime(
-            runtimeProperties: runtimeProperties,
-            runner: runner,
-            submission: submission,
-            gradingLimits: gradingLimits,
-            coprocessFileName: coprocessFileName,
-            artifact: artifact,
-            interactor: interactor
-        );
+      case ExecutableTarget.NativeWithSanitizers:
+        return nativeRuntime;
       case ExecutableTarget.NativeWithValgrind:
-        return ValgrindRuntime(
-            runtimeProperties: runtimeProperties,
-            runner: runner,
-            submission: submission,
-            gradingLimits: gradingLimits,
-            coprocessFileName: coprocessFileName,
-            artifact: artifact,
-            interactor: interactor
-        );
+        return valgrindRuntime;
       case ExecutableTarget.PythonScript:
         throw UnimplementedError('python support not implemented yet');
-      case ExecutableTarget.QemuArmDiskImage:
-      case ExecutableTarget.QemuX86DiskImage:
+      case ExecutableTarget.QemuSystemImage:
         throw UnimplementedError('qemu-system support not implemented yet');
       default:
-        throw Exception('unknown runtime to create');
-    }
-  }
-
-  String _interactorFilePath(Submission submission) {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    final interactorLinkFile = io.File('$solutionPath/.interactor');
-    if (interactorLinkFile.existsSync()) {
-      String interactorName = interactorLinkFile.readAsStringSync().trim();
-      return '$solutionPath/$interactorName';
-    }
-    else {
-      return '';
-    }
-  }
-
-  String _coprocessFilePath(Submission submission) {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    final coprocessLinkFile = io.File('$solutionPath/.coprocess');
-    if (coprocessLinkFile.existsSync()) {
-      String coprocessName = coprocessLinkFile.readAsStringSync().trim();
-      return '$solutionPath/$coprocessName';
-    }
-    else {
-      return '';
+        throw UnsupportedError('unknown runtime to create');
     }
   }
 

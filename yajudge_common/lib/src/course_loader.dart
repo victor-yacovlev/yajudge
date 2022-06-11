@@ -554,6 +554,7 @@ class CourseLoader {
         io.File datFile = io.File('${testsDir.path}/$base.dat');
         io.File ansFile = io.File('${testsDir.path}/$base.ans');
         io.File infFile = io.File('${testsDir.path}/$base.inf');
+        io.File argsFile = io.File('${testsDir.path}/$base.args');
         io.File errFile = io.File('${testsDir.path}/$base.err');
         File tgz = File();
         File dat = File();
@@ -586,6 +587,12 @@ class CourseLoader {
           updateProblemLastModified(problemId, infFile);
           int equalPos = line.indexOf('=');
           params = line.substring(equalPos+1).trim();
+          anyTestExists = true;
+        }
+        if (argsFile.existsSync()) {
+          String line = argsFile.readAsStringSync().trim();
+          updateProblemLastModified(problemId, argsFile);
+          params = line;
           anyTestExists = true;
         }
         if (anyTestExists) {

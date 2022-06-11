@@ -13,6 +13,7 @@ import 'checkers.dart';
 import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
 import 'package:yaml/yaml.dart';
+import 'package:posix/posix.dart' as posix;
 
 import 'interactors.dart';
 import 'runtimes.dart';
@@ -89,7 +90,10 @@ class SubmissionProcessor {
     final extraBuildProperties = TargetProperties(
         properties: gradingOptions.buildProperties
     );
-    final executableTargetToBuild = gradingOptions.executableTarget;
+    ExecutableTarget executableTargetToBuild = gradingOptions.executableTarget;
+    if (executableTargetToBuild==ExecutableTarget.AutodetectExecutable) {
+      executableTargetToBuild = builder.defaultBuildTarget;
+    }
 
     Iterable<BuildArtifact> buildArtifacts = [];
 
@@ -141,14 +145,23 @@ class SubmissionProcessor {
   Future<void> processSubmission() async {
     submission = submission.deepCopy();
     try {
-      log.fine('started processing ${submission.id}');
-      _processSubmissionGuarded();
-      log.fine('submission ${submission.id} done with status ${submission.status.value} (${submission.status.name})');
-    } catch (error, stackTrace) {
-      log.severe('submission ${submission.id} failed: $error');
+      log.info('started processing ${submission.id}');
+      await _processSubmissionGuarded();
+      log.info('submission ${submission.id} done with status ${submission.status.value} (${submission.status.name})');
+    }
+    catch (error) {
       submission.status = SolutionStatus.CHECK_FAILED;
-      submission.buildErrorLog = '$error\n$stackTrace';
-    } finally {
+      String message = error.toString();
+      if (error is Error) {
+        String stackTrace = error.stackTrace!=null? error.stackTrace!.toString() : '';
+        if (stackTrace.isNotEmpty) {
+          message += '\n$stackTrace';
+        }
+      }
+      log.info('submission ${submission.id} failed: $message');
+      submission.buildErrorLog = message;
+    }
+    finally {
       runner.releaseDirectoryForSubmission(submission);
     }
   }
@@ -316,14 +329,11 @@ class SubmissionProcessor {
     );
     for (final artifact in buildArtifacts) {
       final gradingLimits = defaultLimits.mergedWith(gradingOptions.limits);
-      final extraRuntimeProperties = TargetProperties(
-          properties: gradingOptions.targetProperties
-      );
       final runtime = runtimeFactory.createRuntime(
-          gradingLimits: gradingLimits,
-          submission: submission,
-          artifact: artifact,
-          extraTargetProperties: extraRuntimeProperties,
+        gradingOptions: gradingOptions,
+        gradingLimits: gradingLimits,
+        submission: submission,
+        artifact: artifact,
       );
       final testsCount = prepareSubmissionTests(runtime.runtimeName);
       for (int testNumber=1; testNumber<=testsCount; testNumber++) {
@@ -401,19 +411,61 @@ class SubmissionProcessor {
       }
     }
     final stdoutFile = io.File(stdoutFilePath);
-    List<int> stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
-    final resultCheckerMessage = runChecker(
-        [], // TODO ???
-        stdinData, stdinFilePath,
-        stdout, stdoutFilePath,
-        referenceStdout, referencePath,
-        wd
-    );
+    int outFileMode = 0;
+    bool outputIsReadableByOwner = false;
+    bool outputIsExecutable = false;
+    if (stdoutFile.existsSync()) {
+      outFileMode = stdoutFile.statSync().mode;
+      final fileStat = posix.stat(stdoutFilePath);
+      outFileMode = fileStat.mode.mode;
+      outputIsReadableByOwner = fileStat.mode.isOwnerReadable;
+      outputIsExecutable = fileStat.mode.isOwnerExecutable || fileStat.mode.isGroupExecutable || fileStat.mode.isOtherExecutable;
+    }
+    String resultCheckerMessage = '';
+    String printableMode = (outFileMode).toRadixString(8);
+    if (printableMode.length > 3) {
+      printableMode = printableMode.substring(printableMode.length-3);
+    }
+    printableMode = printableMode.padLeft(4, '0');
+    List<int> stdout = [];
+    if (!stdoutFile.existsSync()) {
+      resultCheckerMessage = 'Output file not exists';
+    }
+    else if (!outputIsReadableByOwner) {
+      resultCheckerMessage = 'Output file has mode $printableMode which not readable by owner';
+    }
+    else if (outputIsExecutable) {
+      resultCheckerMessage = 'Output file has mode $printableMode and it is not secure';
+    }
+    else {
+      stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
+      resultCheckerMessage = runChecker(
+          [], // TODO ???
+          stdinData, stdinFilePath,
+          stdout, stdoutFilePath,
+          referenceStdout, referencePath,
+          wd
+      );
+    }
+
     final checkerOutFile = io.File('${runsDir.path}/$testBaseName.checker');
     checkerOutFile.writeAsStringSync(resultCheckerMessage);
 
     if (resultCheckerMessage.isNotEmpty) {
-      String waMessage = '=== Checker output:\n$resultCheckerMessage\n';
+      String checkerMessageToShow;
+      if (resultCheckerMessage.length > RunTestArtifact.maxDataSizeToShow) {
+        checkerMessageToShow = RunTestArtifact.screenBadSymbols(
+            resultCheckerMessage.substring(0, RunTestArtifact.maxDataSizeToShow)
+        );
+      }
+      else {
+        checkerMessageToShow = RunTestArtifact.screenBadSymbols(resultCheckerMessage);
+      }
+      String waMessage = '=== Checker output:\n';
+      if (resultCheckerMessage.length > RunTestArtifact.maxDataSizeToShow) {
+        waMessage += '(truncated to ${RunTestArtifact.maxDataSizeToShow} symbols)\n';
+      }
+      waMessage += '$checkerMessageToShow\n';
       List<int> stdinBytesToShow = [];
       if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
         stdinBytesToShow = stdinData.sublist(0, RunTestArtifact.maxDataSizeToShow);
@@ -437,7 +489,7 @@ class SubmissionProcessor {
         inputDataToShow = '(input is binary file)\n';
       }
       if (inputDataToShow.isNotEmpty) {
-        waMessage += '=== Input data: $inputDataToShow';
+        waMessage += '=== Input data: ${RunTestArtifact.screenBadSymbols(inputDataToShow)}';
       }
       testResult.checkerOutput = waMessage;
       testResult.status = SolutionStatus.WRONG_ANSWER;
@@ -459,8 +511,13 @@ class SubmissionProcessor {
     return baseName;
   }
 
-  io.Directory get submissionOptionsDirectory =>
-    io.Directory('${locationProperties.cacheDir}/${submission.course.dataId}/${submission.problemId}/build');
+  io.Directory get submissionOptionsDirectory {
+    final cacheDir = locationProperties.cacheDir;
+    final dataId = submission.course.dataId;
+    final problemSubdir = submission.problemId.replaceAll(':', '/');
+    final path = '$cacheDir/$dataId/$problemSubdir/build';
+    return io.Directory(path);
+  }
 
 
   List<String> parseTestInfArgumentsLine(String line) {

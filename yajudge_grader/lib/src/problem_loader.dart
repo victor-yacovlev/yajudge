@@ -52,6 +52,7 @@ class ProblemLoader {
       testsDir.createSync(recursive: true);
       final problemData = response.data.deepCopy();
       final opts = problemData.gradingOptions;
+      opts.extraBuildFiles.saveAll(buildDir);
       opts.coprocess = await buildSupplementaryProgram(
           opts.coprocess, buildDir.path, courseId, problemId
       );
@@ -83,6 +84,7 @@ class ProblemLoader {
     }
     final buildDir = io.Directory(buildDirPath);
     buildDir.createSync(recursive: true);
+    sourceFile.save(buildDir);
 
     final compilerProperties = buildProperties.propertiesForLanguage(
         useCxx? ProgrammingLanguage.cxx : ProgrammingLanguage.c

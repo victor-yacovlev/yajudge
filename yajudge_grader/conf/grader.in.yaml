@@ -32,7 +32,7 @@ default_build_properties:
     enable_sanitizers: undefined address
   S:
     compiler: clang
-    compile_options: -00 -g
+    compile_options: -O0 -g
   java:
     compiler: javac
     compile_options: -g -Werror -source 11 -target 11
