@@ -603,6 +603,7 @@ enum GraderStatus {
 message GraderStatusMessage {
   GraderProperties properties = 1;
   GraderStatus status = 2;
+  int32 capacity = 3;
 }
 
 service SubmissionManagement {

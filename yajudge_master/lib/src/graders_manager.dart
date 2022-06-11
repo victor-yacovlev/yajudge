@@ -11,9 +11,13 @@ class GraderConnection {
   final GraderProperties properties;
   final StreamController<Submission> sink = StreamController<Submission>();
   GraderStatus status = GraderStatus.Unknown;
+  int capacity = 0;
 
   GraderConnection(this.call, this.properties) {
-    String identity = '${properties.name} with CPU=${properties.platform.arch} and PR=${properties.performanceRating}';
+    String identity =
+        '${properties.name} with CPU=${properties.platform.arch}'
+        ', THREADS=${properties.numberOfWorkers}'
+        ' and PR=${properties.performanceRating}';
     if (properties.archSpecificOnlyJobs) {
       identity += ' (takes only arch-specific jobs)';
     }
@@ -32,10 +36,11 @@ class GraderConnection {
   }
 
   bool pushSubmission(Submission submission) {
-    if (status != GraderStatus.Idle) {
+    if (status != GraderStatus.Idle || capacity <= 0) {
       return false;
     }
     sink.add(submission);
+    capacity --;
     return true;
   }
 
@@ -79,11 +84,12 @@ class GradersManager {
     return _connections[announce.name]!.sink;
   }
 
-  void setGraderStatus(String name, GraderStatus status) {
+  void setGraderStatus(String name, GraderStatus status, int capacity) {
     if (!_connections.containsKey(name)) {
       return;
     }
     _connections[name]!.status = status;
+    _connections[name]!.capacity = capacity;
     if (status == GraderStatus.ShuttingDown) {
       _connections[name]!.destroy(null, null);
       _connections.remove(name);
@@ -101,7 +107,7 @@ class GradersManager {
   GraderConnection? findGrader(GradingPlatform platformRequired) {
     List<GraderConnection> candidates = [];
     for (final grader in _connections.values) {
-      if (grader.status != GraderStatus.Idle) {
+      if (grader.status != GraderStatus.Idle && grader.capacity > 0) {
         continue;  // grader not ready yet or processing another submission
       }
       if (platformRequired.arch != Arch.ARCH_ANY) {
@@ -123,7 +129,9 @@ class GradersManager {
     // if several graders available then return best performance rated
     if (candidates.length > 1) {
       candidates.sort((GraderConnection a, GraderConnection b) {
-        return a.properties.performanceRating.compareTo(b.properties.performanceRating);
+        final aRating = a.properties.performanceRating * a.capacity;
+        final bRating = b.properties.performanceRating * b.capacity;
+        return aRating.compareTo(bRating);
       });
     }
     return candidates.last;

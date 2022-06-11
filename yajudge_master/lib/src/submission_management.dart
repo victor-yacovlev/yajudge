@@ -36,7 +36,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     required this.connection,
   })
   {
-    Timer.periodic(Duration(seconds: 5), (_) { processSubmissionsQueue(); });
+    Timer.periodic(Duration(seconds: 2), (_) { processSubmissionsQueue(); });
   }
 
   @override
@@ -1255,7 +1255,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
   @override
   Future<Empty> setGraderStatus(ServiceCall call, GraderStatusMessage request) async {
-    _gradersManager.setGraderStatus(request.properties.name, request.status);
+    _gradersManager.setGraderStatus(request.properties.name, request.status, request.capacity);
     return Empty();
   }
 

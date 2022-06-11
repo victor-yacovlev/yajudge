@@ -389,6 +389,7 @@ class GraderService {
         await submissionsService.setGraderStatus(GraderStatusMessage(
           properties: graderProperties(),
           status: status,
+          capacity: _idleWorkersCount,
         ));
         pushOK = true;
       }
