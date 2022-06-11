@@ -505,7 +505,7 @@ class SubmissionScreenState extends BaseScreenState {
         } catch (_) {
         }
         if (fileContent != null) {
-          contents.add(createFilePreview(context, file.name, fileContent, true));
+          contents.add(createFilePreview(context, file.name, fileContent, true, true));
         }
         else {
           contents.add(SizedBox(height: 20));
@@ -642,11 +642,11 @@ class SubmissionScreenState extends BaseScreenState {
     }
     if (fileContent != null) {
       if (fileContent.length <= maxFileSizeToShow) {
-        contents.add(createFilePreview(context, '', fileContent, false));
+        contents.add(createFilePreview(context, '', fileContent, false, false));
       }
       else {
         contents.add(Text('Вывод слишком большой, отображается только первые $maxFileSizeToShow символов'));
-        contents.add(createFilePreview(context, '', fileContent.substring(0, maxFileSizeToShow), false));
+        contents.add(createFilePreview(context, '', fileContent.substring(0, maxFileSizeToShow), false, false));
       }
     }
     return contents;
@@ -786,12 +786,18 @@ class SubmissionScreenState extends BaseScreenState {
   }
 
 
-  Widget createFilePreview(BuildContext context, String fileName, String data, bool withLineNumbers) {
+  Widget createFilePreview(
+      BuildContext context,
+      String fileName,
+      String data,
+      bool withLineNumbers,
+      bool editableComments,
+      ) {
     return SourceViewWidget(
       text: data,
       fileName: fileName,
       withLineNumbers: withLineNumbers,
-      lineCommentController: _lineCommentController,
+      lineCommentController: editableComments? _lineCommentController : null,
     );
   }
 
@@ -915,7 +921,6 @@ const statusesShort = {
 };
 
 String statusMessageText(SolutionStatus status, String graderName, bool shortVariant) {
-  // TODO implement i18n for non-Russian languages
   String message = '';
 
   if (!shortVariant) {

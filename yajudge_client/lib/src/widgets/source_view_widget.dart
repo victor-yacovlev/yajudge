@@ -46,7 +46,7 @@ class SourceViewWidget extends StatefulWidget {
   final String text;
   late final List<String> lines;
   final bool withLineNumbers;
-  final LineCommentController lineCommentController;
+  final LineCommentController? lineCommentController;
   final String fileName;
   SourceViewWidget({
     required this.text,
@@ -86,7 +86,7 @@ class LineCommentableTextPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final lines = state.widget.lines;
-    final comments = state.widget.lineCommentController.comments;
+    final comments = state.widget.lineCommentController?.comments;
     final lineHeight = calculateLineHeight(mainStyle);
     final commentHeight = calculateLineHeight(commentStyle);
     final commentInLineOffset = (lineHeight - commentHeight) / 2.0;
@@ -96,10 +96,12 @@ class LineCommentableTextPainter extends CustomPainter {
     Offset offset = Offset(0, 0);
     for (int i=0; i<lines.length; i++) {
       LineComment? comment;
-      for (final candidate in comments) {
-        if (candidate.lineNumber == i) {
-          comment = candidate;
-          break;
+      if (comments != null) {
+        for (final candidate in comments) {
+          if (candidate.lineNumber == i) {
+            comment = candidate;
+            break;
+          }
         }
       }
       final lineRect = Rect.fromLTRB(0, offset.dy, size.width, offset.dy+lineHeight);
@@ -271,9 +273,10 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
   }
 
   Widget buildEditorView(BuildContext context) {
-    final canEditComments = widget.lineCommentController.editable;
+    final controller = widget.lineCommentController;
+    final canEditComments = controller==null? false : controller.editable;
     final lines = widget.lines;
-    final comments = widget.lineCommentController.comments;
+    final comments = controller==null? <LineComment>[] : widget.lineCommentController!.comments;
     final mainStyle = createTextStyle(context);
     final commentStyle = createCommentStyle(context);
 
@@ -343,7 +346,8 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
     if (_currentHoveredLine == -1 || _currentHoveredLine >= widget.linesCount) {
       return;
     }
-    widget.lineCommentController.notify();
+    final controller = widget.lineCommentController;
+    controller?.notify();
     int editLine = _currentHoveredLine;
     if (_currentCommentEditingLine!=-1 && _currentCommentEditingLine!=editLine) {
       if (_commentEditor != null) {
@@ -353,7 +357,7 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
       setState(() {
         _currentCommentEditingLine = editLine;
         _commentEditor = TextEditingController();
-        final comments = widget.lineCommentController.comments;
+        final comments = controller==null? <LineComment>[] : controller.comments;
         for (final comment in comments) {
           if (comment.lineNumber == editLine) {
             _commentEditor!.text = comment.message;
@@ -370,7 +374,8 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
       log.info('comment editor is null');
       return;
     }
-    final comments = widget.lineCommentController.comments;
+    final controller = widget.lineCommentController;
+    final comments = controller==null? <LineComment>[] : controller.comments;
     final fileName = widget.fileName;
     setState(() {
       int index = -1;
@@ -401,7 +406,7 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
       }
       _commentEditor = null;
       _currentCommentEditingLine = -1;
-      widget.lineCommentController.notify();
+      widget.lineCommentController?.notify();
     });
   }
 
