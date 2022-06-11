@@ -79,6 +79,9 @@ class RunTestArtifact {
     SolutionStatus status = SolutionStatus.ANY_STATUS_OR_NULL;
     String stdoutResult = stdoutAsString;
     String stderrResult = stderrAsString;
+    if (signalKilled > 0) {
+      stderrResult = _removeYajudgeInternals(stderrResult);
+    }
     int valgrindErrorsCount = 0;
     String valgrindOutput = '';
     if (signalKilled != 0 || detectedError is SanitizerError) {
@@ -102,6 +105,13 @@ class RunTestArtifact {
       valgrindErrors: valgrindErrorsCount,
       valgrindOutput: screenBadSymbols(valgrindOutput),
     ).deepCopy();
+  }
+
+  static String _removeYajudgeInternals(String src) {
+    List<String> lines = src.split('\n');
+    final rxYajudgeInternalScript = RegExp(r'run_wrapper_stage\d\d\.sh');
+    lines = lines.where((element) => !rxYajudgeInternalScript.hasMatch(element)).toList();
+    return lines.join('\n');
   }
 
 }
