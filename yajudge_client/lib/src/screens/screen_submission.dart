@@ -918,6 +918,7 @@ const statusesShort = {
   SolutionStatus.PLAGIARISM_DETECTED: 'CHEAT?',
   SolutionStatus.CODE_REVIEW_REJECTED: 'REJ',
   SolutionStatus.SUMMON_FOR_DEFENCE: 'SM',
+  SolutionStatus.CHECK_FAILED: 'CF',
 };
 
 String statusMessageText(SolutionStatus status, String graderName, bool shortVariant) {
