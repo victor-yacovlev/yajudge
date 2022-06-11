@@ -241,7 +241,9 @@ class SubmissionScreenState extends BaseScreenState {
         _submission = submission.deepCopy();
       }
       else {
-        _submission!.status = submission.status;
+        if (submission.status != SolutionStatus.ANY_STATUS_OR_NULL) {
+          _submission!.status = submission.status;
+        }
         _submission!.graderName = submission.graderName;
         _submission!.buildErrorLog = submission.buildErrorLog;
         _submission!.graderScore = submission.graderScore;
