@@ -535,6 +535,13 @@ class SubmissionScreenState extends BaseScreenState {
       );
       fileContent = _submission!.buildErrorLog;
     }
+    else if (_submission!.status == SolutionStatus.CHECK_FAILED) {
+      contents.add(Container(
+          padding: fileHeadPadding,
+          child: Text('Лог тестирующий системы:', style: fileHeadStyle))
+      );
+      fileContent = _submission!.buildErrorLog;
+    }
     else if (_submission!.status == SolutionStatus.STYLE_CHECK_ERROR) {
       contents.add(Container(
           padding: fileHeadPadding,
@@ -823,6 +830,7 @@ const statusesFull = {
   SolutionStatus.WRONG_ANSWER: 'Неправильный ответ',
   SolutionStatus.VALGRIND_ERRORS: 'Ошибки Valgrind',
   SolutionStatus.TIME_LIMIT: 'Лимит времени',
+  SolutionStatus.CHECK_FAILED: 'Ошибка тестирования',
 };
 
 const statusesShort = {
