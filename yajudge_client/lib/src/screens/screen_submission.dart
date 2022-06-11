@@ -517,6 +517,57 @@ class SubmissionScreenState extends BaseScreenState {
     return contents;
   }
 
+  static const signalDescriptions = {
+    1: ['SIGHUP'],
+    2: ['SIGINT'],
+    3: ['SIGQUIT'],
+    4: ['SIGILL'],
+    5: ['SIGTRAP'],
+    6: ['SIGABRT'],
+    7: ['SIGBUS'],
+    8: ['SIGFPE'],
+    9: ['SIGKILL', 'возможно лимит ресурсов'],
+    10: ['SIGUSR1'],
+    11: ['SIGSEGV', 'ошибки работы с памятью'],
+    12: ['SIGUSR2'],
+    13: ['SIGPIPE', 'попытка записать в закрытый канал или сокет'],
+    14: ['SIGALRM'],
+    15: ['SIGTERM'],
+    16: ['SIGSTKFLT'],
+    17: ['SIGCHLD'],
+    18: ['SIGCONT'],
+    19: ['SIGSTOP'],
+    20: ['SIGTSTP'],
+    21: ['SIGTTIN'],
+    22: ['SIGTTOU'],
+    23: ['SIGURG'],
+    24: ['SIGXCPU'],
+    25: ['SIGXFSZ'],
+    26: ['SIGVTALRM'],
+    27: ['SIGPROF'],
+    28: ['SIGWINCH'],
+    29: ['SIGIO'],
+    30: ['SIGPWR'],
+    31: ['SIGSYS'],
+  };
+
+  static String runtimeErrorDescription(int signum) {
+    String result = '';
+    if (signalDescriptions.containsKey(signum)) {
+      final description = signalDescriptions[signum]!;
+      final sigName = description.first;
+      final comment = description.length>1 ? description[1] : '';
+      result = 'Процесс прибит сигналом $sigName';
+      if (comment.isNotEmpty) {
+        result += ' ($comment)';
+      }
+    }
+    else {
+      result = 'Процесс прибит сигналом с номером $signum';
+    }
+    return result;
+  }
+
   List<Widget> buildSubmissionErrors(BuildContext context) {
     List<Widget> contents = [];
     if (_submission == null) {
@@ -551,11 +602,24 @@ class SubmissionScreenState extends BaseScreenState {
     }
     else if (_submission!.status == SolutionStatus.RUNTIME_ERROR) {
       final brokenTestCase = findFirstBrokenTest();
-      fileContent = '=== stdout:\n${brokenTestCase.stdout}\n\n=== stderr:\n${brokenTestCase.stderr}';
+      String stdoutContent = brokenTestCase.stdout.trim();
+      if (stdoutContent.isNotEmpty) stdoutContent = '=== stdout:\n$stdoutContent\n\n';
+      String stderrContent = brokenTestCase.stderr.trim();
+      if (stderrContent.isNotEmpty) stderrContent = '=== stderr:\n$stderrContent';
+      String messageContent = stdoutContent + stderrContent;
+      if (messageContent.isNotEmpty) {
+        fileContent = messageContent;
+      }
       brokenTestNumber = brokenTestCase.testNumber.toInt();
       contents.add(Container(
           padding: fileHeadPadding,
           child: Text('Ошибка выполнения на тесте $brokenTestNumber:', style: fileHeadStyle))
+      );
+      final signalNumber = brokenTestCase.signalKilled;
+      final errorDescription = runtimeErrorDescription(signalNumber);
+      contents.add(Container(
+          padding: fileHeadPadding,
+          child: Text(errorDescription))
       );
     }
     else if (_submission!.status == SolutionStatus.VALGRIND_ERRORS) {
