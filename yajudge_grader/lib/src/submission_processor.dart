@@ -13,7 +13,6 @@ import 'checkers.dart';
 import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
 import 'package:yaml/yaml.dart';
-import 'package:posix/posix.dart' as posix;
 
 import 'interactors.dart';
 import 'runtimes.dart';
@@ -416,10 +415,12 @@ class SubmissionProcessor {
     bool outputIsExecutable = false;
     if (stdoutFile.existsSync()) {
       outFileMode = stdoutFile.statSync().mode;
-      final fileStat = posix.stat(stdoutFilePath);
-      outFileMode = fileStat.mode.mode;
-      outputIsReadableByOwner = fileStat.mode.isOwnerReadable;
-      outputIsExecutable = fileStat.mode.isOwnerExecutable || fileStat.mode.isGroupExecutable || fileStat.mode.isOtherExecutable;
+      final fileAccessMask = int.parse('777', radix: 8);
+      final fileAccessMode = outFileMode & fileAccessMask;
+      final executableMask = int.parse('111', radix: 8);
+      final ownerReadableMask = int.parse('400', radix: 8);
+      outputIsReadableByOwner = (fileAccessMode & ownerReadableMask) != 0;
+      outputIsExecutable = (fileAccessMode & executableMask) != 0;
     }
     String resultCheckerMessage = '';
     String printableMode = (outFileMode).toRadixString(8);

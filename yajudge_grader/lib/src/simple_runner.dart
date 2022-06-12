@@ -18,7 +18,11 @@ class SimpleRunner extends AbstractRunner {
     String submissionPath = path.absolute(locationProperties.workDir, '${submission.id}');
     String courseId = submission.course.dataId;
     String problemId = submission.problemId;
-    String problemContentPath = path.absolute(locationProperties.cacheDir, courseId, problemId);
+    String problemContentPath = path.absolute(
+        locationProperties.cacheDir, 
+        courseId, 
+        problemId.replaceAll(':', '/'),
+    );
     final submissionFilesDir = io.Directory('$submissionPath/build');
     submissionFilesDir.createSync(recursive: true);
     final problemContent = io.Directory(problemContentPath);
