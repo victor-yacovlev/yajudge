@@ -1,12 +1,8 @@
-import 'dart:io' as io;
-
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
-import 'package:path/path.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:posix/posix.dart' as posix;
 
 import './master_service.dart';
 
@@ -173,7 +169,7 @@ class CourseManagementService extends CourseManagementServiceBase {
   Future<Course> getCourseInfo(Int64 id) async {
     final query = '''
     select 
-      name, course_data, url_prefix, no_teacher_mode
+      name, course_data, url_prefix, disable_review, disable_defence
     from courses
     where id=@id
     ''';
@@ -185,20 +181,22 @@ class CourseManagementService extends CourseManagementServiceBase {
     String name = row[0];
     String dataId = row[1];
     String urlPrefix = row[2];
-    bool noTeacherMode = row[3];
+    bool skipReview = row[3];
+    bool skipDefence = row[4];
     return Course(
       id: id,
       name: name,
       dataId: dataId,
       urlPrefix: urlPrefix,
-      noTeacherMode: noTeacherMode,
+      disableReview: skipReview,
+      disableDefence: skipDefence,
     );
   }
 
   Future<Course> getCourseInfoByUrlPrefix(String urlPrefix) async {
     final query = '''
     select 
-      id, name, course_data, no_teacher_mode
+      id, name, course_data, disable_review, disable_defence
     from courses
     where url_prefix=@url_prefix
     ''';
@@ -210,13 +208,15 @@ class CourseManagementService extends CourseManagementServiceBase {
     int id = row[0];
     String name = row[1];
     String dataId = row[2];
-    bool noTeacherMode = row[3];
+    bool skipReview = row[3];
+    bool skipDefence = row[4];
     return Course(
       id: Int64(id),
       name: name,
       dataId: dataId,
       urlPrefix: urlPrefix,
-      noTeacherMode: noTeacherMode,
+      disableReview: skipReview,
+      disableDefence: skipDefence,
     );
   }
 
@@ -236,7 +236,7 @@ class CourseManagementService extends CourseManagementServiceBase {
       }
     }
     List<dynamic> allCourses = await connection
-        .query('select id,name,course_data,url_prefix,no_teacher_mode from courses');
+        .query('select id,name,course_data,url_prefix,disable_review,disable_defence from courses');
     List<CoursesList_CourseListEntry> res = List.empty(growable: true);
     for (List<dynamic> row in allCourses) {
       Course candidate = Course();
@@ -244,7 +244,8 @@ class CourseManagementService extends CourseManagementServiceBase {
       candidate.name = row[1];
       candidate.dataId = row[2];
       candidate.urlPrefix = row[3];
-      candidate.noTeacherMode = row[4];
+      candidate.disableReview = row[4];
+      candidate.disableDefence = row[5];
       Role courseRole = Role.ROLE_STUDENT;
       bool enrollmentFound = false;
       for (Enrollment enr in enrollments) {

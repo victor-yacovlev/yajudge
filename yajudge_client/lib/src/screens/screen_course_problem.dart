@@ -217,11 +217,13 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       problemStatus = 'не обязательная задача';
     }
     String actionsOnPassed = '';
-    if (_course.noTeacherMode || _problemMetadata.skipCodeReview && _problemMetadata.skipSolutionDefence) {
+    bool skipReview = _course.disableReview || _problemMetadata.skipCodeReview;
+    bool skipDefence = _course.disableDefence || _problemMetadata.skipSolutionDefence;
+    if (skipDefence && skipReview) {
       actionsOnPassed = 'задача считается решенной, код ревью и защита не требуются';
-    } else if (_problemMetadata.skipCodeReview) {
+    } else if (skipReview) {
       actionsOnPassed = 'необходимо защитить решение';
-    } else if (_problemMetadata.skipSolutionDefence) {
+    } else if (skipDefence) {
       actionsOnPassed = 'необходимо пройди код ревью';
     } else {
       actionsOnPassed = 'необходимо пройди код ревью и защитить решение';

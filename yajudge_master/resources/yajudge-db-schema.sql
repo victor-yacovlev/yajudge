@@ -1,215 +1,135 @@
-CREATE TABLE public.courses (
-    id integer NOT NULL,
-    name character varying(50) NOT NULL,
-    course_data character varying(100) NOT NULL,
-    url_prefix character varying(50) NOT NULL,
-    no_teacher_mode boolean DEFAULT true NOT NULL,
-    must_solve_all_required_problems_to_complete boolean DEFAULT false
+create table if not exists courses
+(
+    id                                           serial
+        constraint courses_pk
+            primary key,
+    name                                         varchar(50)  not null,
+    course_data                                  varchar(100) not null,
+    url_prefix                                   varchar(50)  not null,
+    must_solve_all_required_problems_to_complete boolean default false,
+    disable_review                               boolean default false,
+    disable_defence                              boolean default true
 );
 
 
-CREATE SEQUENCE public.courses_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-
-ALTER SEQUENCE public.courses_id_seq OWNED BY public.courses.id;
-
-
-CREATE TABLE public.personal_enrollments (
-    id integer NOT NULL,
-    courses_id integer NOT NULL,
-    users_id integer NOT NULL,
-    role integer NOT NULL,
-    group_pattern varchar(30) NOT NULL DEFAULT ''
+create table if not exists submission_results
+(
+    id              serial
+        constraint submission_results_pk
+            primary key,
+    submissions_id  integer                               not null,
+    test_number     integer                               not null,
+    stdout          varchar                               not null,
+    stderr          varchar                               not null,
+    status          integer                               not null,
+    standard_match  boolean                               not null,
+    signal_killed   integer                               not null,
+    valgrind_errors integer                               not null,
+    valgrind_output varchar                               not null,
+    killed_by_timer boolean                               not null,
+    checker_output  varchar default ''::character varying not null,
+    exit_status     integer default 0                     not null
 );
 
 
-CREATE SEQUENCE public.personal_enrollments_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+create index if not exists submission_results_target_index
+    on submission_results (submissions_id);
 
-
-ALTER SEQUENCE public.personal_enrollments_id_seq OWNED BY public.personal_enrollments.id;
-
-
-CREATE TABLE public.group_enrollments (
-    id integer NOT NULL,
-    courses_id integer NOT NULL,
-    group_pattern varchar(30) NOT NULL
+create table if not exists users
+(
+    id           serial
+        constraint users_pk
+            primary key,
+    password     varchar(128)          not null,
+    first_name   varchar(50),
+    last_name    varchar(50),
+    mid_name     varchar(50),
+    email        varchar(50),
+    group_name   varchar(30),
+    default_role integer default 0     not null,
+    disabled     boolean default false not null,
+    login        varchar(30)
 );
 
 
-CREATE SEQUENCE public.group_enrollments_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.group_enrollments_id_seq OWNED BY public.group_enrollments.id;
-
-
-CREATE TABLE public.sessions (
-    cookie character varying(64) NOT NULL,
-    start timestamp without time zone NOT NULL,
-    users_id integer NOT NULL
+create table if not exists personal_enrollments
+(
+    id            integer     default nextval('enrollments_id_seq'::regclass) not null
+        constraint enrollments_pk
+            primary key,
+    courses_id    integer                                                     not null
+        constraint enrollments_courses_id_fk
+            references courses,
+    users_id      integer                                                     not null
+        constraint enrollments_users_id_fk
+            references users,
+    role          integer                                                     not null,
+    group_pattern varchar(30) default ''::character varying                   not null
 );
 
 
-CREATE TABLE public.submission_files (
-    id integer NOT NULL,
-    file_name character varying(80) NOT NULL,
-    content character varying NOT NULL,
-    submissions_id integer NOT NULL
-);
-
-CREATE SEQUENCE public.submission_files_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE public.submission_files_id_seq OWNED BY public.submission_files.id;
-
-
-CREATE TABLE public.submission_results (
-    id integer NOT NULL,
-    submissions_id integer NOT NULL,
-    test_number integer NOT NULL,
-    stdout character varying NOT NULL,
-    stderr character varying NOT NULL,
-    status integer NOT NULL,
-    standard_match boolean NOT NULL,
-    signal_killed integer NOT NULL,
-    valgrind_errors integer NOT NULL,
-    valgrind_output character varying NOT NULL,
-    killed_by_timer boolean NOT NULL,
-    checker_output character varying DEFAULT ''::character varying NOT NULL,
-    exit_status integer DEFAULT 0 NOT NULL
+create table if not exists sessions
+(
+    cookie   varchar(64) not null
+        constraint sessions_pk
+            primary key,
+    start    timestamp   not null,
+    users_id integer     not null
+        constraint sessions_users_id_fk
+            references users
+            on delete cascade
 );
 
 
-CREATE SEQUENCE public.submission_results_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-ALTER SEQUENCE public.submission_results_id_seq OWNED BY public.submission_results.id;
-
-
-CREATE TABLE public.submissions (
-    id integer NOT NULL,
-    users_id integer NOT NULL,
-    courses_id integer NOT NULL,
-    problem_id character varying(100) NOT NULL,
-    status integer NOT NULL,
-    "timestamp" bigint NOT NULL,
-    grader_name character varying(100),
-    style_error_log character varying,
-    compile_error_log character varying
-);
-
-CREATE SEQUENCE public.submissions_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-ALTER SEQUENCE public.submissions_id_seq OWNED BY public.submissions.id;
-
-
-CREATE TABLE public.users (
-    id integer NOT NULL,
-    login character varying(30),
-    password character varying(128) NOT NULL,
-    first_name character varying(50),
-    last_name character varying(50),
-    mid_name character varying(50),
-    email character varying(50),
-    group_name character varying(30),
-    default_role integer DEFAULT 0 NOT NULL,
-    disabled boolean DEFAULT false NOT NULL
+create table if not exists submissions
+(
+    id                serial
+        constraint submissions_pk
+            primary key,
+    users_id          integer      not null
+        constraint submissions_users_id_fk
+            references users,
+    courses_id        integer      not null
+        constraint submissions_courses_id_fk
+            references courses,
+    problem_id        varchar(100) not null,
+    status            integer      not null,
+    timestamp         bigint       not null,
+    grader_name       varchar(100),
+    style_error_log   varchar,
+    compile_error_log varchar
 );
 
 
-CREATE SEQUENCE public.users_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+create table if not exists submission_files
+(
+    id             integer default nextval('submission_files_id_seq'::regclass) not null
+        constraint submission_files_pk
+            primary key,
+    file_name      varchar(30)                                                  not null,
+    content        varchar                                                      not null,
+    submissions_id integer                                                      not null
+        constraint submission_files_submissions_id_fk
+            references submissions
+);
 
 
-ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
+create unique index if not exists users_login_uindex
+    on users (login);
+
+create table if not exists group_enrollments
+(
+    id            serial
+        constraint group_enrollments_pk
+            primary key,
+    courses_id    integer     not null
+        constraint group_enrollments_courses_id_fk
+            references courses,
+    group_pattern varchar(30) not null
+);
 
 
-
-ALTER TABLE ONLY public.courses ALTER COLUMN id SET DEFAULT nextval('public.courses_id_seq'::regclass);
-ALTER TABLE ONLY public.enrollments ALTER COLUMN id SET DEFAULT nextval('public.enrollments_id_seq'::regclass);
-ALTER TABLE ONLY public.submission_files ALTER COLUMN id SET DEFAULT nextval('public.submission_files_id_seq'::regclass);
-ALTER TABLE ONLY public.submission_results ALTER COLUMN id SET DEFAULT nextval('public.submission_results_id_seq'::regclass);
-ALTER TABLE ONLY public.submissions ALTER COLUMN id SET DEFAULT nextval('public.submissions_id_seq'::regclass);
-ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
-
-ALTER TABLE ONLY public.courses
-    ADD CONSTRAINT courses_pk PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.enrollments
-    ADD CONSTRAINT enrollments_pk PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_pk PRIMARY KEY (cookie);
-
-ALTER TABLE ONLY public.submission_files
-    ADD CONSTRAINT submission_files_pk PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.submission_results
-    ADD CONSTRAINT submission_results_pk PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_pk PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_pk PRIMARY KEY (id);
-
-
-CREATE INDEX submission_results_target_index ON public.submission_results USING btree (submissions_id);
-
-
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_users_id_fk FOREIGN KEY (users_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
-ALTER TABLE ONLY public.submission_files
-    ADD CONSTRAINT submission_files_submissions_id_fk FOREIGN KEY (submissions_id) REFERENCES public.submissions(id);
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_courses_id_fk FOREIGN KEY (courses_id) REFERENCES public.courses(id);
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_users_id_fk FOREIGN KEY (users_id) REFERENCES public.users(id);
-
-create table code_reviews
+create table if not exists code_reviews
 (
     id             serial
         constraint code_reviews_pk
@@ -220,14 +140,16 @@ create table code_reviews
     timestamp      bigint  not null
 );
 
-create table review_line_comments
+
+create table if not exists review_line_comments
 (
     id              serial
         constraint review_line_comments_pk
             primary key,
-    code_reviews_id integer                                   not null,
-    line_number     integer                                   not null,
-    message         varchar                                   not null,
-    context         varchar                                   not null,
-    file_name       varchar(80)                               not null
+    code_reviews_id integer     not null,
+    line_number     integer     not null,
+    message         varchar     not null,
+    context         varchar     not null,
+    file_name       varchar(80) not null
 );
+
