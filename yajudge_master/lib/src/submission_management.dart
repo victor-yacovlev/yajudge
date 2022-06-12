@@ -331,6 +331,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         queryFilter += ' and users.id!=@user_id ';
         queryValues['user_id'] = currentUser.id.toInt();
       }
+      if (request.courseId > 0) {
+        queryFilter += ' and courses_id=@course_id ';
+        queryValues['course_id'] = request.courseId.toInt();
+      }
       if (request.statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
         queryFilter += ' and status=@status ';
         queryValues['status'] = request.statusFilter.value;

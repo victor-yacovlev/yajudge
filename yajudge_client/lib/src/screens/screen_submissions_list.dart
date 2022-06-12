@@ -119,6 +119,7 @@ class SubmissionsListScreenState extends BaseScreenState {
             void afterLoadCourse() {
               _course = value.item1;
               _role = value.item2;
+              query.courseId = _course.id;
               title = 'Посылки курса ${_course.name}';
             }
             if (mounted) {

@@ -106,7 +106,7 @@ class AppState extends State<App> {
           loggedInUser: loggedUser, userIdOrNewOrMyself: arg);
     }
 
-    final RegExp submissionsWithNumber = RegExp(r'/submissions/([a-z_-]+)/(\d+)');
+    final RegExp submissionsWithNumber = RegExp(r'/submissions/([0-9a-z_-]+)/(\d+)');
     if (submissionsWithNumber.hasMatch(fullPath)) {
       final match = submissionsWithNumber.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
@@ -118,7 +118,7 @@ class AppState extends State<App> {
       );
     }
 
-    final RegExp submissionsWithFilters = RegExp(r'/submissions/([a-z_-]+)(/filter:.+)?');
+    final RegExp submissionsWithFilters = RegExp(r'/submissions/([0-9a-z_-]+)(/filter:.+)?');
     if (submissionsWithFilters.hasMatch(fullPath)) {
       final match = submissionsWithFilters.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
@@ -130,7 +130,7 @@ class AppState extends State<App> {
       );
     }
 
-    final RegExp progressWithFilters = RegExp(r'/progress/([a-z_-]+)(/filter:.+)?');
+    final RegExp progressWithFilters = RegExp(r'/progress/([0-9a-z_-]+)(/filter:.+)?');
     if (progressWithFilters.hasMatch(fullPath)) {
       final match = progressWithFilters.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
@@ -142,7 +142,7 @@ class AppState extends State<App> {
       );
     }
 
-    final RegExp enrollmentsWithGroup = RegExp(r'/enrollments/([a-z_-]+)/(.+)');
+    final RegExp enrollmentsWithGroup = RegExp(r'/enrollments/([0-9a-z_-]+)/(.+)');
     if (enrollmentsWithGroup.hasMatch(fullPath)) {
       final match = enrollmentsWithGroup.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
@@ -154,7 +154,7 @@ class AppState extends State<App> {
       );
     }
 
-    final RegExp enrollments = RegExp(r'/enrollments/([a-z_-]+)');
+    final RegExp enrollments = RegExp(r'/enrollments/([0-9a-z_-]+)');
     if (enrollments.hasMatch(fullPath)) {
       final match = enrollments.matchAsPrefix(fullPath)!;
       final courseUrlPrefix = match.group(1)!;
