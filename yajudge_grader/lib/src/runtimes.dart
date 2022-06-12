@@ -10,6 +10,7 @@ import 'abstract_runner.dart';
 import 'builders.dart';
 import 'grader_extra_configs.dart';
 import 'interactors.dart';
+import 'simple_runner.dart';
 
 abstract class DetectedError extends Error {
   String get message;
@@ -492,7 +493,11 @@ class JavaRuntime extends AbstractRuntime {
       if (className.endsWith('.class')) {
         className = className.substring(0, className.length-6);
       }
-      entryPoint = ['-classpath', '/build', className];
+      String classPath = '/build';
+      if (runner is SimpleRunner) {
+        classPath = runner.submissionPrivateDirectory(submission) + classPath;
+      }
+      entryPoint = ['-classpath', classPath, className];
     }
     else if (artifact.executableTarget == ExecutableTarget.JavaJar) {
       assert(artifact.fileNames.length == 1);

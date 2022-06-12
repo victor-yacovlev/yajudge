@@ -35,7 +35,7 @@ default_build_properties:
     compile_options: -O0 -g
   java:
     compiler: javac
-    compile_options: -g -Werror -source 11 -target 11
+    compile_options: -g -Werror
 
 default_runtime_properties:
   valgrind:

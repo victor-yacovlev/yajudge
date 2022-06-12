@@ -336,7 +336,7 @@ class SubmissionProcessor {
       );
       final testsCount = prepareSubmissionTests(runtime.runtimeName);
       for (int testNumber=1; testNumber<=testsCount; testNumber++) {
-        final testBaseName = generateTestBaseName(testNumber);
+        final testBaseName = '$testNumber'.padLeft(3, '0');
         final runTestArtifact = await runtime.runTargetOnTest(testBaseName);
         final runTestResult = runTestArtifact.toTestResult();
         runTestResult.testNumber = testNumber;
@@ -499,17 +499,6 @@ class SubmissionProcessor {
       testResult.status = SolutionStatus.OK;
     }
     return testResult;
-  }
-
-  static String generateTestBaseName(int number) {
-    String baseName = '$number';
-    if (number < 10) {
-      baseName = '0$baseName';
-    }
-    if (number < 100) {
-      baseName = '0$baseName';
-    }
-    return baseName;
   }
 
   io.Directory get submissionOptionsDirectory {

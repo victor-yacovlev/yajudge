@@ -482,6 +482,70 @@ class MakefileBuilder extends AbstractBuilder {
 
 }
 
+class JavaBuilder extends AbstractBuilder {
+  JavaBuilder({required super.defaultBuildProperties, required super.runner});
+
+  @override
+  ExecutableTarget get defaultBuildTarget => ExecutableTarget.JavaClass;
+
+  @override
+  Future<Iterable<BuildArtifact>> build({
+    required Submission submission,
+    required String buildDirRelativePath,
+    required TargetProperties extraBuildProperties,
+    required ExecutableTarget target,
+  }) async {
+    final buildProperties = defaultBuildProperties
+      .propertiesForLanguage(ProgrammingLanguage.java)
+      .mergeWith(extraBuildProperties);
+
+    final fileSet = submission.solutionFiles;
+
+    final submissionRootPath = runner.submissionPrivateDirectory(submission);
+    final buildFullPath = '$submissionRootPath/$buildDirRelativePath';
+    final buildDir = io.Directory(buildFullPath);
+    final compiler = buildProperties.compiler;
+    final compileOptions = buildProperties.property('compile_options');
+
+    List<String> classFiles = [];
+    for (final sourceFile in fileSet.files) {
+      String suffix = path.extension(sourceFile.name);
+      if (suffix != '.java') continue;
+      final classFileName = '${sourceFile.name.substring(0, sourceFile.name.length-5)}.class';
+      final compilerArguments = compileOptions.toList() + [sourceFile.name];
+      final compilerCommand = [compiler] + compilerArguments;
+      final compilerProcess = await runner.start(
+        submission,
+        compilerCommand,
+        workingDirectory: buildDirRelativePath,
+      );
+      bool compilerOk = await compilerProcess.ok;
+      if (!compilerOk) {
+        String message = await compilerProcess.outputAsString;
+        String detailedMessage = '${compilerCommand.join(' ')}\n$message}';
+        io.File('${buildDir.path}/compile.log').writeAsStringSync(detailedMessage);
+        log.fine('cant compile ${sourceFile.name} from ${submission.id}: $detailedMessage');
+        throw BuildError(detailedMessage);
+      } else {
+        log.fine('successfully compiled ${sourceFile.name} from ${submission.id}');
+        classFiles.add(classFileName);
+      }
+    } // done compiling source files into object files
+
+    return [BuildArtifact(
+      executableTarget: ExecutableTarget.JavaClass,
+      fileNames: classFiles,
+    )];
+  }
+
+  @override
+  bool canBuild(Submission submission) {
+    final fileSet = submission.solutionFiles;
+    return fileSet.files.any((element) => element.name.endsWith('.java'));
+  }
+
+}
+
 class UnknownBuildSystemError extends Error {
   UnknownBuildSystemError();
 }
@@ -505,7 +569,9 @@ class BuilderFactory {
       case BuildSystem.GoLangProject:
         throw UnimplementedError('Go language support not implemented yet');
       case BuildSystem.JavaPlainProject:
-        throw UnimplementedError('Java language support not implemented yet');
+        return JavaBuilder(
+            defaultBuildProperties: defaultBuildProperties, runner: runner
+        );
       case BuildSystem.MakefileProject:
         return MakefileBuilder(
             defaultBuildProperties: defaultBuildProperties, runner: runner
@@ -527,6 +593,7 @@ class BuilderFactory {
     final implementedBuilders = {
       MakefileBuilder(defaultBuildProperties: defaultBuildProperties, runner: runner),
       CLangBuilder(defaultBuildProperties: defaultBuildProperties, runner: runner),
+      JavaBuilder(defaultBuildProperties: defaultBuildProperties, runner: runner),
       VoidBuilder(defaultBuildProperties: defaultBuildProperties, runner: runner),
     };
     for (final builder in implementedBuilders) {
