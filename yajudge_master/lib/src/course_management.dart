@@ -69,6 +69,14 @@ class CourseManagementService extends CourseManagementServiceBase {
     return Nothing();
   }
 
+  ProblemMetadata getProblemMetadata(Course course, String problemId) {
+    final courseId = course.dataId;
+    if (courseId.isEmpty || problemId.isEmpty) {
+      throw GrpcError.invalidArgument('course data id and problem id are required');
+    }
+    final courseData = getCourseData(courseId);
+    return courseData.findProblemMetadataById(problemId);
+  }
 
   @override
   Future<ProblemContentResponse> getProblemFullContent(ServiceCall? call, ProblemContentRequest request) async {

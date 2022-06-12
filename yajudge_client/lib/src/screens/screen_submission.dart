@@ -753,7 +753,8 @@ class SubmissionScreenState extends BaseScreenState {
   void _acceptSolution() {
     SolutionStatus status;
     bool reviewPassed = {SolutionStatus.CODE_REVIEW_REJECTED, SolutionStatus.PENDING_REVIEW}.contains(_submission!.status);
-    if (!_problemMetadata!.skipSolutionDefence && reviewPassed) {
+    bool skipDefence = _course!.disableDefence || _problemMetadata!.skipSolutionDefence;
+    if (!_problemMetadata!.skipSolutionDefence && reviewPassed && !skipDefence) {
       status = SolutionStatus.SUMMON_FOR_DEFENCE;
     }
     else {

@@ -691,6 +691,16 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   @override
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
+    request = request.deepCopy();
+    if (request.status == SolutionStatus.OK) {
+      final course = await parent.courseManagementService.getCourseInfo(request.course.id);
+      final problemId = request.problemId;
+      final problemMetadata = parent.courseManagementService.getProblemMetadata(course, problemId);
+      bool skipCodeReview = course.disableReview || problemMetadata.skipCodeReview;
+      if (!skipCodeReview) {
+        request.status = SolutionStatus.PENDING_REVIEW;
+      }
+    }
     await connection.transaction((connection) async {
       // modify submission itself
       await connection.query(
@@ -758,25 +768,23 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       }
     });
     _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
-    final notification = request.copyWith((s) {
-      // clean unnecessary test results
-      List<TestResult> testResults = [];
-      final brokenStatuses = [
-        SolutionStatus.RUNTIME_ERROR, SolutionStatus.VALGRIND_ERRORS,
-        SolutionStatus.TIME_LIMIT, SolutionStatus.WRONG_ANSWER,
-      ];
-      if (brokenStatuses.contains(s.status)) {
-        for (final test in s.testResults) {
-          if (test.status == s.status) {
-            testResults.add(test);
-            break;
-          }
+    // clean unnecessary test results
+    const brokenStatuses = [
+      SolutionStatus.RUNTIME_ERROR, SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.TIME_LIMIT, SolutionStatus.WRONG_ANSWER,
+    ];
+    List<TestResult> testResults = [];
+    if (brokenStatuses.contains(request.status)) {
+      for (final test in request.testResults) {
+        if (test.status == request.status) {
+          testResults.add(test);
+          break;
         }
       }
-      s.testResults.clear();
-      s.testResults.addAll(testResults);
-    });
-    _notifySubmissionResultChanged(notification);
+    }
+    request.testResults.clear();
+    request.testResults.addAll(testResults);
+    _notifySubmissionResultChanged(request);
     return request;
   }
 
@@ -868,7 +876,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
     List<Submission> newSubmissions = await getSubmissionsToGrade();
     for (Submission submission in newSubmissions) {
-      ProblemData problemData = await getProblemDataForSubmission(submission);
+      ProblemData problemData = await getProblemDataForSubmission(call, submission);
       if (graderMatch(request, problemData.gradingOptions)) {
         assignGrader(submission, request.name);
         _notifyProblemStatusChanged(submission.user, submission.course, submission.problemId, true);
@@ -884,7 +892,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       options.platformRequired.arch == Arch.ARCH_ANY;
   }
 
-  Future<ProblemData> getProblemDataForSubmission(Submission sub) async {
+  Future<ProblemData> getProblemDataForSubmission(ServiceCall? call, Submission sub) async {
     String courseDataId;
     if (sub.course.dataId.isEmpty) {
       int courseId = sub.course.id.toInt();
@@ -900,7 +908,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       courseDataId: courseDataId,
       problemId: sub.problemId,
     );
-    final response = await parent.courseManagementService.getProblemFullContent(null, request);
+    final response = await parent.courseManagementService.getProblemFullContent(call, request);
     return response.data;
   }
 
@@ -1232,7 +1240,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   }
 
   Future<bool> pushSubmissionToGrader(Submission submission) async {
-    final problemData = await getProblemDataForSubmission(submission);
+    final problemData = await getProblemDataForSubmission(null, submission);
     final platformRequired = problemData.gradingOptions.platformRequired;
     final graderConnection = _gradersManager.findGrader(platformRequired);
     bool result = false;
