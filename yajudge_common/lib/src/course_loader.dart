@@ -446,6 +446,7 @@ class CourseLoader {
     String interactorName = data['interactor'] is String? data['interactor'] : '';
     String coprocessName = data['coprocess'] is String? data['coprocess'] : '';
     String testsGeneratorName = data['tests_generator'] is String? data['tests_generator'] : '';
+    bool testsRequireBuild = data['tests_require_build'] is bool? data['tests_require_build'] : false;
     ExecutableTarget executableTarget = executableTargetFromString(data['target']);
     BuildSystem buildSystem = buildSystemFromString(data['build']);
     Map<String,String> buildProperties = propertiesFromYaml(data['build_properties']);
@@ -502,6 +503,7 @@ class CourseLoader {
       codeStyles: codeStyles,
       extraBuildFiles: FileSet(files: publicFiles.files + privateFiles.files),
       testCases: testCases,
+      testsRequiresBuild: testsRequireBuild,
       limits: limits,
       securityContext: securityContext,
       testsGenerator: testsGenerator,
@@ -708,6 +710,11 @@ class CourseLoader {
 
   void updateProblemLastModifiedFromFile(String problemId, io.File file) {
     final fileLastModified = file.lastModifiedSync();
+    if (!problemsCache.containsKey(problemId)) {
+      problemsCache[problemId] = ProblemDataCacheItem(
+        lastModified: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+    }
     final cacheLastModified = problemsCache[problemId]!.lastModified!;
     if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       problemsCache[problemId]!.lastModified = fileLastModified;
@@ -717,8 +724,9 @@ class CourseLoader {
   void updateProblemLastModifiedFromDirectory(String problemId, io.Directory directory) {
     final entries = directory.listSync(recursive: true);
     for (final entry in entries) {
-      final file = io.File('${directory.path}/${entry.path}');
-      updateProblemLastModifiedFromFile(problemId, file);
+      if (entry is io.File) {
+        updateProblemLastModifiedFromFile(problemId, entry);
+      }
     }
   }
 

@@ -262,7 +262,7 @@ class CLangBuilder extends AbstractBuilder {
         throw Exception(message);
       }
       String submissionPath = runner.submissionPrivateDirectory(submission);
-      String sourcePath = path.normalize('$submissionPath/build/$fileName');
+      String sourcePath = path.normalize('$submissionPath/$buildDirRelativePath/$fileName');
       String formattedPath = '$sourcePath.formatted';
       final formattedFile = io.File(formattedPath);
       formattedFile.writeAsStringSync(await clangProcess.outputAsString);
@@ -270,7 +270,7 @@ class CLangBuilder extends AbstractBuilder {
       final diffProcess = await runner.start(
         submission,
         ['diff', fileName, '$fileName.formatted'],
-        workingDirectory: '/build',
+        workingDirectory: '/$buildDirRelativePath',
       );
       bool diffOk = await diffProcess.ok;
       String diffOut = await diffProcess.outputAsString;
@@ -402,13 +402,13 @@ class MakefileBuilder extends AbstractBuilder {
     required TargetProperties extraBuildProperties,
     required ExecutableTarget target
   }) async {
-    final buildDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/build');
+    final buildDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/$buildDirRelativePath');
     DateTime beforeMake = DateTime.now();
     io.sleep(Duration(milliseconds: 250));
     final makeProcess = await runner.start(
       submission,
       ['make'],
-      workingDirectory: '/build',
+      workingDirectory: '/$buildDirRelativePath',
     );
     bool makeOk = await makeProcess.ok;
     if (!makeOk) {

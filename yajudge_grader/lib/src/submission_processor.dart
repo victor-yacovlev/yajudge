@@ -100,7 +100,11 @@ class SubmissionProcessor {
       }
     }
 
-    await processSolutionArtifacts(buildArtifacts);
+    await processTests(
+      builder: builder,
+      buildArtifacts: buildArtifacts,
+      gradingOptions: gradingOptions,
+    );
 
     bool hasCompileError = submission.testResults.any((e) => e.status==SolutionStatus.COMPILATION_ERROR);
     bool hasRuntimeError = submission.testResults.any((e) => e.status==SolutionStatus.RUNTIME_ERROR);
@@ -168,8 +172,6 @@ class SubmissionProcessor {
     required Iterable<BuildArtifact> buildArtifacts,
     required GradingOptions gradingOptions,
     required AbstractBuilder builder,
-    required TargetProperties extraBuildProperties,
-    required ExecutableTarget executableTargetToBuild,
   }) async {
 
     Map<int,Iterable<BuildArtifact>> testsBuildArtifacts = {};

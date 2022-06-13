@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:fixnum/fixnum.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:yaml/yaml.dart';
 import './generated/yajudge.pb.dart';
 import 'dart:io' as io;
+import 'package:path/path.dart' as path;
 import 'package:archive/archive.dart'
   if (dart.library.io) 'package:archive/archive_io.dart'
   if (dart.librart.html) 'package:archive/archive.dart';
@@ -701,6 +704,7 @@ extension GradingOptionsExtension on GradingOptions {
   static const limitsName = '.limits';
   static const securityContextName = '.security_context';
   static const testsCountName = '.tests_count';
+  static const testsRequireBuildName = '.tests_require_build';
 
 
   void saveToPlainFiles(io.Directory targetDirectory) {
@@ -716,6 +720,9 @@ extension GradingOptionsExtension on GradingOptions {
     _saveTestsGenerator(targetDirectory);
     _saveLimits(io.File('$dirPath/$limitsName'));
     _saveSecurityContext(io.File('$dirPath/$securityContextName'));
+    if (testsRequiresBuild) {
+      io.File('$dirPath/$testsRequireBuildName').createSync();
+    }
   }
 
   static GradingOptions loadFromPlainFiles(io.Directory sourceDirectory) {
@@ -732,6 +739,7 @@ extension GradingOptionsExtension on GradingOptions {
     result._loadTestsGenerator(sourceDirectory);
     result._loadLimits(io.File('$dirPath/$limitsName'));
     result._loadSecurityContext(io.File('$dirPath/$securityContextName'));
+    result.testsRequiresBuild = io.File('$dirPath/$testsRequireBuildName').existsSync();
     return result;
   }
 
@@ -943,15 +951,19 @@ extension FileSetExtension on FileSet {
     bool recursive = false, String namePrefix = '',
   }) {
     final entries = sourceDirectory.listSync(recursive: recursive);
+    final directoryPath = sourceDirectory.path;
     List<File> files = [];
     for (final entry in entries) {
-      final fullPath = '${sourceDirectory.path}/${entry.path}';
-      final fileName = '$namePrefix${entry.path}';
-      final content = io.File(fullPath).readAsBytesSync().toList();
-      files.add(File(
-        name: fileName,
-        data: content
-      ));
+      if (entry is io.File) {
+        final fullPath = entry.path;
+        String relativePath = fullPath.substring(directoryPath.length);
+        if (relativePath.startsWith('/')) {
+          relativePath = relativePath.substring(1);
+        }
+        final fileName = path.normalize('$namePrefix$relativePath');
+        final content = entry.readAsBytesSync().toList();
+        files.add(File(name: fileName, data: content));
+      }
     }
     return FileSet(files: files).deepCopy();
   }
@@ -959,12 +971,12 @@ extension FileSetExtension on FileSet {
   File toTarGzBundle(String fileName) {
     final archive = Archive();
     for (final file in files) {
-      final archiveFile = ArchiveFile.noCompress(file.name, file.data.length, file.data);
+      final fileData = Uint8List.fromList(file.data);
+      final archiveFile = ArchiveFile(file.name, file.data.length, fileData);
       archive.addFile(archiveFile);
     }
     final tarData = TarEncoder().encode(archive);
-    final gzipCodec = io.GZipCodec(level: io.ZLibOption.maxLevel);
-    final gzData = gzipCodec.encode(tarData);
+    final gzData = GZipEncoder().encode(tarData)!.toList();
     return File(
       name: fileName,
       data: gzData,
