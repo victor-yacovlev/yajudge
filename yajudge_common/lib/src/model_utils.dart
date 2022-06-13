@@ -3,6 +3,9 @@ import 'package:protobuf/protobuf.dart';
 import 'package:yaml/yaml.dart';
 import './generated/yajudge.pb.dart';
 import 'dart:io' as io;
+import 'package:archive/archive.dart'
+  if (dart.library.io) 'package:archive/archive_io.dart'
+  if (dart.librart.html) 'package:archive/archive.dart';
 
 class CourseDataCacheItem {
   CourseData? data;
@@ -876,7 +879,8 @@ extension GradingOptionsExtension on GradingOptions {
       final stdin = testCase.stdinData;
       final stdout = testCase.stdoutReference;
       final stderr = testCase.stderrReference;
-      final bundle = testCase.directoryBundle;
+      final buildBundle = testCase.buildDirectoryBundle;
+      final runtimeBundle = testCase.directoryBundle;
       final args = testCase.commandLineArguments;
       if (stdin.name.isNotEmpty) {
         io.File('$testsDir/${stdin.name}').writeAsBytesSync(
@@ -890,8 +894,11 @@ extension GradingOptionsExtension on GradingOptions {
         io.File('$testsDir/${stderr.name}').writeAsBytesSync(
             gzip.decode(stderr.data));
       }
-      if (bundle.name.isNotEmpty) {
-        io.File('$testsDir/${bundle.name}').writeAsBytesSync(bundle.data);
+      if (runtimeBundle.name.isNotEmpty) {
+        io.File('$testsDir/${runtimeBundle.name}').writeAsBytesSync(runtimeBundle.data);
+      }
+      if (buildBundle.name.isNotEmpty) {
+        io.File('$testsDir/${buildBundle.name}').writeAsBytesSync(buildBundle.data);
       }
       if (args.isNotEmpty) {
         String testBaseName = _testNumberToString(testNumber);
@@ -922,6 +929,7 @@ extension FileExtension on File {
     io.File(fullPath).createSync(recursive: true);
     io.File(fullPath).writeAsBytesSync(data);
   }
+
 }
 
 extension FileSetExtension on FileSet {
@@ -930,4 +938,37 @@ extension FileSetExtension on FileSet {
       file.save(targetDirectory);
     }
   }
+
+  static FileSet fromDirectory(io.Directory sourceDirectory, {
+    bool recursive = false, String namePrefix = '',
+  }) {
+    final entries = sourceDirectory.listSync(recursive: recursive);
+    List<File> files = [];
+    for (final entry in entries) {
+      final fullPath = '${sourceDirectory.path}/${entry.path}';
+      final fileName = '$namePrefix${entry.path}';
+      final content = io.File(fullPath).readAsBytesSync().toList();
+      files.add(File(
+        name: fileName,
+        data: content
+      ));
+    }
+    return FileSet(files: files).deepCopy();
+  }
+
+  File toTarGzBundle(String fileName) {
+    final archive = Archive();
+    for (final file in files) {
+      final archiveFile = ArchiveFile.noCompress(file.name, file.data.length, file.data);
+      archive.addFile(archiveFile);
+    }
+    final tarData = TarEncoder().encode(archive);
+    final gzipCodec = io.GZipCodec(level: io.ZLibOption.maxLevel);
+    final gzData = gzipCodec.encode(tarData);
+    return File(
+      name: fileName,
+      data: gzData,
+    ).deepCopy();
+  }
+
 }

@@ -316,7 +316,7 @@ class CourseLoader {
     }
     updateCourseLastModified(problemYamlFile);
     if (withGradingData) {
-      updateProblemLastModified(problemId, problemYamlFile);
+      updateProblemLastModifiedFromFile(problemId, problemYamlFile);
     }
     YamlMap data = loadYaml(problemYamlFile.readAsStringSync());
     String statementFileName = data['statement'] is String? data['statement'] : 'statement.md';
@@ -424,7 +424,7 @@ class CourseLoader {
         updateCourseLastModified(file);
       }
       if (updateProblemCache) {
-        updateProblemLastModified(problemId, file);
+        updateProblemLastModifiedFromFile(problemId, file);
       }
       List<int> data = file.readAsBytesSync();
       filesList.add(File(name: name, description: description, data: data));
@@ -435,7 +435,7 @@ class CourseLoader {
   GradingOptions _loadProblemGradingOptions(String problemId, FileSet publicFiles) {
     final problemYamlFile = io.File('${problemPath(problemId)}/problem.yaml');
     updateCourseLastModified(problemYamlFile);
-    updateProblemLastModified(problemId, problemYamlFile);
+    updateProblemLastModifiedFromFile(problemId, problemYamlFile);
     YamlMap data = loadYaml(problemYamlFile.readAsStringSync());
     String archValue = data['arch'] is String? data['arch'] : 'any';
     Arch arch = _parseArch(archValue);
@@ -454,25 +454,25 @@ class CourseLoader {
     File customChecker = File();
     if (customCheckerName.isNotEmpty) {
       final checkerFile = io.File('${problemPath(problemId)}/$customCheckerName');
-      updateProblemLastModified(problemId, checkerFile);
+      updateProblemLastModifiedFromFile(problemId, checkerFile);
       customChecker = File(name: customCheckerName, data: checkerFile.readAsBytesSync());
     }
     File customInteractor = File();
     if (interactorName.isNotEmpty) {
       final interactorFile = io.File('${problemPath(problemId)}/$interactorName');
-      updateProblemLastModified(problemId, interactorFile);
+      updateProblemLastModifiedFromFile(problemId, interactorFile);
       customInteractor = File(name: interactorName, data: interactorFile.readAsBytesSync());
     }
     File testsGenerator = File();
     if (testsGeneratorName.isNotEmpty) {
       final generatorFile = io.File('${problemPath(problemId)}/$testsGeneratorName');
-      updateProblemLastModified(problemId, generatorFile);
+      updateProblemLastModifiedFromFile(problemId, generatorFile);
       testsGenerator = File(name: testsGeneratorName, data: generatorFile.readAsBytesSync());
     }
     File coprocess = File();
     if (coprocessName.isNotEmpty) {
       final coprocessFile = io.File('${problemPath(problemId)}/$coprocessName');
-      updateProblemLastModified(problemId, coprocessFile);
+      updateProblemLastModifiedFromFile(problemId, coprocessFile);
       coprocess = File(name: coprocessName, data: coprocessFile.readAsBytesSync());
     }
     FileSet privateFiles = FileSet();
@@ -518,7 +518,7 @@ class CourseLoader {
     if (codeStylesFile.existsSync()) {
       updateCourseLastModified(codeStylesFile);
       if (problemId.isNotEmpty) {
-        updateProblemLastModified(problemId, codeStylesFile);
+        updateProblemLastModifiedFromFile(problemId, codeStylesFile);
       }
       YamlMap codeStylesMap = loadYaml(codeStylesFile.readAsStringSync());
       for (final entry in codeStylesMap.entries) {
@@ -542,67 +542,67 @@ class CourseLoader {
     final gzip = io.gzip;
     if (testsDir.existsSync()) {
       for (int i = 1; i <= 999; i++) {
-        String base;
-        if (i < 10) {
-          base = '00$i';
-        } else if (i < 100) {
-          base = '0$i';
-        } else {
-          base = '$i';
-        }
+        TestCase testCase = TestCase().deepCopy();
+        String base = '$i'.padLeft(3, '0');
         io.File tgzFile = io.File('${testsDir.path}/$base.tgz');
         io.File datFile = io.File('${testsDir.path}/$base.dat');
         io.File ansFile = io.File('${testsDir.path}/$base.ans');
         io.File infFile = io.File('${testsDir.path}/$base.inf');
         io.File argsFile = io.File('${testsDir.path}/$base.args');
         io.File errFile = io.File('${testsDir.path}/$base.err');
-        File tgz = File();
-        File dat = File();
-        File ans = File();
-        File err = File();
-        String params = '';
-        bool anyTestExists = false;
-        if (tgzFile.existsSync()) {
-          tgz = File(name: '$base.tgz', data: tgzFile.readAsBytesSync());
-          updateProblemLastModified(problemId, tgzFile);
-          anyTestExists = true;
+        io.Directory runtimeDirectory = io.Directory('${testsDir.path}/$base.dir');
+        io.Directory buildDirectory = io.Directory('${testsDir.path}/$base.build');
+        bool anyTestFileExists = false;
+        if (buildDirectory.existsSync()) {
+          final fileSet = FileSetExtension.fromDirectory(
+              buildDirectory, recursive: true, namePrefix: '$base.build/'
+          );
+          testCase.buildDirectoryBundle = fileSet.toTarGzBundle('$base-build.tgz');
+          updateProblemLastModifiedFromDirectory(problemId, buildDirectory);
+          anyTestFileExists = true;
+        }
+        if (runtimeDirectory.existsSync()) {
+          final fileSet = FileSetExtension.fromDirectory(
+            runtimeDirectory, recursive: true, namePrefix: '$base.dir/'
+          );
+          testCase.directoryBundle = fileSet.toTarGzBundle('$base.tgz');
+          updateProblemLastModifiedFromDirectory(problemId, runtimeDirectory);
+          anyTestFileExists = true;
+        }
+        else if (tgzFile.existsSync()) {
+          testCase.directoryBundle = File(name: '$base.tgz', data: tgzFile.readAsBytesSync());
+          updateProblemLastModifiedFromFile(problemId, tgzFile);
+          anyTestFileExists = true;
         }
         if (datFile.existsSync()) {
-          dat = File(name: '$base.dat', data: gzip.encode(datFile.readAsBytesSync()));
-          updateProblemLastModified(problemId, datFile);
-          anyTestExists = true;
+          testCase.stdinData = File(name: '$base.dat', data: gzip.encode(datFile.readAsBytesSync()));
+          updateProblemLastModifiedFromFile(problemId, datFile);
+          anyTestFileExists = true;
         }
         if (ansFile.existsSync()) {
-          ans = File(name: '$base.ans', data: gzip.encode(ansFile.readAsBytesSync()));
-          updateProblemLastModified(problemId, ansFile);
-          anyTestExists = true;
+          testCase.stdoutReference = File(name: '$base.ans', data: gzip.encode(ansFile.readAsBytesSync()));
+          updateProblemLastModifiedFromFile(problemId, ansFile);
+          anyTestFileExists = true;
         }
         if (errFile.existsSync()) {
-          err = File(name: '$base.err', data: gzip.encode(errFile.readAsBytesSync()));
-          updateProblemLastModified(problemId, errFile);
-          anyTestExists = true;
-        }
-        if (infFile.existsSync()) {
-          String line = infFile.readAsStringSync().trim();
-          updateProblemLastModified(problemId, infFile);
-          int equalPos = line.indexOf('=');
-          params = line.substring(equalPos+1).trim();
-          anyTestExists = true;
+          testCase.stderrReference = File(name: '$base.err', data: gzip.encode(errFile.readAsBytesSync()));
+          updateProblemLastModifiedFromFile(problemId, errFile);
+          anyTestFileExists = true;
         }
         if (argsFile.existsSync()) {
           String line = argsFile.readAsStringSync().trim();
-          updateProblemLastModified(problemId, argsFile);
-          params = line;
-          anyTestExists = true;
+          updateProblemLastModifiedFromFile(problemId, argsFile);
+          testCase.commandLineArguments = line;
+          anyTestFileExists = true;
         }
-        if (anyTestExists) {
-          final testCase = TestCase(
-            stdinData: dat,
-            stderrReference: err,
-            stdoutReference: ans,
-            commandLineArguments: params,
-            directoryBundle: tgz,
-          );
+        else if (infFile.existsSync()) {
+          String line = infFile.readAsStringSync().trim();
+          updateProblemLastModifiedFromFile(problemId, infFile);
+          int equalPos = line.indexOf('=');
+          testCase.commandLineArguments = line.substring(equalPos+1).trim();
+          anyTestFileExists = true;
+        }
+        if (anyTestFileExists) {
           result.add(testCase);
         } else {
           break;
@@ -706,11 +706,19 @@ class CourseLoader {
     }
   }
 
-  void updateProblemLastModified(String problemId, io.File file) {
+  void updateProblemLastModifiedFromFile(String problemId, io.File file) {
     final fileLastModified = file.lastModifiedSync();
     final cacheLastModified = problemsCache[problemId]!.lastModified!;
     if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       problemsCache[problemId]!.lastModified = fileLastModified;
+    }
+  }
+
+  void updateProblemLastModifiedFromDirectory(String problemId, io.Directory directory) {
+    final entries = directory.listSync(recursive: true);
+    for (final entry in entries) {
+      final file = io.File('${directory.path}/${entry.path}');
+      updateProblemLastModifiedFromFile(problemId, file);
     }
   }
 

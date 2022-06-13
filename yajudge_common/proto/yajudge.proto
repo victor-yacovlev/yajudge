@@ -108,7 +108,8 @@ message TestCase {
   File            stdin_data                  = 4;
   File            stdout_reference            = 5;
   File            stderr_reference            = 6;
-  File            directory_bundle            = 7;
+  File            directory_bundle            = 7; // runtime files
+  File            build_directory_bundle      = 8; // additional files to build solution
 }
 
 enum ExecutableTarget {
@@ -163,6 +164,7 @@ message GradingOptions {
   map<string,string>  build_properties      = 22;
   map<string,string>  target_properties     = 23;
   SecurityContext     security_context      = 30;
+  bool                tests_requires_build  = 40;
 }
 
 message CodeStyle {
@@ -287,6 +289,7 @@ message TestResult {
   string              valgrind_output = 10;
   int32               valgrind_errors = 11;
   string              checker_output = 12;
+  string              build_error_log = 13;  // if test has custom build files
 }
 
 message Submission {

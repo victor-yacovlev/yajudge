@@ -58,7 +58,7 @@ class SubmissionProcessor {
     );
   }
 
-  Future<void> _processSubmissionGuarded() async {
+  Future<void> processSubmissionGuarded() async {
     runner.createDirectoryForSubmission(submission);
 
     final gradingOptions = GradingOptionsExtension.loadFromPlainFiles(
@@ -86,44 +86,31 @@ class SubmissionProcessor {
       }
     }
 
-    final extraBuildProperties = TargetProperties(
-        properties: gradingOptions.buildProperties
-    );
-    ExecutableTarget executableTargetToBuild = gradingOptions.executableTarget;
-    if (executableTargetToBuild==ExecutableTarget.AutodetectExecutable) {
-      executableTargetToBuild = builder.defaultBuildTarget;
-    }
-
     Iterable<BuildArtifact> buildArtifacts = [];
 
-    try {
-      buildArtifacts = await builder.build(
-        submission: submission,
-        buildDirRelativePath: '/build',
-        extraBuildProperties: extraBuildProperties,
-        target: executableTargetToBuild,
+    if (!gradingOptions.testsRequiresBuild) {
+      // build single solution for all tests
+      buildArtifacts = await buildSolution(
+          builder: builder,
+          buildRelativePath: '/build',
+          gradingOptions: gradingOptions,
       );
-    }
-    catch (error) {
-      if (error is BuildError) {
-        submission.buildErrorLog = error.buildMessage;
-        submission.status = SolutionStatus.COMPILATION_ERROR;
+      if (submission.status == SolutionStatus.COMPILATION_ERROR) {
         return;
       }
-      else {
-        rethrow;
-      }
-    }
-
-    if (buildArtifacts.isEmpty) {
-      throw Exception('Nothing to run in this submission');
     }
 
     await processSolutionArtifacts(buildArtifacts);
+
+    bool hasCompileError = submission.testResults.any((e) => e.status==SolutionStatus.COMPILATION_ERROR);
     bool hasRuntimeError = submission.testResults.any((e) => e.status==SolutionStatus.RUNTIME_ERROR);
     bool hasValgrindError = submission.testResults.any((e) => e.status==SolutionStatus.VALGRIND_ERRORS);
     bool hasTimeLimit = submission.testResults.any((e) => e.status==SolutionStatus.TIME_LIMIT);
     bool hasWrongAnswer = submission.testResults.any((e) => e.status==SolutionStatus.WRONG_ANSWER);
+    if (hasCompileError) {
+      submission.status = SolutionStatus.COMPILATION_ERROR;
+      submission.buildErrorLog = ''; // test but not submission property
+    }
     if (hasRuntimeError) {
       submission.status = SolutionStatus.RUNTIME_ERROR;
     }
@@ -141,11 +128,99 @@ class SubmissionProcessor {
     }
   }
 
+  Future<Iterable<BuildArtifact>> buildSolution({
+    required AbstractBuilder builder,
+    required String buildRelativePath,
+    required GradingOptions gradingOptions,
+  }) async {
+    final extraBuildProperties = TargetProperties(
+        properties: gradingOptions.buildProperties
+    );
+    ExecutableTarget executableTargetToBuild = gradingOptions.executableTarget;
+    if (executableTargetToBuild==ExecutableTarget.AutodetectExecutable) {
+      executableTargetToBuild = builder.defaultBuildTarget;
+    }
+    Iterable<BuildArtifact> buildArtifacts = [];
+    try {
+      buildArtifacts = await builder.build(
+        submission: submission,
+        buildDirRelativePath: buildRelativePath,
+        extraBuildProperties: extraBuildProperties,
+        target: executableTargetToBuild,
+      );
+      if (buildArtifacts.isEmpty) {
+        throw BuildError('Nothing to run in this submission');
+      }
+    }
+    catch (error) {
+      if (error is BuildError) {
+        submission.buildErrorLog = error.buildMessage;
+        submission.status = SolutionStatus.COMPILATION_ERROR;
+      }
+      else {
+        rethrow;
+      }
+    }
+    return buildArtifacts;
+  }
+
+  Future<void> processTests({
+    required Iterable<BuildArtifact> buildArtifacts,
+    required GradingOptions gradingOptions,
+    required AbstractBuilder builder,
+    required TargetProperties extraBuildProperties,
+    required ExecutableTarget executableTargetToBuild,
+  }) async {
+
+    Map<int,Iterable<BuildArtifact>> testsBuildArtifacts = {};
+    int buildTestsCount = 0;
+    if (gradingOptions.testsRequiresBuild) {
+      // build tests
+      buildTestsCount = prepareBuildTests();
+      for (int i=1; i<=buildTestsCount; i++) {
+        final testBaseName = '$i'.padLeft(3, '0');
+        final testBuildSubdir = '/$testBaseName.build';
+        final testBuildDir = io.Directory(
+          '${runner.submissionPrivateDirectory(submission)}$testBuildSubdir'
+        );
+        submission.solutionFiles.saveAll(testBuildDir);
+        final artifacts = await buildSolution(
+            builder: builder,
+            buildRelativePath: testBuildSubdir,
+            gradingOptions: gradingOptions
+        );
+        if (submission.status == SolutionStatus.COMPILATION_ERROR) {
+          submission.testResults.add(TestResult(
+            testNumber: i,
+            status: SolutionStatus.COMPILATION_ERROR,
+            buildErrorLog: submission.buildErrorLog,
+          ));
+          testsBuildArtifacts[i] = [];
+        }
+        else {
+          testsBuildArtifacts[i] = artifacts;
+        }
+      }
+    }
+
+    // run build artifacts on tests
+    if (gradingOptions.testsRequiresBuild) {
+      for (int i=0; i<buildTestsCount; i++) {
+        final testNumber = i + 1;
+        final artifacts = testsBuildArtifacts[testNumber]!;
+        processSolutionArtifacts(artifacts, onlyForTestNumber: testNumber);
+      }
+    }
+    else {
+      processSolutionArtifacts(buildArtifacts);
+    }
+  }
+
   Future<void> processSubmission() async {
     submission = submission.deepCopy();
     try {
       log.info('started processing ${submission.id}');
-      await _processSubmissionGuarded();
+      await processSubmissionGuarded();
       log.info('submission ${submission.id} done with status ${submission.status.value} (${submission.status.name})');
     }
     catch (error) {
@@ -260,24 +335,41 @@ class SubmissionProcessor {
     return '';
   }
 
+  int prepareBuildTests() {
+    String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
+    final buildsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/');
+    // Unpack -build.tgz bundles if any exists
+    int maxBuildTestCount = problemTestsCount();
+    int buildTestCount = 0;
+    for (int i=1; i<=maxBuildTestCount; i++) {
+      String testBaseName = '$i'.padLeft(3, '0');
+      final bundleFile = io.File('$testsPath/$testBaseName-build.tgz');
+      if (bundleFile.existsSync()) {
+        buildTestCount ++;
+        io.Process.runSync('tar', ['zxf', bundleFile.path], workingDirectory: buildsDir.path);
+      }
+      else {
+        break;
+      }
+    }
+    return buildTestCount;
+  }
 
-  int prepareSubmissionTests(String targetPrefix) {
+  int prepareRuntimeTests(String targetPrefix, {int onlyForTestNumber = 0}) {
     String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
     final runsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/runs/$targetPrefix/');
+
     runsDir.createSync(recursive: true);
 
     // Unpack .tgz bundles if any exists
     for (int i=1; i<=problemTestsCount(); i++) {
-      String testBaseName = '$i';
-      if (i < 10) {
-        testBaseName = '0$testBaseName';
+      if (onlyForTestNumber>0 && i!=onlyForTestNumber) {
+        continue;
       }
-      if (i < 100) {
-        testBaseName = '0$testBaseName';
-      }
-      final testBundle = io.File('$testsPath/$testBaseName.tgz');
-      if (testBundle.existsSync()) {
-        io.Process.runSync('tar', ['zxf', testBundle.path], workingDirectory: runsDir.path);
+      String testBaseName = '$i'.padLeft(3, '0');
+      final bundleFile = io.File('$testsPath/$testBaseName.tgz');
+      if (bundleFile.existsSync()) {
+        io.Process.runSync('tar', ['zxf', bundleFile.path], workingDirectory: runsDir.path);
       }
       else {
         break;
@@ -288,6 +380,11 @@ class SubmissionProcessor {
     String testsGenerator = problemTestsGenerator();
     if (testsGenerator.isEmpty) {
       return problemTestsCount();
+    }
+    final testsCountFile = io.File('${runsDir.path}/.tests_count');
+    if (testsCountFile.existsSync()) {
+      // already generated
+      return int.parse(testsCountFile.readAsStringSync().trim());
     }
 
     if (testsGenerator.endsWith('.py')) {
@@ -314,14 +411,17 @@ class SubmissionProcessor {
         log.severe('tests generator $testsGenerator failed: $message');
         return 0;
       }
-      return int.parse(io.File('${runsDir.path}/.tests_count').readAsStringSync().trim());
+      return int.parse(testsCountFile.readAsStringSync().trim());
     }
     else {
       throw UnimplementedError('Tests generators other than Python not supported yet: $testsGenerator');
     }
   }
 
-  Future<void> processSolutionArtifacts(Iterable<BuildArtifact> buildArtifacts) async {
+  Future<void> processSolutionArtifacts(
+      Iterable<BuildArtifact> buildArtifacts,
+      {int onlyForTestNumber = 0}
+      ) async {
     List<TestResult> testResults = [];
     final gradingOptions = GradingOptionsExtension.loadFromPlainFiles(
         submissionOptionsDirectory
@@ -334,8 +434,11 @@ class SubmissionProcessor {
         submission: submission,
         artifact: artifact,
       );
-      final testsCount = prepareSubmissionTests(runtime.runtimeName);
+      final testsCount = prepareRuntimeTests(runtime.runtimeName, onlyForTestNumber: onlyForTestNumber);
       for (int testNumber=1; testNumber<=testsCount; testNumber++) {
+        if (onlyForTestNumber>0 && onlyForTestNumber!=testNumber) {
+          continue;
+        }
         final testBaseName = '$testNumber'.padLeft(3, '0');
         final runTestArtifact = await runtime.runTargetOnTest(testBaseName);
         final runTestResult = runTestArtifact.toTestResult();
@@ -509,337 +612,6 @@ class SubmissionProcessor {
     return io.Directory(path);
   }
 
-
-  List<String> parseTestInfArgumentsLine(String line) {
-    String quoteSymbol = '';
-    List<String> result = [];
-    String currentToken = '';
-    for (int i=0; i<line.length; i++) {
-      String currentSymbol = line.substring(i, i+1);
-      if (currentSymbol==' ' && quoteSymbol.isEmpty) {
-        if (currentToken.isNotEmpty) {
-          result.add(currentToken);
-        }
-        currentToken = '';
-      }
-      else if (currentSymbol=='"' && quoteSymbol!='"') {
-        quoteSymbol = '"';
-      }
-      else if (currentSymbol=="'" && quoteSymbol!="'") {
-        quoteSymbol = "'";
-      }
-      else if (currentSymbol == quoteSymbol) {
-        quoteSymbol = '';
-      }
-      else {
-        currentToken += currentSymbol;
-      }
-    }
-    if (currentToken.isNotEmpty) {
-      result.add(currentToken);
-    }
-    return result;
-  }
-
-  Future<TestResult> processTest({
-    required int testNumber,
-    required String runsDirPrefix,
-    required List<String> firstArgs,
-    required String description,
-    required String testBaseName,
-    required GradingLimits limits,
-    bool checkValgrindErrors = false,
-    bool checkSanitizersErrors = false,
-
-  }) async {
-    log.info('running test $testBaseName ($description) for submission ${submission.id}');
-    String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
-    final runsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/runs/$runsDirPrefix/');
-    String wd;
-    if (io.Directory('${runsDir.path}/$testBaseName.dir').existsSync()) {
-      wd = '/runs/$runsDirPrefix/$testBaseName.dir';
-    }
-    else {
-      wd = '/runs/$runsDirPrefix';
-    }
-
-    List<String> arguments = [];
-    final problemArgsFile = io.File('$testsPath/$testBaseName.args');
-    final targetArgsFile = io.File('${runsDir.path}/$testBaseName.inf');
-    String argumentsLine = '';
-    if (targetArgsFile.existsSync()) {
-      // file generated by tests generator
-      String line = targetArgsFile.readAsStringSync().trim();
-      int eqPos = line.indexOf('=');
-      if (eqPos > 0) {
-        String key = line.substring(0, eqPos).trimRight();
-        String value = line.substring(eqPos+1).trimLeft();
-        if (key == 'params') {
-          argumentsLine = value;
-        }
-      }
-    }
-    else if (problemArgsFile.existsSync()) {
-      // already parsed arguments file
-      argumentsLine = problemArgsFile.readAsStringSync().trim();
-    }
-    arguments = parseTestInfArgumentsLine(argumentsLine);
-    List<int> stdinData = [];
-    final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
-    final targetStdinFile = io.File('${runsDir.path}/$testBaseName.dat');
-    String stdinFilePath = '';
-
-    if (targetStdinFile.existsSync()) {
-      stdinData = targetStdinFile.readAsBytesSync();
-      stdinFilePath = targetStdinFile.path;
-    }
-    else if (problemStdinFile.existsSync()) {
-      stdinData = problemStdinFile.readAsBytesSync();
-      stdinFilePath = problemStdinFile.path;
-    }
-
-    String interactorName = interactorFilePath();
-    AbstractInteractor? interactor;
-    Function? interactorShutdown;
-
-    if (interactorName.isNotEmpty) {
-      interactor = interactorFactory.getInteractor(interactorName);
-    }
-
-    String coprocessName = coprocessFilePath();
-
-    final solutionProcess = await runner.start(
-      submission,
-      firstArgs + arguments,
-      workingDirectory: wd,
-      limits: limits,
-      runTargetIsScript: runTargetIsScript,
-      coprocessFileName: coprocessName,
-    );
-
-    if (interactor != null) {
-      interactorShutdown = await interactor.interact(solutionProcess, wd, stdinFilePath);
-    }
-    else {
-      if (stdinData.isNotEmpty) {
-        await solutionProcess.writeToStdin(stdinData);
-      }
-      await solutionProcess.closeStdin();
-    }
-
-    bool timeoutExceed = false;
-    Timer? timer;
-
-    void handleTimeout() {
-      timeoutExceed = true;
-      runner.killProcess(solutionProcess);
-    }
-
-    if (limits.realTimeLimitSec > 0) {
-      final timerDuration = Duration(seconds: limits.realTimeLimitSec.toInt());
-      timer = Timer(timerDuration, handleTimeout);
-    }
-
-    int exitStatus = await solutionProcess.exitCode;
-    if (timer != null) {
-      timer.cancel();
-    }
-    if (interactorShutdown != null) {
-      await interactorShutdown();
-    }
-
-    List<int> stdout = await solutionProcess.stdout;
-    List<int> stderr = await solutionProcess.stderr;
-
-    int signalKilled = 0;
-    if (exitStatus >= 128 && !timeoutExceed) {
-      signalKilled = exitStatus - 128;
-    }
-
-    String stdoutFilePath = '${runsDir.path}/$testBaseName.stdout';
-    final stdoutFile = io.File(stdoutFilePath);
-    final stderrFile = io.File('${runsDir.path}/$testBaseName.stderr');
-    stdoutFile.writeAsBytesSync(stdout);
-    stderrFile.writeAsBytesSync(stderr);
-    String resultCheckerMessage = '';
-
-    bool checkAnswer = signalKilled==0 && !timeoutExceed;
-    int valgrindErrors = 0;
-    String valgrindOutput = '';
-    SolutionStatus solutionStatus = SolutionStatus.OK;
-
-    final maxDataSizeToShow = 50 * 1024;
-
-    String screenBadSymbols(String s) {
-      String result = '';
-      int outLength = s.length;
-      if (outLength > maxDataSizeToShow) {
-        outLength = maxDataSizeToShow;
-      }
-      for (int i=0; i<outLength; i++) {
-        final symbol = s[i];
-        int code = symbol.codeUnitAt(0);
-        if (code < 32 && code != 10 || code == 0xFF) {
-          result += r'\' + code.toString();
-        }
-        else {
-          result += symbol;
-        }
-      }
-      return result;
-    }
-
-    if (signalKilled==0 && !timeoutExceed && checkValgrindErrors) {
-      log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for valgrind errors');
-      String runsPath = '${runner.submissionPrivateDirectory(submission)}/runs';
-      final valgrindOut = io.File('$runsPath/valgrind/$testBaseName.valgrind').readAsStringSync();
-      valgrindErrors = 0;
-      final rxErrorsSummary = RegExp(r'==\d+== ERROR SUMMARY: (\d+) errors');
-      final matchEntries = List<RegExpMatch>.from(rxErrorsSummary.allMatches(valgrindOut));
-      if (matchEntries.isNotEmpty) {
-        RegExpMatch match = matchEntries.first;
-        String matchGroup = match.group(1)!;
-        valgrindErrors = int.parse(matchGroup);
-      }
-      if (valgrindErrors > 0) {
-        log.fine('submission ${submission.id} has $valgrindErrors valgrind errors on test $testBaseName');
-        valgrindOutput = valgrindOut;
-        solutionStatus = SolutionStatus.VALGRIND_ERRORS;
-        checkAnswer = false;
-      }
-    }
-    if (signalKilled==0 && !timeoutExceed && checkSanitizersErrors) {
-      log.fine('submission ${submission.id} exited with status $exitStatus on test $testBaseName, checking for sanitizer errors');
-      String errOut = screenBadSymbols(utf8.decode(stderr, allowMalformed: true));
-      final errLines = errOut.split('\n');
-      List<String> patternParts = [];
-      for (final solutionFile in submission.solutionFiles.files) {
-        String part = solutionFile.name.replaceAll('.', r'\.');
-        patternParts.add(part);
-      }
-      // final rxRuntimeError = RegExp('('+patternParts.join('|')+r'):\d+:\d+:\s+runtime\s+error:');
-      final rxRuntimeError = RegExp(r'==\d+==ERROR:\s+.+Sanitizer:');
-      for (final line in errLines) {
-        final match = rxRuntimeError.matchAsPrefix(line);
-        if (match != null) {
-          checkAnswer = false;
-          solutionStatus = SolutionStatus.RUNTIME_ERROR;
-          log.fine('submission ${submission.id} got runtime error: $line');
-          break;
-        }
-      }
-    }
-    if (signalKilled==0 && !timeoutExceed && exitStatus == 127) {
-      String errOut = screenBadSymbols(utf8.decode(stderr, allowMalformed: true));
-      if (errOut.contains('yajudge_error:')) {
-        checkAnswer = false;
-        solutionStatus = SolutionStatus.RUNTIME_ERROR;
-        log.fine('submission ${submission.id} got yajudge error');
-      }
-    }
-    if (signalKilled != 0) {
-      log.fine('submission ${submission.id} ($description) killed by signal $signalKilled on test $testBaseName');
-      exitStatus = 0;
-      solutionStatus = SolutionStatus.RUNTIME_ERROR;
-      checkAnswer = false;
-    }
-
-    if (timeoutExceed) {
-      log.fine('submission ${submission.id} ($description) killed by timeout ${limits.realTimeLimitSec} on test $testBaseName');
-      solutionStatus = SolutionStatus.TIME_LIMIT;
-    }
-
-    if (checkAnswer) {
-      List<int> referenceStdout = [];
-      final problemAnsFile = io.File('$testsPath/$testBaseName.ans');
-      final targetAnsFile = io.File('${runsDir.path}/$testBaseName.ans');
-      String referencePath = '';
-      if (targetAnsFile.existsSync()) {
-        referenceStdout = targetAnsFile.readAsBytesSync();
-        referencePath = targetAnsFile.path;
-      }
-      else if (problemAnsFile.existsSync()) {
-        referenceStdout = problemAnsFile.readAsBytesSync();
-        referencePath = problemAnsFile.path;
-      }
-      // Check for checker_options that overrides input files
-      final checkerData = problemChecker().trim().split('\n');
-      final checkerOpts = checkerData.length > 1? checkerData[1].split(' ') : [];
-      for (String opt in checkerOpts) {
-        if (opt.startsWith('stdin=')) {
-          stdinFilePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(6)}';
-          final stdinFile = io.File(stdinFilePath);
-          stdinData = stdinFile.existsSync()? stdinFile.readAsBytesSync() : [];
-        }
-        if (opt.startsWith('stdout=')) {
-          stdoutFilePath = '${runner.submissionPrivateDirectory(submission)}/$wd/${opt.substring(7)}';
-          final stdoutFile = io.File(stdoutFilePath);
-          stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
-        }
-        if (opt.startsWith('reference=')) {
-          referencePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(10)}';
-          final referenceFile = io.File(referencePath);
-          referenceStdout = referenceFile.existsSync()? referenceFile.readAsBytesSync() : [];
-        }
-      }
-      log.fine('submission ${submission.id} ($description) exited with $exitStatus on test $testBaseName');
-      resultCheckerMessage = runChecker(arguments,
-          stdinData, stdinFilePath,
-          stdout, stdoutFilePath,
-          referenceStdout, referencePath,
-          wd);
-      final checkerOutFile = io.File('${runsDir.path}/$testBaseName.checker');
-      checkerOutFile.writeAsStringSync(resultCheckerMessage);
-    }
-
-    if (resultCheckerMessage.isNotEmpty) {
-      String waMessage = '=== Checker output:\n$resultCheckerMessage\n';
-      String args = arguments.join(' ');
-      waMessage += '=== Arguments: $args\n';
-      List<int> stdinBytesToShow = [];
-      if (stdinData.length > maxDataSizeToShow) {
-        stdinBytesToShow = stdinData.sublist(0, maxDataSizeToShow);
-      } else {
-        stdinBytesToShow = stdinData;
-      }
-      String inputDataToShow = '';
-      bool inputIsBinary = false;
-      try {
-        inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: false);
-      }
-      catch (e) {
-        if (e is FormatException) {
-          inputIsBinary = true;
-        }
-      }
-      if (stdinData.length > maxDataSizeToShow) {
-        inputDataToShow += '  \n(input is too big, truncated to $maxDataSizeToShow bytes)\n';
-      }
-      else if (inputIsBinary) {
-        inputDataToShow = '(input is binary file)\n';
-      }
-      if (inputDataToShow.isNotEmpty) {
-        waMessage += '=== Input data: $inputDataToShow';
-      }
-      resultCheckerMessage = waMessage;
-      solutionStatus = SolutionStatus.WRONG_ANSWER;
-    }
-
-    return TestResult(
-      testNumber: testNumber,
-      target: runsDirPrefix,
-      exitStatus: exitStatus,
-      status: solutionStatus,
-      stderr: screenBadSymbols(utf8.decode(stderr, allowMalformed: true)),
-      stdout: screenBadSymbols(utf8.decode(stdout, allowMalformed: true)),
-      killedByTimer: timeoutExceed,
-      standardMatch: resultCheckerMessage.isEmpty,
-      checkerOutput: screenBadSymbols(resultCheckerMessage),
-      signalKilled: signalKilled,
-      valgrindErrors: valgrindErrors,
-      valgrindOutput: screenBadSymbols(valgrindOutput),
-    );
-  }
 
   String runChecker(List<String> args,
       List<int> stdin, String stdinName,
