@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:posix/posix.dart' as posix;
 import 'abstract_runner.dart';
 import 'assets_loader.dart';
+import 'grader_service.dart';
 
 class ChrootedRunner extends AbstractRunner {
   final GraderLocationProperties locationProperties;
@@ -63,7 +64,7 @@ class ChrootedRunner extends AbstractRunner {
     return cgroupSystemPath;
   }
 
-  static String initializeLinuxCgroup() {
+  static String initializeLinuxCgroup(String graderName) {
     // io.sleep(Duration(minutes: 5));
     String cgroupFsRoot = systemRootCgroupLocation();
     if (cgroupFsRoot.isEmpty) {
@@ -101,27 +102,28 @@ class ChrootedRunner extends AbstractRunner {
     if (!controllersAvailable.contains('pids')) {
       return 'pids cgroup controller not available';
     }
-    // io.sleep(Duration(minutes: 5)); // to explore WTF
+
     // Check if it is possible to create subgroup with pids and memory
-    final checkDirectory = io.Directory('$cgroupRoot/check');
+    cgroupRoot = '$cgroupRoot/$graderName';
+    final graderCgroupDirectory = io.Directory('$cgroupRoot');
     try {
-      checkDirectory.createSync();
+      graderCgroupDirectory.createSync();
     }
     catch (error) {
-      return 'cant create subdirectory ${checkDirectory.path}: $error';
+      return 'cant create subdirectory ${graderCgroupDirectory.path}: $error';
     }
-    final checkSubtreeControl = io.File('$cgroupRoot/check/cgroup.subtree_control');
+    final subtreeControl = io.File('$cgroupRoot/cgroup.subtree_control');
     try {
-      checkSubtreeControl.writeAsStringSync('+pids');
+      subtreeControl.writeAsStringSync('+pids');
     }
     catch (error) {
-      return 'cant write +pids to ${checkSubtreeControl.path}: $error';
+      return 'cant write +pids to ${subtreeControl.path}: $error';
     }
     try {
-      checkSubtreeControl.writeAsStringSync('+memory');
+      subtreeControl.writeAsStringSync('+memory');
     }
     catch (error) {
-      return 'cant write +memory to ${checkSubtreeControl.path}: $error';
+      return 'cant write +memory to ${subtreeControl.path}: $error';
     }
     return '';
   }
@@ -192,20 +194,25 @@ class ChrootedRunner extends AbstractRunner {
     return path.absolute(wrappersDir.path, names.first);
   }
 
-  String submissionCgroupPath(Submission submission) {
+  String submissionCgroupPath(Submission submission, String target) {
+    String result;
     if (submission.id >= 0) {
-      return '$cgroupRoot/submission-${submission.id}';
+      result = '$cgroupRoot/submission-${submission.id}';
     }
     else {
-      return '$cgroupRoot/problem-${submission.problemId}';
+      result = '$cgroupRoot/problem-${submission.problemId}';
     }
+    if (target.isNotEmpty) {
+      result += '/$target';
+    }
+    return result;
   }
 
-  void createSubmissionCgroup(Submission submission) {
+  void createSubmissionCgroup(Submission submission, String target) {
     // cleanup cgroup directories from possible previous run
-    removeSubmissionCgroup(submission);
+    removeSubmissionCgroup(submission, target);
 
-    String path = submissionCgroupPath(submission);
+    String path = submissionCgroupPath(submission, target);
     final dir = io.Directory(path);
     try {
       dir.createSync(recursive: true);
@@ -250,14 +257,18 @@ class ChrootedRunner extends AbstractRunner {
 
       // remove cgroup with no processes
       final result = io.Process.runSync('rmdir', [path]);
+      io.sleep(Duration(milliseconds: 50));
       if (result.exitCode != 0) {
         log.severe('cant remove cgroup $path: ${result.stderr.toString()}');
+      }
+      else {
+        log.fine('removed cgroup subdirectory $path');
       }
     }
   }
 
-  void removeSubmissionCgroup(Submission submission) {
-    String path = submissionCgroupPath(submission);
+  void removeSubmissionCgroup(Submission submission, String target) {
+    String path = submissionCgroupPath(submission, target);
     final dir = io.Directory(path);
     if (dir.existsSync()) {
       for (final entry in dir.listSync()) {
@@ -272,11 +283,12 @@ class ChrootedRunner extends AbstractRunner {
 
   @override
   Future<YajudgeProcess> start(Submission submission, List<String> arguments, {
-    String workingDirectory = '/build',
+    required String workingDirectory,
     Map<String,String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript = false,
     String coprocessFileName = '',
+    required String targetName,
   }) async {
     assert (arguments.isNotEmpty);
     String executable = arguments.first;
@@ -288,11 +300,14 @@ class ChrootedRunner extends AbstractRunner {
     else {
       environment = Map<String,String>.from(environment);
     }
-    String cgroupPath = submissionCgroupPath(submission);
+    String cgroupPath = submissionCgroupPath(submission, '');
     environment['YAJUDGE_CGROUP_PATH'] = cgroupPath;
+    environment['YAJUDGE_CGROUP_SUBDIR'] = targetName;
 
-    String cgroupSubmodule = path.basenameWithoutExtension(executable);
-    environment['YAJUDGE_CGROUP_SUBDIR'] = cgroupSubmodule;
+    final wrapperLogPath = '${submissionPrivateDirectory(submission)}.wrapper-$targetName.log';
+    environment['YAJUDGE_WRAPPER_LOG'] = wrapperLogPath;
+
+    final cgroupDirectory = io.Directory('$cgroupPath/$targetName');
 
     if (limits != null) {
       if (limits.stackSizeLimitMb > 0) {
@@ -351,16 +366,13 @@ class ChrootedRunner extends AbstractRunner {
       executable
     ] + arguments;
 
-    final ioProcess = await io.Process.start(
+    final futureIoProcess = io.Process.start(
       'bash',
       launcherArguments,
       environment: environment,
     );
 
-    final cgroupDirectory = '$cgroupPath/$cgroupSubmodule';
     final realPidCompleter = Completer<int>();
-    _extractRealPid(cgroupDirectory, executable, realPidCompleter);
-    Future<int> realPid = realPidCompleter.future;
 
     int stdoutSizeLimit = -1;
     int stderrSizeLimit = -1;
@@ -371,15 +383,28 @@ class ChrootedRunner extends AbstractRunner {
       stderrSizeLimit = 1024 * 1024 * limits.stderrSizeLimitMb.toInt();
     }
 
-    log.fine('started process $executable');
+    final resultCompleter = Completer<YajudgeProcess>();
 
-    return YajudgeProcess(
-      cgroupDirectory: cgroupDirectory,
-      ioProcess: ioProcess,
-      realPid: realPid,
-      stdoutSizeLimit: stdoutSizeLimit,
-      stderrSizeLimit: stderrSizeLimit,
-    );
+    futureIoProcess.then((value) {
+      final ioProcess = value;
+      _extractRealPid(cgroupDirectory.path, executable, realPidCompleter);
+      Future<int> realPid = realPidCompleter.future;
+      log.fine('started process $executable');
+
+      final result = YajudgeProcess(
+        cgroupDirectory: cgroupDirectory.path,
+        ioProcess: ioProcess,
+        realPid: realPid,
+        stdoutSizeLimit: stdoutSizeLimit,
+        stderrSizeLimit: stderrSizeLimit,
+      );
+      resultCompleter.complete(result);
+    }, onError: (error, stackTrace) {
+      log.severe('cant start process: $executable: $error');
+      resultCompleter.completeError(error, stackTrace);
+    });
+
+    return resultCompleter.future;
   }
 
   Future _extractRealPid(String cgroupPath, String executableName, Completer<int> completer) async {
@@ -438,19 +463,19 @@ class ChrootedRunner extends AbstractRunner {
   }
 
   @override
-  void createDirectoryForSubmission(Submission submission) {
+  void createDirectoryForSubmission(Submission submission, String target) {
     if (submission.id >= 0) {
       createSubmissionDir(submission);
     }
     else if (submission.id == -1) {
       createProblemTemporaryDirs();
     }
-    createSubmissionCgroup(submission);
+    createSubmissionCgroup(submission, target);
   }
 
   @override
-  void releaseDirectoryForSubmission(Submission submission) {
-    removeSubmissionCgroup(submission);
+  void releaseDirectoryForSubmission(Submission submission, String target) {
+    removeSubmissionCgroup(submission, target);
 
     // clean temporary directories and files
     final workdirWork = io.Directory('${overlayWorkDir!.path}/work');

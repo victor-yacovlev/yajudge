@@ -1,15 +1,11 @@
 import 'package:logging/logging.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
 import 'abstract_runner.dart';
 import 'grader_extra_configs.dart';
 import 'package:path/path.dart' as path;
 
-class BuildError extends Error {
-  final String buildMessage;
-
-  BuildError(this.buildMessage);
-}
 
 class BuildArtifact {
   final ExecutableTarget executableTarget;
@@ -19,6 +15,27 @@ class BuildArtifact {
     required this.executableTarget,
     required this.fileNames,
   });
+}
+
+
+class BuildResult {
+  final Iterable<BuildArtifact> artifacts;
+  final String errorMessage;
+
+  bool get isError => errorMessage.isNotEmpty;
+
+  Submission applyTo(Submission s) {
+    if (!isError) return s;
+    return s.deepCopy()
+      ..buildErrorLog = errorMessage
+      ..status = SolutionStatus.COMPILATION_ERROR;
+  }
+
+  factory BuildResult.ok(Iterable<BuildArtifact> artifacts) => BuildResult(artifacts, '');
+  factory BuildResult.error(String message) => BuildResult([], message);
+  factory BuildResult.empty() => BuildResult([], '');
+
+  BuildResult(this.artifacts, this.errorMessage);
 }
 
 class StyleCheckResult {
@@ -44,14 +61,14 @@ abstract class AbstractBuilder {
   bool canCheckCodeStyle(Submission submission) => false;
   ExecutableTarget get defaultBuildTarget => ExecutableTarget.AutodetectExecutable;
 
-  Future<Iterable<BuildArtifact>> build({
+  Future<BuildResult> build({
     required Submission submission,
     required String buildDirRelativePath,
     required TargetProperties extraBuildProperties,
     required ExecutableTarget target,
   });
 
-  Future<Iterable<StyleCheckResult>> checkStyle({
+  Future<List<StyleCheckResult>> checkStyle({
     required Submission submission,
     required String buildDirRelativePath,
   }) async => [];
@@ -136,7 +153,7 @@ class CLangBuilder extends AbstractBuilder {
     defaultBuildProperties.propertiesForLanguage(ProgrammingLanguage.gnuAsm)
         .mergeWith(extraBuildProperties);
 
-    TargetProperties buildProperties;
+    TargetProperties buildProperties = TargetProperties(properties: {});
     if (hasCXXFiles(fileSet)) {
       buildProperties = cxxProperties;
     }
@@ -146,13 +163,10 @@ class CLangBuilder extends AbstractBuilder {
     else if (hasCFiles(fileSet)) {
       buildProperties = cProperties;
     }
-    else {
-      throw BuildError('no suitable source files for gcc/clang toolchain');
-    }
     return buildProperties;
   }
 
-  Future<BuildArtifact> _buildTarget({
+  Future<BuildResult> _buildTarget({
     required Submission submission,
     required String buildDirRelativePath,
     required TargetProperties buildProperties,
@@ -195,6 +209,7 @@ class CLangBuilder extends AbstractBuilder {
         submission,
         compilerCommand,
         workingDirectory: buildDirRelativePath,
+        targetName: 'clang_build',
       );
       bool compilerOk = await compilerProcess.ok;
       if (!compilerOk) {
@@ -202,7 +217,7 @@ class CLangBuilder extends AbstractBuilder {
         String detailedMessage = '${compilerCommand.join(' ')}\n$message}';
         io.File('${buildDir.path}/compile.log').writeAsStringSync(detailedMessage);
         log.fine('cant compile ${sourceFile.name} from ${submission.id}: $detailedMessage');
-        throw BuildError(detailedMessage);
+        return BuildResult.error(detailedMessage);
       } else {
         log.fine('successfully compiled ${sourceFile.name} from ${submission.id}');
         objectFiles.add(objectFileName);
@@ -216,9 +231,10 @@ class CLangBuilder extends AbstractBuilder {
         objectFiles;
     final linkerCommand = [compiler] + linkerArguments;
     final linkerProcess = await runner.start(
-        submission,
-        linkerCommand,
-        workingDirectory: buildDirRelativePath,
+      submission,
+      linkerCommand,
+      workingDirectory: buildDirRelativePath,
+      targetName: 'clang_build',
     );
     bool linkerOk = await linkerProcess.ok;
     if (!linkerOk) {
@@ -226,18 +242,20 @@ class CLangBuilder extends AbstractBuilder {
       String detailedMessage = '${linkerCommand.join(' ')}\n$message';
       log.fine('cant link ${submission.id}: $detailedMessage');
       io.File('${buildDir.path}/compile.log').writeAsStringSync(detailedMessage);
-      throw BuildError(detailedMessage);
+      return BuildResult.error(detailedMessage);
     } else {
       log.fine('successfully linked target $binaryTargetName for ${submission.id}');
-      return BuildArtifact(
+      return BuildResult.ok([
+        BuildArtifact(
           executableTarget: target,
           fileNames: ['$buildDirRelativePath/$binaryTargetName'],
-      );
+        )
+      ]);
     }
   }
 
   @override
-  Future<Iterable<StyleCheckResult>> checkStyle({
+  Future<List<StyleCheckResult>> checkStyle({
     required Submission submission,
     required String buildDirRelativePath,
   }) async {
@@ -254,6 +272,7 @@ class CLangBuilder extends AbstractBuilder {
         submission,
         ['clang-format', '-style=file', fileName],
         workingDirectory: buildDirRelativePath,
+        targetName: 'check_style',
       );
       bool clangFormatOk = await clangProcess.ok;
       if (!clangFormatOk) {
@@ -271,6 +290,7 @@ class CLangBuilder extends AbstractBuilder {
         submission,
         ['diff', fileName, '$fileName.formatted'],
         workingDirectory: '/$buildDirRelativePath',
+        targetName: 'check_style',
       );
       bool diffOk = await diffProcess.ok;
       String diffOut = await diffProcess.outputAsString;
@@ -299,7 +319,7 @@ class CLangBuilder extends AbstractBuilder {
   }
 
   @override
-  Future<Iterable<BuildArtifact>> build({
+  Future<BuildResult> build({
     required Submission submission,
     required String buildDirRelativePath,
     required TargetProperties extraBuildProperties,
@@ -342,28 +362,38 @@ class CLangBuilder extends AbstractBuilder {
     assert(buildPlainTarget || buildSanitizersTarget);
 
     if (buildPlainTarget) {
-      final plainTarget = await _buildTarget(
+      final plainBuildResult = await _buildTarget(
           submission: submission,
           buildDirRelativePath: buildDirRelativePath,
           buildProperties: buildProperties,
           target: enableValgrind? ExecutableTarget.NativeWithValgrind : ExecutableTarget.Native,
           sanitizerOptions: [],
       );
-      artifacts.add(plainTarget);
+      if (plainBuildResult.isError) {
+        return plainBuildResult;
+      }
+      else {
+        artifacts.addAll(plainBuildResult.artifacts);
+      }
     }
 
     if (buildSanitizersTarget) {
-      final sanitizedTarget = await _buildTarget(
+      final sanitizedBuildResult = await _buildTarget(
         submission: submission,
         buildDirRelativePath: buildDirRelativePath,
         buildProperties: buildProperties,
         target: ExecutableTarget.NativeWithSanitizers,
         sanitizerOptions: sanitizerOptions,
       );
-      artifacts.add(sanitizedTarget);
+      if (sanitizedBuildResult.isError) {
+        return sanitizedBuildResult;
+      }
+      else {
+        artifacts.addAll(sanitizedBuildResult.artifacts);
+      }
     }
 
-    return artifacts;
+    return BuildResult.ok(artifacts);
   }
 
   @override
@@ -374,7 +404,7 @@ class VoidBuilder extends AbstractBuilder {
   VoidBuilder({required super.defaultBuildProperties, required super.runner});
 
   @override
-  Future<Iterable<BuildArtifact>> build({
+  Future<BuildResult> build({
     required Submission submission,
     required String buildDirRelativePath,
     required TargetProperties extraBuildProperties,
@@ -382,10 +412,10 @@ class VoidBuilder extends AbstractBuilder {
   }) async {
     final fileSet = submission.solutionFiles;
     final scriptFileNames = fileSet.files.map((file) => '$buildDirRelativePath/${file.name}');
-    return [BuildArtifact(
+    return BuildResult.ok([BuildArtifact(
       executableTarget: target,
       fileNames: scriptFileNames.toList(),
-    )];
+    )]);
   }
 
   @override
@@ -396,7 +426,7 @@ class MakefileBuilder extends AbstractBuilder {
   MakefileBuilder({required super.defaultBuildProperties, required super.runner});
 
   @override
-  Future<Iterable<BuildArtifact>> build({
+  Future<BuildResult> build({
     required Submission submission,
     required String buildDirRelativePath,
     required TargetProperties extraBuildProperties,
@@ -409,13 +439,14 @@ class MakefileBuilder extends AbstractBuilder {
       submission,
       ['make'],
       workingDirectory: '/$buildDirRelativePath',
+      targetName: 'make',
     );
     bool makeOk = await makeProcess.ok;
     if (!makeOk) {
       String message = await makeProcess.outputAsString;
       log.fine('cant build Makefile project from ${submission.id}:\n$message');
       io.File('${buildDir.path}/make.log').writeAsStringSync(message);
-      throw BuildError(message);
+      return BuildResult.error(message);
     } else {
       log.fine('successfully compiled Makefile project from ${submission.id}');
     }
@@ -435,7 +466,7 @@ class MakefileBuilder extends AbstractBuilder {
       String message = 'no suitable targets created by make in Makefile project from ${submission.id}';
       log.fine(message);
       io.File('${buildDir.path}/make.log').writeAsStringSync(message);
-      throw BuildError(message);
+      return BuildResult.error(message);
     }
     List<String> artifactFileNames = [];
     for (final entry in newEntriesForTarget) {
@@ -451,7 +482,7 @@ class MakefileBuilder extends AbstractBuilder {
       executableTarget: target,
       fileNames: artifactFileNames,
     );
-    return [artifact];
+    return BuildResult.ok([artifact]);
   }
 
   bool _artifactMatchesTarget(io.FileSystemEntity entity, ExecutableTarget target) {
@@ -489,7 +520,7 @@ class JavaBuilder extends AbstractBuilder {
   ExecutableTarget get defaultBuildTarget => ExecutableTarget.JavaClass;
 
   @override
-  Future<Iterable<BuildArtifact>> build({
+  Future<BuildResult> build({
     required Submission submission,
     required String buildDirRelativePath,
     required TargetProperties extraBuildProperties,
@@ -518,6 +549,7 @@ class JavaBuilder extends AbstractBuilder {
         submission,
         compilerCommand,
         workingDirectory: buildDirRelativePath,
+        targetName: 'javac',
       );
       bool compilerOk = await compilerProcess.ok;
       if (!compilerOk) {
@@ -525,17 +557,17 @@ class JavaBuilder extends AbstractBuilder {
         String detailedMessage = '${compilerCommand.join(' ')}\n$message}';
         io.File('${buildDir.path}/compile.log').writeAsStringSync(detailedMessage);
         log.fine('cant compile ${sourceFile.name} from ${submission.id}: $detailedMessage');
-        throw BuildError(detailedMessage);
+        return BuildResult.error(message);
       } else {
         log.fine('successfully compiled ${sourceFile.name} from ${submission.id}');
         classFiles.add(classFileName);
       }
     } // done compiling source files into object files
 
-    return [BuildArtifact(
+    return BuildResult.ok([BuildArtifact(
       executableTarget: ExecutableTarget.JavaClass,
       fileNames: classFiles,
-    )];
+    )]);
   }
 
   @override

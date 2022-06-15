@@ -12,15 +12,14 @@ import 'builders.dart';
 import 'checkers.dart';
 import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
-import 'package:yaml/yaml.dart';
 
 import 'interactors.dart';
 import 'runtimes.dart';
 
+
 class SubmissionProcessor {
-  Submission submission;
   final AbstractRunner runner;
-  final Logger log = Logger('SubmissionProcessor');
+  Logger log = Logger('SubmissionProcessor');
   final GraderLocationProperties locationProperties;
   final GradingLimits defaultLimits;
   final DefaultBuildProperties defaultBuildProperties;
@@ -37,7 +36,6 @@ class SubmissionProcessor {
   bool disableValgrindAndSanitizers = false;
 
   SubmissionProcessor({
-    required this.submission,
     required this.runner,
     required this.locationProperties,
     required this.defaultLimits,
@@ -56,13 +54,15 @@ class SubmissionProcessor {
         runner: runner,
         interactorFactory: interactorFactory
     );
+    log = Logger('SubmissionProcessor');
   }
 
-  Future<void> processSubmissionGuarded() async {
-    runner.createDirectoryForSubmission(submission);
+  Future<Submission> processSubmissionGuarded(Submission submission) async {
+
+    runner.createDirectoryForSubmission(submission, '');
 
     final gradingOptions = GradingOptionsExtension.loadFromPlainFiles(
-      submissionOptionsDirectory
+      submissionOptionsDirectory(submission),
     );
 
     final builder = builderFactory.createBuilder(submission, gradingOptions);
@@ -82,35 +82,55 @@ class SubmissionProcessor {
         errorMessage = errorMessage.trim();
         submission.styleErrorLog = errorMessage;
         submission.status = SolutionStatus.STYLE_CHECK_ERROR;
-        return;
+        return submission;
       }
     }
 
-    Iterable<BuildArtifact> buildArtifacts = [];
+    Future<BuildResult> futureBuildResult;
 
     if (!gradingOptions.testsRequiresBuild) {
-      // build single solution for all tests
-      buildArtifacts = await buildSolution(
-          builder: builder,
-          buildRelativePath: '/build',
-          gradingOptions: gradingOptions,
+      futureBuildResult = buildSolution(
+        submission: submission,
+        builder: builder,
+        buildRelativePath: '/build',
+        gradingOptions: gradingOptions,
       );
-      if (submission.status == SolutionStatus.COMPILATION_ERROR) {
-        return;
-      }
+    }
+    else {
+      final emptyCompleter = Completer<BuildResult>();
+      futureBuildResult = emptyCompleter.future;
+      emptyCompleter.complete(BuildResult.empty());
     }
 
-    await processTests(
-      builder: builder,
-      buildArtifacts: buildArtifacts,
-      gradingOptions: gradingOptions,
-    );
+    final resultCompleter = Completer<Submission>();
 
-    bool hasCompileError = submission.testResults.any((e) => e.status==SolutionStatus.COMPILATION_ERROR);
-    bool hasRuntimeError = submission.testResults.any((e) => e.status==SolutionStatus.RUNTIME_ERROR);
-    bool hasValgrindError = submission.testResults.any((e) => e.status==SolutionStatus.VALGRIND_ERRORS);
-    bool hasTimeLimit = submission.testResults.any((e) => e.status==SolutionStatus.TIME_LIMIT);
-    bool hasWrongAnswer = submission.testResults.any((e) => e.status==SolutionStatus.WRONG_ANSWER);
+    futureBuildResult.then((buildResult) {
+      if (buildResult.isError) {
+        resultCompleter.complete(buildResult.applyTo(submission));
+      }
+      else {
+        final artifacts = buildResult.artifacts;
+        final testsResults = processTests(
+          submission: submission,
+          builder: builder,
+          buildArtifacts: artifacts,
+          gradingOptions: gradingOptions,
+        );
+        testsResults.then((value) {
+          resultCompleter.complete(applyTestResults(submission, value));
+        });
+      }
+    });
+
+    return resultCompleter.future;
+  }
+
+  static Submission applyTestResults(Submission submission, List<TestResult> testResults) {
+    bool hasCompileError = testResults.any((e) => e.status==SolutionStatus.COMPILATION_ERROR);
+    bool hasRuntimeError = testResults.any((e) => e.status==SolutionStatus.RUNTIME_ERROR);
+    bool hasValgrindError = testResults.any((e) => e.status==SolutionStatus.VALGRIND_ERRORS);
+    bool hasTimeLimit = testResults.any((e) => e.status==SolutionStatus.TIME_LIMIT);
+    bool hasWrongAnswer = testResults.any((e) => e.status==SolutionStatus.WRONG_ANSWER);
     if (hasCompileError) {
       submission.status = SolutionStatus.COMPILATION_ERROR;
       submission.buildErrorLog = ''; // test but not submission property
@@ -130,9 +150,11 @@ class SubmissionProcessor {
     else {
       submission.status = SolutionStatus.OK;
     }
+    return submission..testResults.addAll(testResults);
   }
 
-  Future<Iterable<BuildArtifact>> buildSolution({
+  Future<BuildResult> buildSolution({
+    required Submission submission,
     required AbstractBuilder builder,
     required String buildRelativePath,
     required GradingOptions gradingOptions,
@@ -144,41 +166,27 @@ class SubmissionProcessor {
     if (executableTargetToBuild==ExecutableTarget.AutodetectExecutable) {
       executableTargetToBuild = builder.defaultBuildTarget;
     }
-    Iterable<BuildArtifact> buildArtifacts = [];
-    try {
-      buildArtifacts = await builder.build(
-        submission: submission,
-        buildDirRelativePath: buildRelativePath,
-        extraBuildProperties: extraBuildProperties,
-        target: executableTargetToBuild,
-      );
-      if (buildArtifacts.isEmpty) {
-        throw BuildError('Nothing to run in this submission');
-      }
-    }
-    catch (error) {
-      if (error is BuildError) {
-        submission.buildErrorLog = error.buildMessage;
-        submission.status = SolutionStatus.COMPILATION_ERROR;
-      }
-      else {
-        rethrow;
-      }
-    }
-    return buildArtifacts;
+    return builder.build(
+      submission: submission,
+      buildDirRelativePath: buildRelativePath,
+      extraBuildProperties: extraBuildProperties,
+      target: executableTargetToBuild,
+    );
   }
 
-  Future<void> processTests({
+  Future<List<TestResult>> processTests({
+    required Submission submission,
     required Iterable<BuildArtifact> buildArtifacts,
     required GradingOptions gradingOptions,
     required AbstractBuilder builder,
   }) async {
 
+    List<TestResult> result = [];
     Map<int,Iterable<BuildArtifact>> testsBuildArtifacts = {};
     int buildTestsCount = 0;
     if (gradingOptions.testsRequiresBuild) {
       // build tests
-      buildTestsCount = prepareBuildTests();
+      buildTestsCount = prepareBuildTests(submission);
       for (int i=1; i<=buildTestsCount; i++) {
         final testBaseName = '$i'.padLeft(3, '0');
         final testBuildSubdir = '/$testBaseName.build';
@@ -186,21 +194,17 @@ class SubmissionProcessor {
           '${runner.submissionPrivateDirectory(submission)}$testBuildSubdir'
         );
         submission.solutionFiles.saveAll(testBuildDir);
-        final artifacts = await buildSolution(
-            builder: builder,
-            buildRelativePath: testBuildSubdir,
-            gradingOptions: gradingOptions
+        final buildResult = await buildSolution(
+          submission: submission,
+          builder: builder,
+          buildRelativePath: testBuildSubdir,
+          gradingOptions: gradingOptions,
         );
-        if (submission.status == SolutionStatus.COMPILATION_ERROR) {
-          submission.testResults.add(TestResult(
-            testNumber: i,
-            status: SolutionStatus.COMPILATION_ERROR,
-            buildErrorLog: submission.buildErrorLog,
-          ));
-          testsBuildArtifacts[i] = [];
+        if (!buildResult.isError) {
+          testsBuildArtifacts[i] = buildResult.artifacts;
         }
         else {
-          testsBuildArtifacts[i] = artifacts;
+          testsBuildArtifacts[i] = [];
         }
       }
     }
@@ -210,22 +214,32 @@ class SubmissionProcessor {
       for (int i=0; i<buildTestsCount; i++) {
         final testNumber = i + 1;
         final artifacts = testsBuildArtifacts[testNumber]!;
-        processSolutionArtifacts(artifacts, onlyForTestNumber: testNumber);
+        result.addAll(
+          await processSolutionArtifacts(
+            submission,
+            artifacts,
+            onlyForTestNumber: testNumber
+          )
+        );
       }
+      return result;
     }
     else {
-      processSolutionArtifacts(buildArtifacts);
+      return processSolutionArtifacts(submission, buildArtifacts);
     }
   }
 
-  Future<void> processSubmission() async {
+  Future<Submission> processSubmission(Submission submission) {
     submission = submission.deepCopy();
-    try {
-      log.info('started processing ${submission.id}');
-      await processSubmissionGuarded();
-      log.info('submission ${submission.id} done with status ${submission.status.value} (${submission.status.name})');
-    }
-    catch (error) {
+    log.info('started processing ${submission.id}');
+    final futureProcessed = processSubmissionGuarded(submission);
+    final resultCompleter = Completer<Submission>();
+    futureProcessed.then((processed) {
+      log.info('submission ${processed.id} done with status ${processed.status.value} (${processed.status.name})');
+      log.info('releasing directory for submission ${processed.id}');
+      runner.releaseDirectoryForSubmission(processed, '');
+      resultCompleter.complete(processed);
+    }, onError: (error) {
       submission.status = SolutionStatus.CHECK_FAILED;
       String message = error.toString();
       if (error is Error) {
@@ -236,62 +250,26 @@ class SubmissionProcessor {
       }
       log.info('submission ${submission.id} failed: $message');
       submission.buildErrorLog = message;
-    }
-    finally {
-      runner.releaseDirectoryForSubmission(submission);
-    }
+      log.info('releasing directory for submission ${submission.id}');
+      runner.releaseDirectoryForSubmission(submission, '');
+      resultCompleter.complete(submission);
+    });
+    return resultCompleter.future;
   }
 
-  List<String> solutionFileNames() {
-    String solutionPath = '${runner.submissionPrivateDirectory(submission)}/build';
-    return io.File('$solutionPath/.solution_files').readAsStringSync().trim().split('\n');
-  }
 
-  List<String> compileOptions() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    return io.File('$solutionPath/.compile_options').readAsStringSync().trim().split(' ');
-  }
-
-  List<String> linkOptions() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    return io.File('$solutionPath/.link_options').readAsStringSync().trim().split(' ');
-  }
-
-  String problemChecker() {
+  String problemChecker(Submission submission) {
     String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
     return io.File('$solutionPath/.checker').readAsStringSync().trim();
   }
 
-  String interactorFilePath() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    final interactorLinkFile = io.File('$solutionPath/.interactor');
-    if (interactorLinkFile.existsSync()) {
-      String interactorName = interactorLinkFile.readAsStringSync().trim();
-      return '$solutionPath/$interactorName';
-    }
-    else {
-      return '';
-    }
-  }
 
-  String coprocessFilePath() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    final coprocessLinkFile = io.File('$solutionPath/.coprocess');
-    if (coprocessLinkFile.existsSync()) {
-      String coprocessName = coprocessLinkFile.readAsStringSync().trim();
-      return '$solutionPath/$coprocessName';
-    }
-    else {
-      return '';
-    }
-  }
-
-  int problemTestsCount() {
+  int problemTestsCount(Submission submission) {
     String solutionPath = '${runner.submissionProblemDirectory(submission)}/tests';
     return int.parse(io.File('$solutionPath/.tests_count').readAsStringSync().trim());
   }
 
-  String problemTestsGenerator() {
+  String problemTestsGenerator(Submission submission) {
     String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
     final generatorFile = io.File('$solutionPath/.tests_generator');
     if (generatorFile.existsSync()) {
@@ -301,47 +279,11 @@ class SubmissionProcessor {
     }
   }
 
-  bool disableProblemValgrind() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    return io.File('$solutionPath/.disable_valgrind').existsSync();
-  }
-
-  List<String> disableProblemSanitizers() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    final confFile = io.File('$solutionPath/.disable_sanitizers');
-    return confFile.existsSync()? confFile.readAsStringSync().trim().split(' ') : [];
-  }
-
-  SecurityContext securityContext() {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    final confFile = io.File('$solutionPath/.security_context');
-    if (confFile.existsSync()) {
-      YamlMap conf = loadYaml(confFile.readAsStringSync());
-      final problemSecurityContext = securityContextFromYaml(conf);
-      return mergeSecurityContext(defaultSecurityContext, problemSecurityContext);
-    }
-    else {
-      return defaultSecurityContext;
-    }
-  }
-
-  String styleFileName(String suffix) {
-    String solutionPath = '${runner.submissionProblemDirectory(submission)}/build';
-    if (suffix.startsWith('.')) {
-      suffix = suffix.substring(1);
-    }
-    String styleLinkPath = '$solutionPath/.style_$suffix';
-    if (io.File(styleLinkPath).existsSync()) {
-      return io.File(styleLinkPath).readAsStringSync().trim();
-    }
-    return '';
-  }
-
-  int prepareBuildTests() {
+  int prepareBuildTests(Submission submission) {
     String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
     final buildsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/');
     // Unpack -build.tgz bundles if any exists
-    int maxBuildTestCount = problemTestsCount();
+    int maxBuildTestCount = problemTestsCount(submission);
     int buildTestCount = 0;
     for (int i=1; i<=maxBuildTestCount; i++) {
       String testBaseName = '$i'.padLeft(3, '0');
@@ -357,14 +299,14 @@ class SubmissionProcessor {
     return buildTestCount;
   }
 
-  int prepareRuntimeTests(String targetPrefix, {int onlyForTestNumber = 0}) {
+  int prepareRuntimeTests(Submission submission, String targetPrefix, {int onlyForTestNumber = 0}) {
     String testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
     final runsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/runs/$targetPrefix/');
 
     runsDir.createSync(recursive: true);
 
     // Unpack .tgz bundles if any exists
-    for (int i=1; i<=problemTestsCount(); i++) {
+    for (int i=1; i<=problemTestsCount(submission); i++) {
       if (onlyForTestNumber>0 && i!=onlyForTestNumber) {
         continue;
       }
@@ -379,9 +321,9 @@ class SubmissionProcessor {
     }
 
     // Generate tests if script provided
-    String testsGenerator = problemTestsGenerator();
+    String testsGenerator = problemTestsGenerator(submission);
     if (testsGenerator.isEmpty) {
-      return problemTestsCount();
+      return problemTestsCount(submission);
     }
     final testsCountFile = io.File('${runsDir.path}/.tests_count');
     if (testsCountFile.existsSync()) {
@@ -420,13 +362,14 @@ class SubmissionProcessor {
     }
   }
 
-  Future<void> processSolutionArtifacts(
+  Future<List<TestResult>> processSolutionArtifacts(
+      Submission submission,
       Iterable<BuildArtifact> buildArtifacts,
       {int onlyForTestNumber = 0}
       ) async {
     List<TestResult> testResults = [];
     final gradingOptions = GradingOptionsExtension.loadFromPlainFiles(
-        submissionOptionsDirectory
+        submissionOptionsDirectory(submission)
     );
     for (final artifact in buildArtifacts) {
       final gradingLimits = defaultLimits.mergedWith(gradingOptions.limits);
@@ -436,30 +379,37 @@ class SubmissionProcessor {
         submission: submission,
         artifact: artifact,
       );
-      final testsCount = prepareRuntimeTests(runtime.runtimeName, onlyForTestNumber: onlyForTestNumber);
+      final testsCount = prepareRuntimeTests(submission, runtime.runtimeName, onlyForTestNumber: onlyForTestNumber);
       for (int testNumber=1; testNumber<=testsCount; testNumber++) {
         if (onlyForTestNumber>0 && onlyForTestNumber!=testNumber) {
           continue;
         }
+        log.info('processing test $testNumber using ${artifact.fileNames}');
         final testBaseName = '$testNumber'.padLeft(3, '0');
         final runTestArtifact = await runtime.runTargetOnTest(testBaseName);
         final runTestResult = runTestArtifact.toTestResult();
+        log.info('run finished with status ${runTestResult.status.name} (${runTestResult.status.value})');
         runTestResult.testNumber = testNumber;
         runTestResult.target = runtime.runtimeName;
-        bool checkAnswer = runTestResult.status==SolutionStatus.ANY_STATUS_OR_NULL;
+        bool checkAnswer = runTestResult.status==SolutionStatus.OK;
+        bool failed = !checkAnswer;
         if (checkAnswer) {
-          final checkedTestResult = await processCheckAnswer(testBaseName, runTestResult);
+          final checkedTestResult = await processCheckAnswer(submission, testBaseName, runTestResult);
+          failed = checkedTestResult.status!=SolutionStatus.OK;
           testResults.add(checkedTestResult);
         }
         else {
           testResults.add(runTestResult);
         }
+        if (failed) {
+          return testResults;
+        }
       }
     }
-    submission.testResults.addAll(testResults);
+    return testResults;
   }
 
-  Future<TestResult> processCheckAnswer(String testBaseName, TestResult testResult) async {
+  Future<TestResult> processCheckAnswer(Submission submission, String testBaseName, TestResult testResult) async {
     final testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
     final runsDir = io.Directory(
       '${runner.submissionPrivateDirectory(submission)}/runs/${testResult.target}/'
@@ -477,7 +427,7 @@ class SubmissionProcessor {
       referencePath = problemAnsFile.path;
     }
     // Check for checker_options that overrides input files
-    final checkerData = problemChecker().trim().split('\n');
+    final checkerData = problemChecker(submission).trim().split('\n');
     final checkerOpts = checkerData.length > 1? checkerData[1].split(' ') : [];
     List<int> stdinData = [];
     final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
@@ -546,11 +496,12 @@ class SubmissionProcessor {
     else {
       stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
       resultCheckerMessage = runChecker(
-          [], // TODO ???
-          stdinData, stdinFilePath,
-          stdout, stdoutFilePath,
-          referenceStdout, referencePath,
-          wd
+        submission,
+        [], // TODO ???
+        stdinData, stdinFilePath,
+        stdout, stdoutFilePath,
+        referenceStdout, referencePath,
+        wd
       );
     }
 
@@ -606,7 +557,7 @@ class SubmissionProcessor {
     return testResult;
   }
 
-  io.Directory get submissionOptionsDirectory {
+  io.Directory submissionOptionsDirectory(Submission submission) {
     final cacheDir = locationProperties.cacheDir;
     final dataId = submission.course.dataId;
     final problemSubdir = submission.problemId.replaceAll(':', '/');
@@ -615,13 +566,15 @@ class SubmissionProcessor {
   }
 
 
-  String runChecker(List<String> args,
+  String runChecker(
+      Submission submission,
+      List<String> args,
       List<int> stdin, String stdinName,
       List<int> stdout, String stdoutName,
       List<int> reference, String referenceName,
       String wd)
   {
-    final checkerData = problemChecker().trim().split('\n');
+    final checkerData = problemChecker(submission).trim().split('\n');
     final checkerName = checkerData[0];
     final checkerOpts = checkerData.length > 1? checkerData[1] : '';
     wd = path.normalize(

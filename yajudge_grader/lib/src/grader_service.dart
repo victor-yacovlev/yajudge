@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:grpc/grpc.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:logging/logging.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'grader_extra_configs.dart';
 import 'chrooted_runner.dart';
@@ -14,6 +15,7 @@ import 'simple_runner.dart';
 import 'package:path/path.dart' as path;
 
 import 'abstract_runner.dart';
+import 'submission_processor.dart';
 
 const reconnectTimeout = Duration(seconds: 5);
 
@@ -172,11 +174,11 @@ class GraderService {
       String messageLine;
       if (isolateName.isEmpty) {
         messageLine =
-        '${record.time}: ${record.level.name} - ${record.message}\n';
+        '${record.time}: ${record.level.name} - ${record.loggerName}: ${record.message}\n';
       }
       else {
         messageLine =
-        '${record.time}: ${record.level.name} - [$isolateName] ${record.message}\n';
+        '${record.time}: ${record.level.name} - [$isolateName] ${record.loggerName}: ${record.message}\n';
       }
       try {
         if (outFile != null) {
@@ -429,6 +431,7 @@ class GraderService {
   }
 
   Future<Submission> processSubmission(Submission submission) async {
+    submission = submission.deepCopy();
     final courseId = submission.course.dataId;
     final problemId = submission.problemId;
 
@@ -444,32 +447,57 @@ class GraderService {
     );
 
     await problemLoader.loadProblemData();
-    final currentStatus = await waitForAnyWorkerIdle();
 
-    if (currentStatus == GraderStatus.ShuttingDown) {
-      return Future.error('server shutting down');
+    final singleThreaded = availableWorkersCount == 1;
+
+    if (!singleThreaded) {
+      final currentStatus = await waitForAnyWorkerIdle();
+      if (currentStatus == GraderStatus.ShuttingDown) {
+        return Future.error('server shutting down');
+      }
     }
 
-    final job = WorkerRequest(
-      submission: submission,
-      locationProperties: locationProperties,
-      defaultSecurityContext: defaultSecurityContext,
-      defaultBuildProperties: defaultBuildProperties,
-      defaultRuntimeProperties: defaultRuntimeProperties,
-      defaultLimits: defaultLimits,
-    );
+    // these two fields should be overwritten by worker if processing success
+    submission.status = SolutionStatus.CHECK_FAILED;
+    submission.buildErrorLog = 'submission processing not completed';
 
-    final worker = Worker(submission);
-    _idleWorkersCount --;
-    final completer = Completer<Submission>();
-    worker.process(job).then((value) {
-      _idleWorkersCount ++;
-      completer.complete(value);
-    }, onError: (error, stackTrace) {
-      _idleWorkersCount ++;
-      completer.completeError(error, stackTrace);
-    });
-    return completer.future;
+    if (singleThreaded) {
+      final runner = createRunner(
+          submission,
+          locationProperties
+      );
+      final submissionProcessor = SubmissionProcessor(
+        runner: runner,
+        locationProperties: locationProperties,
+        defaultLimits: defaultLimits,
+        defaultBuildProperties: defaultBuildProperties,
+        defaultRuntimeProperties: defaultRuntimeProperties,
+        defaultSecurityContext: defaultSecurityContext,
+      );
+      return submissionProcessor.processSubmission(submission);
+    }
+    else {
+      final job = WorkerRequest(
+        submission: submission,
+        locationProperties: locationProperties,
+        defaultSecurityContext: defaultSecurityContext,
+        defaultBuildProperties: defaultBuildProperties,
+        defaultRuntimeProperties: defaultRuntimeProperties,
+        defaultLimits: defaultLimits,
+      );
+
+      final worker = Worker(submission);
+      _idleWorkersCount --;
+      final completer = Completer<Submission>();
+      worker.process(job).then((value) {
+        _idleWorkersCount ++;
+        completer.complete(value);
+      }, onError: (error, stackTrace) {
+        _idleWorkersCount ++;
+        completer.completeError(error, stackTrace);
+      });
+      return completer.future;
+    }
   }
 
   void shutdown(String reason, [bool error = false]) async {

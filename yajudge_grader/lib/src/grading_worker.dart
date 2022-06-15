@@ -84,7 +84,6 @@ class Worker {
         request.locationProperties
     );
     final processor = SubmissionProcessor(
-      submission: request.submission,
       runner: runner,
       locationProperties: request.locationProperties,
       defaultLimits: request.defaultLimits,
@@ -94,8 +93,7 @@ class Worker {
     );
     WorkerResponse response;
     try {
-      await processor.processSubmission();
-      final result = processor.submission;
+      final result = await processor.processSubmission(submission);
       response = WorkerResponse.ok(result);
     } catch (error) {
       response = WorkerResponse.error(error);

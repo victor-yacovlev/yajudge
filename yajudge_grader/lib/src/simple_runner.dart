@@ -14,7 +14,7 @@ class SimpleRunner extends AbstractRunner {
   SimpleRunner({required this.locationProperties});
 
   @override
-  void createDirectoryForSubmission(Submission submission) {
+  void createDirectoryForSubmission(Submission submission, String target) {
     String submissionPath = path.absolute(locationProperties.workDir, '${submission.id}');
     String courseId = submission.course.dataId;
     String problemId = submission.problemId;
@@ -43,17 +43,18 @@ class SimpleRunner extends AbstractRunner {
   }
 
   @override
-  void releaseDirectoryForSubmission(Submission submission) {
+  void releaseDirectoryForSubmission(Submission submission, String target) {
     // Do nothing to keep data for possible debug
   }
 
   @override
   Future<YajudgeProcess> start(Submission submission, List<String> arguments, {
-    String workingDirectory = '/build',
+    required String workingDirectory,
     Map<String, String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript = false,
     String coprocessFileName = '',
+    required String targetName,
       }) async
   {
     assert (arguments.isNotEmpty);

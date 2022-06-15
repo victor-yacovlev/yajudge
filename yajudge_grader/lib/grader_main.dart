@@ -125,7 +125,7 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
 
   if (io.Platform.isLinux) {
     Logger.root.info('Checking for linux cgroup capabilities');
-    String cgroupInitializationError = ChrootedRunner.initializeLinuxCgroup();
+    String cgroupInitializationError = ChrootedRunner.initializeLinuxCgroup(graderInstanceName);
     Logger.root.info('Will use cgroup root: ${ChrootedRunner.cgroupRoot}');
     print('Will use cgroup root: ${ChrootedRunner.cgroupRoot}');
     if (cgroupInitializationError.isEmpty) {

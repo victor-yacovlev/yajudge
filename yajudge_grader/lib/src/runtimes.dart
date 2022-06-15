@@ -77,7 +77,7 @@ class RunTestArtifact {
   }
 
   TestResult toTestResult() {
-    SolutionStatus status = SolutionStatus.ANY_STATUS_OR_NULL;
+    SolutionStatus status = SolutionStatus.OK;
     String stdoutResult = stdoutAsString;
     String stderrResult = stderrAsString;
     if (signalKilled > 0) {
@@ -119,6 +119,7 @@ class RunTestArtifact {
 
 
 abstract class AbstractRuntime {
+  final String targetName;
   final TargetProperties runtimeProperties;
   final AbstractRunner runner;
   final Submission submission;
@@ -138,6 +139,7 @@ abstract class AbstractRuntime {
     required String coprocessFileName,
     required this.artifact,
     required this.interactor,
+    required this.targetName,
   }) {
     gradingLimits = gradingLimits.deepCopy();
     final extraMemoryLimit = runtimeProperties.properties['extra_memory_limit'];
@@ -352,6 +354,7 @@ class NativeRuntime extends AbstractRuntime {
     required super.gradingLimits,
     required super.coprocessFileName,
     required super.interactor,
+    required super.targetName,
   }) : super(runtimeName: 'native');
 
   @override
@@ -387,6 +390,7 @@ class NativeRuntime extends AbstractRuntime {
       workingDirectory: workDir,
       limits: gradingLimits,
       coprocessFileName: coprocessFileName,
+      targetName: targetName,
     );
   }
 }
@@ -399,7 +403,8 @@ class ValgrindRuntime extends AbstractRuntime {
     required super.gradingLimits,
     required super.coprocessFileName,
     required super.artifact,
-    required super.interactor
+    required super.interactor,
+    required super.targetName,
   }) : super(runtimeName: 'valgrind');
 
   @override
@@ -445,6 +450,7 @@ class ValgrindRuntime extends AbstractRuntime {
       workingDirectory: workDir,
       limits: gradingLimits,
       coprocessFileName: coprocessFileName,
+      targetName: targetName,
     );
   }
 }
@@ -457,7 +463,8 @@ class JavaRuntime extends AbstractRuntime {
     required super.gradingLimits,
     required super.coprocessFileName,
     required super.artifact,
-    required super.interactor
+    required super.interactor,
+    required super.targetName,
   }) : super(runtimeName: 'java');
 
   @override
@@ -514,6 +521,7 @@ class JavaRuntime extends AbstractRuntime {
       limits: gradingLimits,
       coprocessFileName: coprocessFileName,
       runTargetIsScript: true,
+      targetName: targetName,
     );
   }
 }
@@ -529,7 +537,8 @@ abstract class InterpreterRuntime extends AbstractRuntime {
     required super.gradingLimits,
     required super.coprocessFileName,
     required super.artifact,
-    required super.interactor
+    required super.interactor,
+    required super.targetName,
   });
 
   @override
@@ -538,10 +547,6 @@ abstract class InterpreterRuntime extends AbstractRuntime {
     required List<String> arguments,
     required String testBaseName
   }) {
-    String javaExecutable = runtimeProperties.executable;
-    if (javaExecutable.isEmpty) {
-      javaExecutable = 'java';
-    }
     List<String> interpreterOptions = runtimeProperties.property('runtime_options');
     String fileName = '';
     if (artifact.fileNames.length == 1) {
@@ -560,7 +565,8 @@ abstract class InterpreterRuntime extends AbstractRuntime {
       workingDirectory: workDir,
       limits: gradingLimits,
       coprocessFileName: coprocessFileName,
-      runTargetIsScript: true,
+      runTargetIsScript: false,
+      targetName: targetName,
     );
   }
 }
@@ -573,7 +579,8 @@ class ShellRuntime extends InterpreterRuntime {
     required super.gradingLimits,
     required super.coprocessFileName,
     required super.artifact,
-    required super.interactor
+    required super.interactor,
+    required super.targetName,
   }) : super(runtimeName: 'shell') {
     String executable = runtimeProperties.executable;
     if (executable.isEmpty) {
@@ -619,40 +626,45 @@ class RuntimeFactory {
     if (interactorName.isNotEmpty) {
       interactor = interactorFactory.getInteractor(interactorName);
     }
+    final targetName = artifact.executableTarget.name;
     final javaRuntime = JavaRuntime(
-        runtimeProperties: runtimeProperties,
-        runner: runner,
-        submission: submission,
-        gradingLimits: gradingLimits,
-        coprocessFileName: coprocessFileName,
-        artifact: artifact,
-        interactor: interactor
+      runtimeProperties: runtimeProperties,
+      runner: runner,
+      submission: submission,
+      gradingLimits: gradingLimits,
+      coprocessFileName: coprocessFileName,
+      artifact: artifact,
+      interactor: interactor,
+      targetName: targetName,
     );
     final nativeRuntime = NativeRuntime(
-        runtimeProperties: runtimeProperties,
-        runner: runner,
-        submission: submission,
-        gradingLimits: gradingLimits,
-        coprocessFileName: coprocessFileName,
-        artifact: artifact,
-        interactor: interactor
+      runtimeProperties: runtimeProperties,
+      runner: runner,
+      submission: submission,
+      gradingLimits: gradingLimits,
+      coprocessFileName: coprocessFileName,
+      artifact: artifact,
+      interactor: interactor,
+      targetName: targetName,
     );
     final valgrindRuntime = ValgrindRuntime(
-        runtimeProperties: runtimeProperties,
-        runner: runner,
-        submission: submission,
-        gradingLimits: gradingLimits,
-        coprocessFileName: coprocessFileName,
-        artifact: artifact,
-        interactor: interactor
+      runtimeProperties: runtimeProperties,
+      runner: runner,
+      submission: submission,
+      gradingLimits: gradingLimits,
+      coprocessFileName: coprocessFileName,
+      artifact: artifact,
+      interactor: interactor,
+      targetName: targetName,
     );
     final shellRuntime = ShellRuntime(
-        runtimeProperties: runtimeProperties,
-        runner: runner,
-        submission: submission,
-        gradingLimits: gradingLimits,
-        coprocessFileName: coprocessFileName,
-        artifact: artifact, interactor: interactor
+      runtimeProperties: runtimeProperties,
+      runner: runner,
+      submission: submission,
+      gradingLimits: gradingLimits,
+      coprocessFileName: coprocessFileName,
+      artifact: artifact, interactor: interactor,
+      targetName: targetName,
     );
     switch (target) {
       case ExecutableTarget.ShellScript:

@@ -93,13 +93,15 @@ class ProblemLoader {
     final compiler = compilerProperties.compiler;
     final baseOptions = compilerProperties.property('compile_options');
 
-    runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId));
+    const targetName = 'build_supplementary';
+    runner.createDirectoryForSubmission(Submission(id: Int64(-1), problemId: problemId), targetName);
 
     final arguments = baseOptions + ['-o', binaryName, sourceName];
     final process = await runner.start(
       Submission(id: Int64(-1), problemId: problemId),
       [compiler] + arguments,
       workingDirectory: '/build',
+      targetName: targetName,
     );
 
     bool compilerOk = await process.ok;
@@ -113,7 +115,7 @@ class ProblemLoader {
     final binaryContent = io.File('$buildDirPath/$binaryName')
       .readAsBytesSync();
 
-    runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)));
+    runner.releaseDirectoryForSubmission(Submission(id: Int64(-1)), targetName);
 
     return File(name: binaryName, data: binaryContent);
   }

@@ -5,15 +5,16 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
 
 abstract class AbstractRunner {
-  void createDirectoryForSubmission(Submission submission);
-  void releaseDirectoryForSubmission(Submission submission);
+  void createDirectoryForSubmission(Submission submission, String target);
+  void releaseDirectoryForSubmission(Submission submission, String target);
 
   Future<YajudgeProcess> start(Submission submission, List<String> arguments, {
-    String workingDirectory = '/build',
+    required String workingDirectory,
     Map<String,String>? environment,
     GradingLimits? limits,
     bool runTargetIsScript,
     String coprocessFileName,
+    required String targetName,
   });
 
   void killProcess(YajudgeProcess process);

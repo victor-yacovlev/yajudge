@@ -24,17 +24,59 @@ then
   exit 1
 fi
 mount -t tmpfs tmpfs "$YAJUDGE_OVERLAY_MERGEDIR/tmp"
+if [ ! $? ]
+then
+  echo "cant mount $YAJUDGE_OVERLAY_MERGEDIR/tmp"
+  exit 1
+fi
+
+if [ ! -d "$YAJUDGE_CGROUP_PATH" ]
+then
+  mkdir -p "$YAJUDGE_CGROUP_PATH"
+    if [ ! $? ]
+    then
+      echo "cant create $YAJUDGE_CGROUP_PATH"
+      exit 1
+    fi
+fi
+
 
 # create new clean cgroup and dedicated subgroup for solution itself
-echo "+memory +pids" > "$YAJUDGE_CGROUP_PATH/cgroup.subtree_control"
-mkdir -p "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR"
+if [ ! -d "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR" ]
+then
+  echo "+memory +pids" > "$YAJUDGE_CGROUP_PATH/cgroup.subtree_control"
+  if [ ! $? ]
+  then
+    echo "cant add +memory +pids to $YAJUDGE_CGROUP_PATH/cgroup.subtree_control"
+    exit 1
+  fi
+  mkdir -p "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR"
+  if [ ! $? ]
+  then
+    echo "cant create $YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR"
+    exit 1
+  fi
+fi
 
 # setup cgroup-configurable limits
 if [ -n "$YAJUDGE_PROC_COUNT_LIMIT" ]
 then
   echo "$YAJUDGE_PROC_COUNT_LIMIT" > "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR/pids.max"
+  if [ ! $? ]
+  then
+    echo "cant write procs limit to $YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR/pids.max"
+    exit 1
+  fi
 fi
-if [ -n "$YAJUDGE_PROC_MEMORY_LIMIT" ]; then echo "$YAJUDGE_PROC_MEMORY_LIMIT" > "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR/memory.max"; fi
+if [ -n "$YAJUDGE_PROC_MEMORY_LIMIT" ]
+then
+  echo "$YAJUDGE_PROC_MEMORY_LIMIT" > "$YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR/memory.max"
+  if [ ! $? ]
+  then
+    echo "cant write memory limit to $YAJUDGE_CGROUP_PATH/$YAJUDGE_CGROUP_SUBDIR/memory.max"
+    exit 1
+  fi
+fi
 
 # unshare IPC namespace due it will be in use by timeout command on next stage
 if [ -n "$YAJUDGE_DEBUG" ]; then echo $YAJUDGE_SCRIPT_STAGE; fi
