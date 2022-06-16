@@ -12,6 +12,8 @@ const highlightBackground = Color.fromARGB(255, 250, 250, 255);
 const commentBackground = Color.fromARGB(255, 255, 230, 230);
 const commentLeftMargin = 8.0;
 const commentTextColor = Colors.red;
+const tabExpand = '    ';
+const leadingSpacesMarkColor = Colors.black12;
 
 class LineCommentController {
   final bool editable;
@@ -91,6 +93,10 @@ class LineCommentableTextPainter extends CustomPainter {
     final commentHeight = calculateLineHeight(commentStyle);
     final commentInLineOffset = (lineHeight - commentHeight) / 2.0;
     final linePaint = Paint()..color = lineColor;
+    final whiteSpaceMarkPaint = Paint()
+      ..color = leadingSpacesMarkColor
+      ..strokeWidth = 2.0
+      ;
     final hoverPaint = Paint()..color = highlightBackground;
     final commentPaint = Paint()..color = commentBackground;
     Offset offset = Offset(0, 0);
@@ -112,10 +118,11 @@ class LineCommentableTextPainter extends CustomPainter {
         canvas.drawRect(lineRect, hoverPaint);
       }
       final line = lines[i];
-      final mainSpan = TextSpan(text: line, style: mainStyle);
+      final mainSpan = TextSpan(text: line.replaceAll('\t', tabExpand), style: mainStyle);
       final mainPainter = TextPainter(text: mainSpan, textDirection: TextDirection.ltr);
       mainPainter.layout();
       mainPainter.paint(canvas, offset);
+      drawWhiteSpaceMarkers(canvas, whiteSpaceMarkPaint, mainStyle, offset, line);
       if (comment != null && state._currentCommentEditingLine!=comment.lineNumber) {
         final mainMetrics = mainPainter.computeLineMetrics();
         double dx = 0.0;
@@ -130,6 +137,48 @@ class LineCommentableTextPainter extends CustomPainter {
       }
       offset = offset.translate(0, lineHeight);
       canvas.drawLine(Offset(0, offset.dy), Offset(size.width, offset.dy), linePaint);
+    }
+  }
+
+  void drawWhiteSpaceMarkers(Canvas canvas, Paint painter, TextStyle style, Offset offset, String sourceText) {
+    final lineHeight = calculateLineHeight(style);
+    final charWidth = calculateLineWidth('H', style);
+    final dotCenter = Offset(charWidth/2-1, lineHeight/2+1);
+    final lineStart = Offset(2, lineHeight/2+1);
+    final lineEnd = Offset(charWidth*tabExpand.length - 4, lineStart.dy);
+    for (int i=0; i<sourceText.length; i++) {
+      final currentChar = sourceText[i];
+      if (currentChar != ' ' && currentChar != '\t') {
+        break;
+      }
+      if (currentChar == ' ') {
+        // draw centered dot
+        canvas.drawCircle(offset.translate(dotCenter.dx, dotCenter.dy), 1.5, painter);
+        offset = offset.translate(charWidth, 0);
+      }
+      else if (currentChar == '\t') {
+        // draw tab arrow
+        canvas.drawLine(
+          offset.translate(lineStart.dx, lineStart.dy),
+          offset.translate(lineEnd.dx, lineEnd.dy),
+          painter,
+        );
+        canvas.drawLine(
+          offset.translate(lineStart.dx, 8),
+          offset.translate(lineStart.dx, lineHeight-6),
+          painter,
+        );
+        canvas.drawLine(
+          offset.translate(lineEnd.dx-8, 9),
+          offset.translate(lineEnd.dx, lineEnd.dy),
+          painter,
+        );
+        canvas.drawLine(
+          offset.translate(lineEnd.dx-8, lineEnd.dy+4),
+          offset.translate(lineEnd.dx, lineEnd.dy),
+          painter,
+        );
+      }
     }
   }
 
@@ -198,7 +247,7 @@ class LineCommentableTextPainter extends CustomPainter {
   }
 
   static double calculateLineWidth(String text, TextStyle style) {
-    final textSpan = TextSpan(text: text, style: style);
+    final textSpan = TextSpan(text: text.replaceAll('\t', tabExpand), style: style);
     final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
     textPainter.layout();
     final metrics = textPainter.computeLineMetrics();
