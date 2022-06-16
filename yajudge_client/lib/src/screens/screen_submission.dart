@@ -741,7 +741,7 @@ class SubmissionScreenState extends BaseScreenState {
     if (hasUnsavedComments && hasComments && reviewableStatus) {
       result.add(
           ScreenSubmitAction(
-            title: status==SolutionStatus.CODE_REVIEW_REJECTED? 'Сохранить замечания' : 'Отклонить решение',
+            title: status==SolutionStatus.CODE_REVIEW_REJECTED? 'Сохранить замечания' : 'На доработку',
             onAction: _rejectSolution,
             color: status==SolutionStatus.CODE_REVIEW_REJECTED? null : Colors.red,
           )
