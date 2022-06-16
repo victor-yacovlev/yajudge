@@ -36,14 +36,13 @@ IFS=$'\n'
 for e in $(env)
 do
   env_name=$(echo "$e" | cut -d '=' -f 1)
-  if [[ ! "$env_name" =~ ^(PATH|TERM|UID)$ ]]; then
+  if [[ ! "$env_name" =~ ^(PATH|TERM|UID|LANG)$ ]]; then
     unset "$env_name"
   fi
 done
 
 export PATH="/bin:/usr/bin:/usr/local/bin"
 export HOME="/build"
-
 exec unshare --mount-proc \
   --root="$LOCAL_YAJUDGE_ROOT_DIR" \
   --wd="$LOCAL_YAJUDGE_WORK_DIR" \
