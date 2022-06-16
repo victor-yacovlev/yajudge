@@ -57,37 +57,18 @@ class DashboardScreenState extends BaseScreenState {
       if (e.role != Role.ROLE_STUDENT || isAdministrator) {
         roleTitle = 'Вид глазами студента';
         subactions.addAll([
-          IconButton(
-            icon: const Icon(Icons.sort),
-            color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
-            onPressed: progressAction,
-            tooltip: 'Прогресс',
+          createIconButtonForItem(
+            context, progressAction, Icons.sort, 'Прогресс',
           ),
-          IconButton(
-            icon: const Icon(Icons.view_list_outlined),
-            color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
-            onPressed: submissionsAction,
-            tooltip: 'Посылки',
+          createIconButtonForItem(
+            context, submissionsAction, Icons.view_list_outlined, 'Посылки',
           ),
         ]);
       }
       if (e.role == Role.ROLE_LECTURER || e.role == Role.ROLE_ADMINISTRATOR || isAdministrator) {
-        subactions.add(
-            IconButton(
-              icon: const Icon(Icons.people),
-              color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
-              onPressed: enrollmentsAction,
-              tooltip: 'Группы и студенты',
-            )
-        );
-        // subactions.add(
-        //   IconButton(
-        //     icon: const Icon(Icons.settings),
-        //     color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
-        //     onPressed: settingsAction,
-        //     tooltip: 'Настройки курса',
-        //   )
-        // );
+        subactions.add(createIconButtonForItem(
+          context, enrollmentsAction, Icons.people, 'Студенты',
+        ));
       }
       String link = '/${e.course.urlPrefix}/';
       void action() {
@@ -101,6 +82,46 @@ class DashboardScreenState extends BaseScreenState {
       result.add(buttonWrapper);
     }
     return result;
+  }
+
+  static Widget createIconButtonForItem(BuildContext context, void Function() action, IconData icon, String text) {
+    const useLegacyStyle = false;
+    if (useLegacyStyle) {
+      return IconButton(
+        icon: Icon(icon),
+        color: Theme.of(context).textTheme.bodyText1!.color!.withAlpha(100),
+        onPressed: action,
+        tooltip: text,
+      );
+    }
+    final color = Theme.of(context).buttonTheme.colorScheme!.primary;
+    final textStyle = Theme.of(context).textTheme.button!.merge(
+      TextStyle(
+        color: color,
+        fontSize: 11,
+      )
+    );
+    return Padding(
+      padding: EdgeInsets.fromLTRB(4, 4, 4, 4),
+      child: SizedBox.fromSize(
+          size: Size(64, 64), // button width and height
+          child: ClipOval(
+            child: Material(
+              // color: Colors.orange, // button color
+              child: InkWell(
+                onTap: action, // button pressed
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Icon(icon, color: color), // icon
+                    Text(text, style: textStyle), // text
+                  ],
+                ),
+              ),
+            ),
+          ),
+        )
+    );
   }
 
   List<Widget> _createAdminEntries() {
