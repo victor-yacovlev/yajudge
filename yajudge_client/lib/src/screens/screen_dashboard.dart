@@ -98,23 +98,24 @@ class DashboardScreenState extends BaseScreenState {
     final textStyle = Theme.of(context).textTheme.button!.merge(
       TextStyle(
         color: color,
-        fontSize: 11,
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
       )
     );
     return Padding(
-      padding: EdgeInsets.fromLTRB(4, 4, 4, 4),
+      padding: EdgeInsets.fromLTRB(4, 8, 4, 8),
       child: SizedBox.fromSize(
-          size: Size(64, 64), // button width and height
+          size: Size(60, 60),
           child: ClipOval(
             child: Material(
-              // color: Colors.orange, // button color
               child: InkWell(
-                onTap: action, // button pressed
+                onTap: action,
+                hoverColor: color.withAlpha(20),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                    Icon(icon, color: color), // icon
-                    Text(text, style: textStyle), // text
+                    Icon(icon, color: color),
+                    Text(text, style: textStyle),
                   ],
                 ),
               ),
