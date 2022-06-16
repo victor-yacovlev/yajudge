@@ -232,6 +232,9 @@ class AppState extends State<App> {
       future: futureData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
+          if (snapshot.hasError) {
+            return ErrorScreen(courseTitle, snapshot.error.toString());
+          }
           final content = snapshot.requireData as CourseData;
           return generateWidgetForCourse(
               context,
