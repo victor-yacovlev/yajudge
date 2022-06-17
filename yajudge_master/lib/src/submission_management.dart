@@ -162,7 +162,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           '''
       select id,status,timestamp from submissions
       where users_id=@users_id and courses_id=@courses_id and problem_id=@problem_id
-      order by id asc 
+      order by timestamp asc 
       ''',
           substitutionValues: {
             'users_id': usersId,
@@ -174,7 +174,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       log.severe('sql query at checkCourseStatus: $error');
     }
 
-    final finalStatuses = [SolutionStatus.OK, SolutionStatus.DISQUALIFIED];
+    const finalStatuses = [
+      SolutionStatus.OK,
+      SolutionStatus.DISQUALIFIED,
+      SolutionStatus.PENDING_REVIEW,
+      SolutionStatus.CODE_REVIEW_REJECTED,
+      SolutionStatus.SUMMON_FOR_DEFENCE,
+    ];
     List<Submission> submissions = [];
     SolutionStatus problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
     bool completed = false;
