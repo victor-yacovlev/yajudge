@@ -315,9 +315,6 @@ class SubmissionProcessor {
       if (bundleFile.existsSync()) {
         io.Process.runSync('tar', ['zxf', bundleFile.path], workingDirectory: runsDir.path);
       }
-      else {
-        break;
-      }
     }
 
     // Generate tests if script provided
@@ -415,6 +412,7 @@ class SubmissionProcessor {
       '${runner.submissionPrivateDirectory(submission)}/runs/${testResult.target}/'
     );
     List<int> referenceStdout = [];
+    List<int> referenceStderr = [];
     final problemAnsFile = io.File('$testsPath/$testBaseName.ans');
     final targetAnsFile = io.File('${runsDir.path}/$testBaseName.ans');
     String referencePath = '';
@@ -425,6 +423,17 @@ class SubmissionProcessor {
     else if (problemAnsFile.existsSync()) {
       referenceStdout = problemAnsFile.readAsBytesSync();
       referencePath = problemAnsFile.path;
+    }
+    final problemErrFile = io.File('$testsPath/$testBaseName.err');
+    final targetErrFile = io.File('${runsDir.path}/$testBaseName.err');
+    String errorReferencePath = '';
+    if (targetErrFile.existsSync()) {
+      referenceStderr = targetErrFile.readAsBytesSync();
+      errorReferencePath = targetErrFile.path;
+    }
+    else if (problemErrFile.existsSync()) {
+      referenceStderr = problemErrFile.readAsBytesSync();
+      errorReferencePath = problemErrFile.path;
     }
     // Check for checker_options that overrides input files
     final checkerData = problemChecker(submission).trim().split('\n');
@@ -449,6 +458,7 @@ class SubmissionProcessor {
       stdinFilePath = problemStdinFile.path;
     }
     String stdoutFilePath = '${runsDir.path}/$testBaseName.stdout';
+    String stderrFilePath = '${runsDir.path}/$testBaseName.stderr';
     for (String opt in checkerOpts) {
       if (opt.startsWith('stdin=')) {
         stdinFilePath = '${runner.submissionProblemDirectory(submission)}/$wd/${opt.substring(6)}';
@@ -509,52 +519,71 @@ class SubmissionProcessor {
     checkerOutFile.writeAsStringSync(resultCheckerMessage);
 
     if (resultCheckerMessage.isNotEmpty) {
-      String checkerMessageToShow;
-      if (resultCheckerMessage.length > RunTestArtifact.maxDataSizeToShow) {
-        checkerMessageToShow = RunTestArtifact.screenBadSymbols(
-            resultCheckerMessage.substring(0, RunTestArtifact.maxDataSizeToShow)
-        );
-      }
-      else {
-        checkerMessageToShow = RunTestArtifact.screenBadSymbols(resultCheckerMessage);
-      }
-      String waMessage = '=== Checker output:\n';
-      if (resultCheckerMessage.length > RunTestArtifact.maxDataSizeToShow) {
-        waMessage += '(truncated to ${RunTestArtifact.maxDataSizeToShow} symbols)\n';
-      }
-      waMessage += '$checkerMessageToShow\n';
-      List<int> stdinBytesToShow = [];
-      if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
-        stdinBytesToShow = stdinData.sublist(0, RunTestArtifact.maxDataSizeToShow);
-      } else {
-        stdinBytesToShow = stdinData;
-      }
-      String inputDataToShow = '';
-      bool inputIsBinary = false;
-      try {
-        inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: false);
-      }
-      catch (e) {
-        if (e is FormatException) {
-          inputIsBinary = true;
-        }
-      }
-      if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
-        inputDataToShow += '  \n(input is too big, truncated to ${RunTestArtifact.maxDataSizeToShow} bytes)\n';
-      }
-      else if (inputIsBinary) {
-        inputDataToShow = '(input is binary file)\n';
-      }
-      if (inputDataToShow.isNotEmpty) {
-        waMessage += '=== Input data: ${RunTestArtifact.screenBadSymbols(inputDataToShow)}';
-      }
-      testResult.checkerOutput = waMessage;
+      testResult.checkerOutput = formatCheckerOutput(
+          resultCheckerMessage, 'Checker output', stdinData
+      );
       testResult.status = SolutionStatus.WRONG_ANSWER;
     }
     else {
       testResult.status = SolutionStatus.OK;
     }
+
+    final stderrFile = io.File(stderrFilePath);
+    if (testResult.status == SolutionStatus.OK && stderrFile.existsSync()) {
+      List<int> stderr = stderrFile.readAsBytesSync();
+      final textChecker = TextChecker();
+      final errCheckerOutput = textChecker.matchData([], [], stderr, referenceStderr, '', '', '');
+      if (errCheckerOutput.isNotEmpty) {
+        testResult.checkerOutput = formatCheckerOutput(
+            errCheckerOutput, 'Checker output on stderr stream', stdinData,
+        );
+        testResult.status = SolutionStatus.WRONG_ANSWER;
+      }
+    }
     return testResult;
+  }
+
+  static String formatCheckerOutput(String checkerOutput, String title, List<int> stdinData) {
+    String checkerMessageToShow;
+    if (checkerOutput.length > RunTestArtifact.maxDataSizeToShow) {
+      checkerMessageToShow = RunTestArtifact.screenBadSymbols(
+          checkerOutput.substring(0, RunTestArtifact.maxDataSizeToShow)
+      );
+    }
+    else {
+      checkerMessageToShow = RunTestArtifact.screenBadSymbols(checkerOutput);
+    }
+    String waMessage = '=== $title:\n';
+    if (checkerOutput.length > RunTestArtifact.maxDataSizeToShow) {
+      waMessage += '(truncated to ${RunTestArtifact.maxDataSizeToShow} symbols)\n';
+    }
+    waMessage += '$checkerMessageToShow\n';
+    List<int> stdinBytesToShow = [];
+    if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
+      stdinBytesToShow = stdinData.sublist(0, RunTestArtifact.maxDataSizeToShow);
+    } else {
+      stdinBytesToShow = stdinData;
+    }
+    String inputDataToShow = '';
+    bool inputIsBinary = false;
+    try {
+      inputDataToShow = utf8.decode(stdinBytesToShow, allowMalformed: false);
+    }
+    catch (e) {
+      if (e is FormatException) {
+        inputIsBinary = true;
+      }
+    }
+    if (stdinData.length > RunTestArtifact.maxDataSizeToShow) {
+      inputDataToShow += '  \n(input is too big, truncated to ${RunTestArtifact.maxDataSizeToShow} bytes)\n';
+    }
+    else if (inputIsBinary) {
+      inputDataToShow = '(input is binary file)\n';
+    }
+    if (inputDataToShow.isNotEmpty) {
+      waMessage += '=== Input data: ${RunTestArtifact.screenBadSymbols(inputDataToShow)}';
+    }
+    return waMessage;
   }
 
   io.Directory submissionOptionsDirectory(Submission submission) {
