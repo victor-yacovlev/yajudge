@@ -118,8 +118,12 @@ class CourseManagementService extends CourseManagementServiceBase {
         );
       }
     } catch (error) {
-      log.severe('cant load problem $courseId/$problemId into cache: $error');
-      throw GrpcError.internal('cant load problem $courseId/$problemId into cache');
+      String message = 'cant load problem $courseId/$problemId into cache: $error';
+      if (error is Error && error.stackTrace!=null) {
+        message += '\n${error.stackTrace}';
+      }
+      log.severe(message);
+      throw GrpcError.internal(message);
     }
   }
 

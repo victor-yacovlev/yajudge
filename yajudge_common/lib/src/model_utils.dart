@@ -937,6 +937,30 @@ extension FileExtension on File {
     io.File(fullPath).createSync(recursive: true);
     io.File(fullPath).writeAsBytesSync(data);
   }
+  
+  static File fromFile(io.File sourceFile, {
+    String name = '',
+    String description = '',
+    int? permissions,
+  }) {
+    name = name.isEmpty? sourceFile.path : name;
+    final data = sourceFile.readAsBytesSync();
+    final permissionsMask = int.parse('777', radix: 8);
+    int resolvedPermissions;
+    if (permissions != null) {
+      resolvedPermissions = permissions & permissionsMask;
+    }
+    else {
+      final mode = sourceFile.statSync().mode;
+      resolvedPermissions = mode & permissionsMask;
+    }
+    return File(
+      name: name,
+      data: data,
+      permissions: resolvedPermissions,
+      description: description,
+    );
+  }
 
 }
 
@@ -947,12 +971,17 @@ extension FileSetExtension on FileSet {
     }
   }
 
+  static const String permissionsFileName = '.permissions';
+
   static FileSet fromDirectory(io.Directory sourceDirectory, {
     bool recursive = false, String namePrefix = '',
   }) {
     final entries = sourceDirectory.listSync(recursive: recursive);
     final directoryPath = sourceDirectory.path;
     List<File> files = [];
+    final permissions = readPermissionsFile(
+      '${sourceDirectory.path}/$permissionsFileName'
+    );
     for (final entry in entries) {
       if (entry is io.File) {
         final fullPath = entry.path;
@@ -961,11 +990,38 @@ extension FileSetExtension on FileSet {
           relativePath = relativePath.substring(1);
         }
         final fileName = path.normalize('$namePrefix$relativePath');
-        final content = entry.readAsBytesSync().toList();
-        files.add(File(name: fileName, data: content));
+        int? filePermissions;
+        if (permissions.containsKey(relativePath)) {
+          filePermissions = permissions[relativePath]!;
+        }
+        files.add(FileExtension.fromFile(entry, name: fileName, permissions: filePermissions));
       }
     }
     return FileSet(files: files).deepCopy();
+  }
+
+  static Map<String,int> readPermissionsFile(String permissionsPath) {
+    Map<String,int> result = {};
+    final permissionsMask = int.parse('777', radix: 8);
+    final permissionsFile = io.File(permissionsPath);
+    if (permissionsFile.existsSync()) {
+      final lines = permissionsFile.readAsLinesSync();
+      for (final line in lines) {
+        if (line.trim().startsWith('#') || line.trim().isEmpty) {
+          continue;
+        }
+        final parts = line.trim().split(RegExp(r'\s+'));
+        if (parts.length < 2) {
+          continue;
+        }
+        final fileName = parts[0];
+        int? mode = int.tryParse(parts[1], radix: 8);
+        if (mode != null) {
+          result[fileName] = mode & permissionsMask;
+        }
+      }
+    }
+    return result;
   }
 
   File toTarGzBundle(String fileName) {
@@ -973,6 +1029,7 @@ extension FileSetExtension on FileSet {
     for (final file in files) {
       final fileData = Uint8List.fromList(file.data);
       final archiveFile = ArchiveFile(file.name, file.data.length, fileData);
+      archiveFile.mode = file.permissions;
       archive.addFile(archiveFile);
     }
     final tarData = TarEncoder().encode(archive);

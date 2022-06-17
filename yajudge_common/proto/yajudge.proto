@@ -55,6 +55,7 @@ message File {
   string      name        = 1;
   bytes       data        = 2;
   string      description = 3;
+  int32       permissions = 4; // unix permissions & 0777, use only for test case files
 }
 
 message FileSet {

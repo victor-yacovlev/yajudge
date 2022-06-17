@@ -715,6 +715,9 @@ class CourseLoader {
         lastModified: DateTime.fromMillisecondsSinceEpoch(0),
       );
     }
+    if (problemsCache[problemId]!.lastModified == null) {
+      problemsCache[problemId]!.lastModified = fileLastModified;
+    }
     final cacheLastModified = problemsCache[problemId]!.lastModified!;
     if (fileLastModified.millisecondsSinceEpoch > cacheLastModified.millisecondsSinceEpoch) {
       problemsCache[problemId]!.lastModified = fileLastModified;
