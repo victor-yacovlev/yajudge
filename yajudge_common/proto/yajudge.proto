@@ -206,8 +206,6 @@ message ProblemMetadata {
 
 enum SolutionStatus {
   ANY_STATUS_OR_NULL  = 0;
-  SUBMITTED           = 1;
-  GRADE_IN_PROGRESS   = 2;
   STYLE_CHECK_ERROR   = 3;
   COMPILATION_ERROR   = 4;
   WRONG_ANSWER        = 5;
@@ -221,9 +219,12 @@ enum SolutionStatus {
   TIME_LIMIT          = 15;
   VALGRIND_ERRORS     = 16;
   OK                  = 100;
+}
 
-  // INTERNAL STATUSES
-  GRADER_ASSIGNED     = 201;
+enum SubmissionGradingStatus {
+  queued = 0;
+  assigned = 1;
+  processed = 2;
 }
 
 message ProblemStatus {
@@ -240,6 +241,7 @@ message ProblemStatus {
   SolutionStatus      final_solution_status = 11;
   SubmissionsCountLimit submission_count_limit = 12;
   repeated Submission submissions = 13;
+  SubmissionGradingStatus final_grading_status = 20;
 
 }
 
@@ -308,6 +310,7 @@ message Submission {
   string              problem_id    = 12;
   repeated TestResult test_results  = 13;
 
+  SubmissionGradingStatus grading_status = 100;
 }
 
 message Solution {
@@ -590,6 +593,7 @@ message SubmissionListEntry {
   User              sender = 3;
   int64             timestamp = 4;
   string            problem_id = 5;
+  SubmissionGradingStatus grading_status = 10;
 }
 
 message SubmissionListResponse {

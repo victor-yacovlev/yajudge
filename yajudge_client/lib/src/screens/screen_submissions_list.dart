@@ -422,8 +422,13 @@ class SubmissionsListScreenState extends BaseScreenState {
           name += ' ${entry.sender.midName.trim()}';
         }
         String problemId = entry.problemId;
-        String status = statusMessageText(entry.status, '', narrow);
+        final solutionStatus = entry.status;
+        final gradingStatus = entry.gradingStatus;
+        String status = statusMessageText(solutionStatus, gradingStatus, '', narrow);
         Color statusTextColor = statusMessageColor(context, entry.status);
+        if (const {SubmissionGradingStatus.assigned, SubmissionGradingStatus.queued}.contains(gradingStatus)) {
+          statusTextColor = statusMessageColor(context, SolutionStatus.ANY_STATUS_OR_NULL);
+        }
         TableCell makeClickableCellFromText(String text, [Color? color]) {
           TextStyle textStyle = Theme.of(context).textTheme.bodyText1!;
           if (narrow) {

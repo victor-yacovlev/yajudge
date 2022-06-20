@@ -487,7 +487,7 @@ class CourseScreenState extends BaseScreenState {
       ProblemMetadata metadata = lesson.problemsMetadata[i];
       ProblemStatus? problemStatus;
       if (_status != null) {
-        problemStatus = findProblemStatus(_status!, problem.id);
+        problemStatus = _status!.findProblemStatus(problem.id);
       }
       action() {
         _navigateToProblem(problem);
@@ -506,7 +506,9 @@ class CourseScreenState extends BaseScreenState {
         }
       }
       else if (problemStatus!=null && problemStatus.finalSolutionStatus!=SolutionStatus.ANY_STATUS_OR_NULL) {
-        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, problemStatus.finalSolutionStatus);
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(
+            context, problemStatus.finalSolutionStatus, problemStatus.finalGradingStatus,
+        );
         String secondLine = statusView.item1;
         iconData = statusView.item2;
         iconColor = statusView.item3;

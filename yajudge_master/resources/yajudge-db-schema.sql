@@ -81,23 +81,24 @@ create table if not exists sessions
 );
 
 
-create table if not exists submissions
+create table submissions
 (
     id                serial
         constraint submissions_pk
             primary key,
-    users_id          integer      not null
+    users_id          integer           not null
         constraint submissions_users_id_fk
             references users,
-    courses_id        integer      not null
+    courses_id        integer           not null
         constraint submissions_courses_id_fk
             references courses,
-    problem_id        varchar(100) not null,
-    status            integer      not null,
-    timestamp         bigint       not null,
+    problem_id        varchar(100)      not null,
+    status            integer           not null,
+    timestamp         bigint            not null,
     grader_name       varchar(100),
     style_error_log   varchar,
-    compile_error_log varchar
+    compile_error_log varchar,
+    grading_status    integer default 0 not null
 );
 
 

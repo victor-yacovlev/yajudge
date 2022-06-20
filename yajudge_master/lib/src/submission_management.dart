@@ -160,7 +160,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     try {
       rows = await connection.query(
           '''
-      select id,status,timestamp from submissions
+      select id,status,timestamp,grading_status from submissions
       where users_id=@users_id and courses_id=@courses_id and problem_id=@problem_id
       order by timestamp asc 
       ''',
@@ -182,14 +182,16 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       SolutionStatus.SUMMON_FOR_DEFENCE,
     ];
     List<Submission> submissions = [];
-    SolutionStatus problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
+    var problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
+    var gradingStatus = SubmissionGradingStatus.processed;
     bool completed = false;
     double scoreGot = 0.0;
     Int64 submitted = Int64(0);
     for (List<dynamic> fields in rows) {
       int id = fields[0];
-      SolutionStatus status = SolutionStatus.valueOf(fields[1])!;
-      Int64 timestamp = Int64(fields[2]);
+      final status = SolutionStatus.valueOf(fields[1])!;
+      final timestamp = Int64(fields[2]);
+      gradingStatus = SubmissionGradingStatus.valueOf(fields[3])!;
       if (finalStatuses.contains(status)) {
         problemStatus = status;
         submitted = timestamp;
@@ -203,6 +205,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           id: Int64(id),
           problemId: problemMetadata.id,
           status: status,
+          gradingStatus: gradingStatus,
           user: user,
           course: course,
           timestamp: timestamp,
@@ -219,6 +222,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       scoreMax: problemMetadata.fullScoreMultiplier * 100,
       scoreGot: scoreGot,
       finalSolutionStatus: problemStatus,
+      finalGradingStatus: gradingStatus,
       submitted: submitted,
       submissionCountLimit: countLimit,
       submissions: submissions,
@@ -312,7 +316,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     String queryBegin = '''
       select submissions.id, problem_id, timestamp, status,
         users.first_name, users.last_name, users.mid_name,
-        users.group_name
+        users.group_name, grading_status
       from submissions, users
       where users_id=users.id 
       ''';
@@ -376,11 +380,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       String lastName = row[5];
       String midName = row[6] is String? row[6] : '';
       String groupName = row[7] is String? row[7] : '';
+      final gradingStatus = SubmissionGradingStatus.valueOf(row[8])!;
       result.add(SubmissionListEntry(
         submissionId: Int64(id),
         problemId: problemId,
         timestamp: Int64(timestamp),
         status: SolutionStatus.valueOf(status),
+        gradingStatus: gradingStatus,
         sender: User(
           firstName: firstName,
           lastName: lastName,
@@ -456,7 +462,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     int submissionId = request.id.toInt();
     final query =
     '''
-    select users_id, problem_id, timestamp, status, style_error_log, compile_error_log
+    select users_id, problem_id, timestamp, status, style_error_log, compile_error_log, grading_status
     from submissions
     where id=@id order by id asc
       ''';
@@ -468,9 +474,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     int userId = firstSubmissionRow[0];
     String problemId = firstSubmissionRow[1];
     int timestamp = firstSubmissionRow[2];
-    SolutionStatus status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
+    final status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
     String? styleErrorLog = firstSubmissionRow[4];
     String? compileErrorLog = firstSubmissionRow[5];
+    final gradingStatus = SubmissionGradingStatus.valueOf(firstSubmissionRow[6])!;
     styleErrorLog ??= '';
     compileErrorLog ??= '';
 
@@ -516,6 +523,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       user: User(id: Int64(userId)),
       timestamp: Int64(timestamp),
       status: status,
+      gradingStatus: gradingStatus,
       problemId: problemId,
       solutionFiles: FileSet(files: solutionFiles),
       testResults: testResults,
@@ -615,15 +623,16 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     }
     List<dynamic> submissionsRows = await connection.query(
       '''
-      insert into submissions(users_id,courses_id,problem_id,status,timestamp)
-      values (@users_id,@courses_id,@problem_id,@status,@timestamp)
+      insert into submissions(users_id,courses_id,problem_id,status,timestamp,grading_status)
+      values (@users_id,@courses_id,@problem_id,@status,@timestamp,@grading_status)
       returning id
       ''',
       substitutionValues: {
         'users_id': currentUser.id.toInt(),
         'courses_id': request.course.id.toInt(),
         'problem_id': request.problemId,
-        'status': SolutionStatus.SUBMITTED.value,
+        'status': SolutionStatus.ANY_STATUS_OR_NULL.value,
+        'grading_status': SubmissionGradingStatus.queued.value,
         'timestamp': DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000,
       }
     );
@@ -651,30 +660,30 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   void assignGrader(Submission submission, String graderName) {
     connection.query('''
       update submissions
-      set status=@status, grader_name=@grader_name
+      set grading_status=@grading_status, grader_name=@grader_name
       where id=@id
       ''',
       substitutionValues: {
         'id': submission.id.toInt(),
-        'status': SolutionStatus.GRADER_ASSIGNED.value,
+        'grading_status': SubmissionGradingStatus.assigned.value,
         'grader_name': graderName,
       }
     );
     final assignedSubmission = submission.deepCopy();
     assignedSubmission.graderName = graderName;
-    assignedSubmission.status = SolutionStatus.GRADER_ASSIGNED;
+    assignedSubmission.gradingStatus = SubmissionGradingStatus.assigned;
     _notifySubmissionResultChanged(assignedSubmission);
   }
 
   void unassignGrader(String graderName) {
     connection.query('''
       update submissions
-      set status=@new_status, grader_name=null
-      where status=@assigned_status and grader_name=@grader_name
+      set grading_status=@new_status, grader_name=null
+      where grading_status=@assigned_status and grader_name=@grader_name
       ''',
         substitutionValues: {
-          'assigned_status': SolutionStatus.GRADER_ASSIGNED.value,
-          'new_status': SolutionStatus.SUBMITTED.value,
+          'assigned_status': SubmissionGradingStatus.assigned.value,
+          'new_status': SubmissionGradingStatus.queued.value,
           'grader_name': graderName,
         }
     );
@@ -698,6 +707,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     request = request.deepCopy();
+    request.gradingStatus = SubmissionGradingStatus.processed;
     if (request.status == SolutionStatus.OK) {
       final course = await parent.courseManagementService.getCourseInfo(request.course.id);
       final problemId = request.problemId;
@@ -730,7 +740,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         '''
         update 
           submissions set status=@status, grader_name=@grader_name,
-          style_error_log=@style_error_log, compile_error_log=@compile_error_log
+          style_error_log=@style_error_log, compile_error_log=@compile_error_log,
+          grading_status=@grading_status
         where id=@id
         ''',
         substitutionValues: {
@@ -739,6 +750,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           'id': request.id.toInt(),
           'style_error_log': request.styleErrorLog,
           'compile_error_log': request.buildErrorLog,
+          'grading_status': SubmissionGradingStatus.processed.value,
         }
       );
       // there might be older test results in case of rejudging submission
@@ -830,10 +842,10 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       '''
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
-      where status=@status and courses_id=courses.id
+      where grading_status=@grading_status and courses_id=courses.id
       order by timestamp
       ''',
-      substitutionValues: {'status': SolutionStatus.SUBMITTED.value}
+      substitutionValues: {'grading_status': SubmissionGradingStatus.queued.value}
     );
     List<Submission> result = [];
     for (final e in rows) {
@@ -860,12 +872,12 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         '''
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
-      where status=@status and grader_name=@grader_name and courses_id=courses.id
+      where grading_status=@grading_status and grader_name=@grader_name and courses_id=courses.id
       order by timestamp
       limit 1
       ''',
         substitutionValues: {
-          'status': SolutionStatus.GRADER_ASSIGNED.value,
+          'grading_status': SubmissionGradingStatus.assigned.value,
           'grader_name': graderName,
         }
     );
@@ -1142,14 +1154,14 @@ values (@submissions_id,@test_number,@stdout,@stderr,
           }
       );
       await connection.query(
-          'update submissions set status=@new_status where id=@id',
+          'update submissions set grading_status=@new_status where id=@id',
           substitutionValues: {
-            'new_status': SolutionStatus.SUBMITTED.value,
+            'new_status': SubmissionGradingStatus.queued.value,
             'id': submission.id.toInt(),
           }
       );
       final rows = await connection.query(
-          'select users_id, first_name, last_name, mid_name, timestamp, grader_name '
+          'select users_id, first_name, last_name, mid_name, timestamp, grader_name, status '
           'from submissions, users '
           'where submissions.id=@id and users.id=submissions.users_id',
           substitutionValues: {
@@ -1163,8 +1175,10 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       final midName = (firstRow[3] as String?) ?? '';
       final timestamp = Int64(firstRow[4] as int);
       final graderName = firstRow[5] as String;
+      final status = firstRow[6] as int;
       submission.user = User(id: userId, firstName: firstName, lastName: lastName, midName: midName);
-      submission.status = SolutionStatus.SUBMITTED;
+      submission.status = SolutionStatus.valueOf(status)!;
+      submission.gradingStatus = SubmissionGradingStatus.queued;
       submission.styleErrorLog = submission.buildErrorLog = '';
       submission.testResults.clear();
       submission.graderScore = 0.0;
@@ -1190,7 +1204,6 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       final rows = await connection.query(
         query,
         substitutionValues: {
-          'new_status': SolutionStatus.SUBMITTED.value,
           'courses_id': request.course.id.toInt(),
           'problem_id': request.problemId,
         }
@@ -1204,7 +1217,9 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         await rejudgeSubmission(submission);
       }
     }
-    return request;
+    final response = request.deepCopy();
+    response.submission.gradingStatus = SubmissionGradingStatus.queued;
+    return response;
   }
 
   @override

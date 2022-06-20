@@ -244,6 +244,7 @@ class SubmissionScreenState extends BaseScreenState {
         if (submission.status != SolutionStatus.ANY_STATUS_OR_NULL) {
           _submission!.status = submission.status;
         }
+        _submission!.gradingStatus = submission.gradingStatus;
         _submission!.graderName = submission.graderName;
         _submission!.buildErrorLog = submission.buildErrorLog;
         _submission!.graderScore = submission.graderScore;
@@ -356,7 +357,10 @@ class SubmissionScreenState extends BaseScreenState {
       );
     }
 
-    String statusName = statusMessageText(_submission!.status, _submission!.graderName, false);
+    final status = _submission!.status;
+    final gradingStatus = _submission!.gradingStatus;
+    final graderName = _submission!.graderName;
+    String statusName = statusMessageText(status, gradingStatus, graderName, false);
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
 
     final whoCanRejudge = [
@@ -894,8 +898,6 @@ const statusesFull = {
   SolutionStatus.PLAGIARISM_DETECTED: 'Подозрение на плагиат',
   SolutionStatus.CODE_REVIEW_REJECTED: 'Отправлено на доработку',
   SolutionStatus.SUMMON_FOR_DEFENCE: 'Требуется защита',
-  SolutionStatus.SUBMITTED: 'В очереди на тестирование',
-  SolutionStatus.GRADER_ASSIGNED: 'Тестируется',
   SolutionStatus.DISQUALIFIED: 'Дисквалификация',
   SolutionStatus.COMPILATION_ERROR: 'Ошибка компиляции',
   SolutionStatus.STYLE_CHECK_ERROR: 'Ошибка форматирования',
@@ -908,9 +910,7 @@ const statusesFull = {
 
 const statusesShort = {
   SolutionStatus.ANY_STATUS_OR_NULL: 'ANY',
-  SolutionStatus.SUBMITTED: 'NEW',
   SolutionStatus.PENDING_REVIEW: 'PR',
-  SolutionStatus.GRADER_ASSIGNED: '...',
   SolutionStatus.DISQUALIFIED: 'DISQ',
   SolutionStatus.COMPILATION_ERROR: 'CE',
   SolutionStatus.STYLE_CHECK_ERROR: 'STY',
@@ -924,9 +924,18 @@ const statusesShort = {
   SolutionStatus.CHECK_FAILED: 'CF',
 };
 
-String statusMessageText(SolutionStatus status, String graderName, bool shortVariant) {
+String statusMessageText(SolutionStatus status, SubmissionGradingStatus gradingStatus, String graderName, bool shortVariant) {
   String message = '';
-
+  if (gradingStatus == SubmissionGradingStatus.queued) {
+    return shortVariant? '...' : 'В очереди на тестирование';
+  }
+  if (gradingStatus == SubmissionGradingStatus.assigned) {
+    message = 'Тестируется';
+    if (graderName.isNotEmpty) {
+      message += ' ($graderName)';
+    }
+    return shortVariant? '...' : message;
+  }
   if (!shortVariant) {
     if (statusesFull.containsKey(status)) {
       message = statusesFull[status]!;
@@ -942,9 +951,6 @@ String statusMessageText(SolutionStatus status, String graderName, bool shortVar
     else {
       message = status.name.substring(0, math.min(4, status.name.length)).toUpperCase();
     }
-  }
-  if (status == SolutionStatus.GRADER_ASSIGNED && graderName.isNotEmpty && !shortVariant) {
-    message += ' ($graderName)';
   }
   return message;
 }

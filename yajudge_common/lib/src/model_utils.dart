@@ -143,19 +143,21 @@ extension CourseDataExtension on CourseData {
 
 }
 
-
-ProblemStatus findProblemStatus(CourseStatus course, String problemId) {
-  for (final section in course.sections) {
-    for (final lesson in section.lessons) {
-      for (final problem in lesson.problems) {
-        if (problem.problemId == problemId) {
-          return problem;
+extension CourseStatusExtension on CourseStatus {
+  ProblemStatus findProblemStatus(String problemId) {
+    for (final section in sections) {
+      for (final lesson in section.lessons) {
+        for (final problem in lesson.problems) {
+          if (problem.problemId == problemId) {
+            return problem;
+          }
         }
       }
     }
+    return ProblemStatus();
   }
-  return ProblemStatus();
 }
+
 
 
 bool submissionsCountLimitIsValid(SubmissionsCountLimit countLimit) {
@@ -623,6 +625,7 @@ extension SubmissionExtension on Submission {
     return SubmissionListEntry(
       submissionId: id,
       status: status,
+      gradingStatus: gradingStatus,
       sender: user,
       timestamp: timestamp,
       problemId: problemId,

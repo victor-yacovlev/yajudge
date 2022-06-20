@@ -392,7 +392,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       submissionsToShow.sort((a, b) => b.id.compareTo(a.id));
       for (Submission submission in submissionsToShow) {
         String firstLine = 'ID = ${submission.id}, ${formatDateTime(submission.timestamp.toInt())}';
-        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, submission.status);
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, submission.status, submission.gradingStatus);
         String secondLine = statusView.item1;
         IconData iconData = statusView.item2;
         Color iconColor = statusView.item3;
@@ -558,23 +558,17 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
 }
 
-Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, SolutionStatus status) {
+Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, SolutionStatus status, SubmissionGradingStatus gradingStatus) {
   String secondLine = '';
   IconData iconData = Icons.error;
   Color iconColor = Colors.grey;
+  if (gradingStatus == SubmissionGradingStatus.assigned) {
+    return Tuple3('В очереди на тестирование', Icons.access_time_rounded, iconColor);
+  }
+  if (gradingStatus == SubmissionGradingStatus.queued) {
+    return Tuple3('Тестируется', Icons.access_time_rounded, iconColor);
+  }
   switch (status) {
-    case SolutionStatus.SUBMITTED:
-      iconData = Icons.access_time_rounded;
-      secondLine = 'В очереди на тестирование';
-      break;
-    case SolutionStatus.GRADE_IN_PROGRESS:
-      iconData = Icons.access_time_rounded;
-      secondLine = 'В очереди на тестирование';
-      break;
-    case SolutionStatus.GRADER_ASSIGNED:
-      iconData = Icons.access_time_rounded;
-      secondLine = 'Выполняется тестирование';
-      break;
     case SolutionStatus.STYLE_CHECK_ERROR:
       iconData = Icons.error_outline;
       secondLine = 'Нарушение форматирования кода';
