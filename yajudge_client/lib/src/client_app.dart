@@ -204,7 +204,15 @@ class AppState extends State<App> {
     if (fullPath.endsWith('/')) {
       fullPath = fullPath.substring(0, fullPath.length-1);
     }
+
     fullPath = path.normalize(fullPath);
+
+    if (fullPath == 'submissions') {
+      // Back button in browser after page refresh => go to initial root
+      Navigator.pushReplacementNamed(context, '/');
+      return DashboardScreen(user: loggedUser, coursesList: coursesList);
+    }
+
     List<String> pathParts = fullPath.split('/');
 
     // extract course prefix
