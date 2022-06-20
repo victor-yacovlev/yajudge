@@ -12,6 +12,12 @@ import 'grader_extra_configs.dart';
 import 'interactors.dart';
 import 'simple_runner.dart';
 
+class RuntimeLaunchError extends Error {
+  final String message;
+
+  RuntimeLaunchError(this.message) : super();
+}
+
 abstract class DetectedError extends Error {
   String get message;
 }
@@ -482,29 +488,29 @@ class JavaRuntime extends AbstractRuntime {
     List<String> entryPoint = [];
     if (artifact.executableTarget == ExecutableTarget.JavaClass) {
       String fileName = '';
-      if (artifact.fileNames.length == 1) {
+      String mainClass = '';
+      if (runtimeProperties.property('main_class').length == 1) {
+        mainClass = runtimeProperties.property('main_class').single;
+      }
+      else if (artifact.fileNames.length == 1) {
         fileName = artifact.fileNames.single;
+        if (fileName.startsWith('/build/')) {
+          fileName = fileName.substring('/build/'.length);
+        }
+        String className = fileName.replaceAll('/', '.');
+        if (className.endsWith('.class')) {
+          className = className.substring(0, className.length-6);
+        }
+        mainClass = className;
       }
       else {
-        if (runtimeProperties.property('main_class').length != 1) {
-          throw ArgumentError('wrong java main class', 'main_class');
-        }
-        final mainClassName = runtimeProperties.property('main_class').single;
-        final mainClassFileName = '$mainClassName.class';
-        fileName = mainClassFileName;
-      }
-      if (fileName.startsWith('/build/')) {
-        fileName = fileName.substring('/build/'.length);
-      }
-      String className = fileName.replaceAll('/', '.');
-      if (className.endsWith('.class')) {
-        className = className.substring(0, className.length-6);
+        throw RuntimeLaunchError('no main class specified');
       }
       String classPath = '/build';
       if (runner is SimpleRunner) {
         classPath = runner.submissionPrivateDirectory(submission) + classPath;
       }
-      entryPoint = ['-classpath', classPath, className];
+      entryPoint = ['-classpath', classPath, mainClass];
     }
     else if (artifact.executableTarget == ExecutableTarget.JavaJar) {
       assert(artifact.fileNames.length == 1);
