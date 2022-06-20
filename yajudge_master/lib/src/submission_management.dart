@@ -705,6 +705,23 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       bool skipCodeReview = course.disableReview || problemMetadata.skipCodeReview;
       if (!skipCodeReview) {
         request.status = SolutionStatus.PENDING_REVIEW;
+        // do not change submission status in case of review processed
+        final oldStatusRows = await connection.query(
+          'select status from submissions where id=@id',
+          substitutionValues: { 'id': request.id.toInt() },
+        );
+        if (oldStatusRows.isNotEmpty) {
+          final oldStatusRow = oldStatusRows.first;
+          final oldStatusValue = oldStatusRow.first as int;
+          final oldStatus = SolutionStatus.valueOf(oldStatusValue)!;
+          const statusesNotToChange = {
+            SolutionStatus.OK, SolutionStatus.SUMMON_FOR_DEFENCE,
+            SolutionStatus.DISQUALIFIED, SolutionStatus.CODE_REVIEW_REJECTED,
+          };
+          if (statusesNotToChange.contains(oldStatus)) {
+            request.status = oldStatus;
+          }
+        }
       }
     }
     await connection.transaction((connection) async {
