@@ -19,7 +19,9 @@ To build gRPC-Web proxy server also required [GoLang](https://go.dev) >= 1.16.
 Documentation on content preparation explained in Russian using Demo course
 matching this repository [demo](./demo) subdirectory.
 
-Demo course in Russian available at [demo.yajudge.ru](https://demo.yajudge.ru). 
+Demo course in Russian was available at [demo.yajudge.ru](https://demo.yajudge.ru). 
+Now it not available due to sanctions that do not allow to pay cheap hosting. Please contact 
+me for donations if you can pay server outside the Russia.
 
 ## Build
 
