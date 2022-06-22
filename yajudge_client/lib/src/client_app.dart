@@ -106,6 +106,38 @@ class AppState extends State<App> {
           loggedInUser: loggedUser, userIdOrNewOrMyself: arg);
     }
 
+    final RegExp submissionsWithNumberAndProblem = RegExp(r'/submissions/([0-9a-z_-]+)/(\d+)/problem:(.+)');
+    if (submissionsWithNumberAndProblem.hasMatch(fullPath)) {
+      final match = submissionsWithNumberAndProblem.matchAsPrefix(fullPath)!;
+      final courseUrlPrefix = match.group(1)!;
+      final problemId = match.group(3)!;
+
+      final coursesFilter = CoursesFilter(user: loggedUser);
+      final futureCoursesList = ConnectionController.instance!.coursesService
+          .getCourses(coursesFilter);
+
+      return FutureBuilder(
+        future: futureCoursesList,
+        builder: (BuildContext context, AsyncSnapshot<CoursesList> snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return loadingWaitWidget(context);
+          }
+          final coursesList = snapshot.requireData;
+          final courseEntry = coursesList.findByUrlPrefix(courseUrlPrefix);
+          if (courseEntry == null) {
+            return ErrorScreen('Ошибка 404', '');
+          }
+          return CourseProblemScreen(
+            user: loggedUser,
+            role: courseEntry.role,
+            courseUrlPrefix: courseUrlPrefix,
+            problemId: problemId,
+          );
+        },
+
+      );
+    }
+
     final RegExp submissionsWithNumber = RegExp(r'/submissions/([0-9a-z_-]+)/(\d+)');
     if (submissionsWithNumber.hasMatch(fullPath)) {
       final match = submissionsWithNumber.matchAsPrefix(fullPath)!;
@@ -222,14 +254,8 @@ class AppState extends State<App> {
 
     final courseUrlPrefix = pathParts[0];
     pathParts = pathParts.sublist(1);
-    CoursesList_CourseListEntry courseEntry = CoursesList_CourseListEntry();
-    for (final entry in coursesList.courses) {
-      if (entry.course.urlPrefix == courseUrlPrefix) {
-        courseEntry = entry;
-        break;
-      }
-    }
-    if (courseEntry.course.urlPrefix.isEmpty) {
+    final courseEntry = coursesList.findByUrlPrefix(courseUrlPrefix);
+    if (courseEntry == null) {
       return ErrorScreen('Ошибка 404', '');
     }
     final courseTitle = courseEntry.course.name;
@@ -247,7 +273,7 @@ class AppState extends State<App> {
           return generateWidgetForCourse(
               context,
               loggedUser,
-              courseEntry,
+              courseEntry!,
               content,
               pathTail,
           );

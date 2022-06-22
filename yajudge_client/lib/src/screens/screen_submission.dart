@@ -436,6 +436,40 @@ class SubmissionScreenState extends BaseScreenState {
     }
   }
 
+  List<Widget> buildLinkItems(BuildContext context) {
+    Padding wrapIntoPadding(Widget w) {
+      return Padding(
+          child: w,
+          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
+      );
+    }
+    final theme = Theme.of(context);
+    Text makeText(String text, [Color? color, bool underline = false]) {
+      return Text(text,
+          style: theme.textTheme.bodyText1!.merge(TextStyle(
+            fontSize: 16,
+            color: color,
+            decoration: underline? TextDecoration.underline : null,
+          ))
+      );
+    }
+    final currentRoute = ModalRoute.of(context)!.settings.name;
+    final problemUrl = '$currentRoute/problem:${_submission!.problemId}';
+    return [
+      wrapIntoPadding(Row(children: [
+        makeText('Задача: '),
+        TextButton(
+            onPressed: () {
+              Navigator.pushNamed(context, problemUrl).then((_) {
+                _loadSubmission(true);
+              });
+            },
+            child: makeText(_problemData!.title, null, true),
+        )
+      ]))
+    ];
+  }
+
   void _doRejudge() {
     final service = ConnectionController.instance!.submissionsService;
 
@@ -836,6 +870,7 @@ class SubmissionScreenState extends BaseScreenState {
     }
 
     contents.addAll(buildSubmissionCommonItems(context));
+    contents.addAll(buildLinkItems(context));
 
     bool commentsAreReadOnly = !canMakeReview();
 
