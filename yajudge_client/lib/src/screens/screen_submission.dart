@@ -488,18 +488,61 @@ class SubmissionScreenState extends BaseScreenState {
     }
     final currentRoute = ModalRoute.of(context)!.settings.name;
     final problemUrl = '$currentRoute/problem:${_submission!.problemId}';
-    return [
-      wrapIntoPadding(Row(children: [
-        makeText('Задача: '),
-        TextButton(
-            onPressed: () {
-              Navigator.pushNamed(context, problemUrl).then((_) {
-                _loadSubmission(true);
-              });
-            },
-            child: makeText(_problemData!.title, null, true),
-        )
-      ]))
+
+    final problemLinkItem = wrapIntoPadding(Row(children: [
+      makeText('Задача: '),
+      TextButton(
+        onPressed: () {
+          Navigator.pushNamed(context, problemUrl).then((_) {
+            _loadSubmission(true);
+          });
+        },
+        child: makeText(_problemData!.title, null, true),
+      )
+    ]));
+
+    void switchSubmission(Int64 submissionId) {
+      Navigator.pushReplacement(context, PageRouteBuilder(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+          settings: RouteSettings(name: '/submissions/${screen.courseUrlPrefix}/$submissionId'),
+        pageBuilder: (context, _, __) {
+          return SubmissionScreen(
+            user: screen.loggedUser,
+            courseUrlPrefix: screen.courseUrlPrefix,
+            submissionId: submissionId,
+            course: screen.course,
+            role: screen.role,
+            courseData: screen.courseData,
+          );
+        }
+      ));
+    }
+
+    Widget? submissionHistoryItems;
+    if (_submissionsHistory.length > 1) {
+      final rowItems = <Widget>[makeText('История решений задачи: ')];
+      submissionHistoryItems = wrapIntoPadding(Row(children: rowItems));
+      for (final entry in _submissionsHistory) {
+        String title = submissionListEntryToString(entry);
+        if (rowItems.length > 1) {
+          rowItems.add(makeText(', '));
+        }
+        bool isCurrent = entry.submissionId == _submission!.id;
+        if (isCurrent) {
+          rowItems.add(makeText(title));
+        }
+        else {
+          rowItems.add(TextButton(
+              onPressed: () => switchSubmission(entry.submissionId),
+              child: makeText(title, null, true)
+          ));
+        }
+      }
+    }
+
+    return submissionHistoryItems==null ? [problemLinkItem] : [
+      problemLinkItem, submissionHistoryItems
     ];
   }
 
