@@ -354,7 +354,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         queryValues['problem_id'] = request.problemIdFilter;
       }
       if (request.nameQuery.trim().isNotEmpty) {
-        queryFilter += ''' and (
+        final userId = int.tryParse(request.nameQuery);
+        if (userId != null) {
+          queryFilter += ' and users.id=@user_id ';
+          queryValues['user_id'] = userId;
+        }
+        else {
+          queryFilter += ''' and (
           upper(users.first_name) like @name
           or
           upper(users.last_name) like @name
@@ -364,8 +370,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           upper(concat(users.first_name, ' ', users.last_name)) like @name
         )  
         ''';
-        String normalizedName = request.nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
-        queryValues['name'] = '$normalizedName%';
+          String normalizedName = request.nameQuery.trim()
+              .toUpperCase()
+              .replaceAll(r'\s+', ' ');
+          queryValues['name'] = '$normalizedName%';
+        }
       }
     }
     final query = queryBegin + queryFilter + queryEnd;

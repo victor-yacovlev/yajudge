@@ -47,6 +47,7 @@ class SubmissionScreenState extends BaseScreenState {
 
   final SubmissionScreen screen;
   Submission? _submission;
+  List<SubmissionListEntry> _submissionsHistory = [];
   CourseData? _courseData;
   ProblemData? _problemData;
   ProblemMetadata? _problemMetadata;
@@ -143,6 +144,7 @@ class SubmissionScreenState extends BaseScreenState {
     service.getSubmissionResult(Submission(id: screen.submissionId, course: _course, user: screen.loggedUser))
         .then((submission) {
           _updateSubmission(submission);
+          _loadSubmissionsHistory();
           if (subscribe) {
             _subscribeToNotifications();
           }
@@ -153,6 +155,20 @@ class SubmissionScreenState extends BaseScreenState {
         errorMessage = error;
       });
     });
+  }
+
+  void _loadSubmissionsHistory() {
+    if (_submission == null) {
+      return;
+    }
+    final service = ConnectionController.instance!.submissionsService;
+    final query = SubmissionListQuery(
+      showMineSubmissions: true,
+      courseId: _submission!.course.id,
+      problemIdFilter: _submission!.problemId,
+      nameQuery: '${_submission!.user.id}',
+    );
+    service.getSubmissionList(query).then(_updateSubmissionsHistory);
   }
 
   void _loadCodeReviews() {
@@ -196,6 +212,23 @@ class SubmissionScreenState extends BaseScreenState {
         title = 'Посылка ${screen.submissionId}';
       }
     });
+  }
+
+  void _updateSubmissionsHistory(SubmissionListResponse response) {
+    setState(() {
+      _submissionsHistory = response.entries;
+      final visibleItems = _submissionsHistory.map(submissionListEntryToString);
+      final entriesString = visibleItems.join(', ');
+      log.info('Got submissions history: [$entriesString]');
+    });
+  }
+
+  static String submissionListEntryToString(SubmissionListEntry entry) {
+    final id = entry.submissionId.toInt();
+    final status = entry.status;
+    final gradingStatus = entry.gradingStatus;
+    final statusName = statusMessageText(status, gradingStatus, '', true);
+    return '$id ($statusName)';
   }
 
   @override
