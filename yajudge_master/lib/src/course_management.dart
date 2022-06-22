@@ -2,6 +2,7 @@ import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
 import './master_service.dart';
@@ -157,11 +158,13 @@ class CourseManagementService extends CourseManagementServiceBase {
       final lastModified = loader.courseLastModified();
       if (lastModified.millisecondsSinceEpoch > request.cachedTimestamp.toInt()) {
         CourseData courseData = loader.courseData();
+        CourseData publicCourseData = courseData.deepCopy();
+        publicCourseData.cleanPrivateContent();
         log.fine('sent course data on $courseId to client');
         return CourseContentResponse(
           status: ContentStatus.HAS_DATA,
           courseDataId: courseId,
-          data: courseData,
+          data: publicCourseData,
           lastModified: Int64(lastModified.millisecondsSinceEpoch),
         );
       } else {

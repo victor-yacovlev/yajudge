@@ -69,7 +69,7 @@ class CourseLoader {
   ProblemData problemData(String problemId) {
     if (requiresToReloadProblem(problemId)) {
       problemsCache[problemId] = ProblemDataCacheItem();
-      ProblemData problemData = _loadProblemData(true, problemId);
+      ProblemData problemData = _loadProblemData(problemId);
       problemsCache[problemId]!.data = problemData;
       problemsCache[problemId]!.lastChecked = DateTime.now();
     }
@@ -104,7 +104,7 @@ class CourseLoader {
         lastModified: DateTime.fromMillisecondsSinceEpoch(0),
       );
       try {
-        problemsCache[problemId]!.data = _loadProblemData(true, problemId);
+        problemsCache[problemId]!.data = _loadProblemData(problemId);
       } catch (err) {
         problemsCache[problemId]!.loadError = err;
       }
@@ -296,7 +296,7 @@ class CourseLoader {
           throw Exception('problems element in not a string or map');
         }
         problemsCache[problemId] = ProblemDataCacheItem();
-        problemData = _loadProblemData(false, problemId);
+        problemData = _loadProblemData(problemId);
         problemsList.add(problemData);
         problemsMetadataList.add(problemMetadata);
       }
@@ -309,15 +309,13 @@ class CourseLoader {
     _lesson.readings.addAll(readingsList);
   }
 
-  ProblemData _loadProblemData(bool withGradingData, String problemId) {
+  ProblemData _loadProblemData(String problemId) {
     final problemYamlFile = io.File('${problemPath(problemId)}/problem.yaml');
     if (!problemYamlFile.existsSync()) {
       throw Exception('file not exists: ${problemYamlFile.path}');
     }
     updateCourseLastModified(problemYamlFile);
-    if (withGradingData) {
-      updateProblemLastModifiedFromFile(problemId, problemYamlFile);
-    }
+    updateProblemLastModifiedFromFile(problemId, problemYamlFile);
     YamlMap data = loadYaml(problemYamlFile.readAsStringSync());
     String statementFileName = data['statement'] is String? data['statement'] : 'statement.md';
     final statementFile = io.File('${problemPath(problemId)}/$statementFileName');
@@ -383,13 +381,7 @@ class CourseLoader {
         description: description,
       )]);
     }
-    GradingOptions gradingOptions;
-    if (withGradingData) {
-      gradingOptions = _loadProblemGradingOptions(problemId, publicFiles);
-    }
-    else {
-      gradingOptions = GradingOptions();
-    }
+    final gradingOptions = _loadProblemGradingOptions(problemId, publicFiles);
     return ProblemData(
       id: problemId,
       uniqueId: uniqueId,

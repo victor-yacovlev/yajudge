@@ -38,7 +38,31 @@ class ProblemDataCacheItem {
   });
 }
 
+extension ProblemDataExtension on ProblemData {
+
+  void cleanPrivateContent() {
+    // must be called only after deepCopy
+
+    final limits = gradingOptions.limits;
+    gradingOptions = GradingOptions(limits: limits);
+    graderFiles = FileSet();
+  }
+
+}
+
 extension CourseDataExtension on CourseData {
+
+  void cleanPrivateContent() {
+    // must be called only after deepCopy
+
+    for (final section in sections) {
+      for (final lesson in section.lessons) {
+        for (final problem in lesson.problems) {
+          problem.cleanPrivateContent();
+        }
+      }
+    }
+  }
 
   Lesson findLessonByKey(String key) {
     if (key.startsWith('/')) {

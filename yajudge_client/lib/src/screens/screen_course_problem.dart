@@ -154,6 +154,9 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         _updateProblemStatus(event);
       },
       onError: (error) {
+        if (!mounted) {
+          return;
+        }
         log.info('problem status subscription error: $error');
         setState(() {
           _statusStream = null;
@@ -245,7 +248,48 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         child: RichTextViewer(_problemData.statementText, _problemData.statementContentType, theme: theme)
       )
     );
+
     contents.add(SizedBox(height: 20));
+    contents.add(Text('Ограничения ресурсов', style: theme.headline6));
+    final courseLimits = _courseData.defaultLimits;
+    final problemLimits = _problemData.gradingOptions.limits;
+    final limits = courseLimits.mergedWith(problemLimits);
+    int memoryTotalLimit = limits.memoryMaxLimitMb.toInt();
+    int memoryStackLimit = limits.stackSizeLimitMb.toInt();
+    if (memoryTotalLimit > 0 || memoryStackLimit > 0) {
+      List<String> texts = [];
+      if (memoryStackLimit > 0) {
+        texts.add('$memoryStackLimit Мб (стек)');
+      }
+      if (memoryTotalLimit > 0) {
+        texts.add('$memoryTotalLimit Мб (всего)');
+      }
+      contents.add(Text('Память: ${texts.join(', ')}'));
+    }
+    int cpuTimeLimit = limits.cpuTimeLimitSec.toInt();
+    int timeLimit = limits.realTimeLimitSec.toInt();
+    if (cpuTimeLimit > 0 || timeLimit > 0) {
+      List<String> texts = [];
+      if (cpuTimeLimit > 0) {
+        texts.add('$cpuTimeLimit сек. (процессорное)');
+      }
+      if (timeLimit > 0) {
+        texts.add('$timeLimit сек. (астрономическое)');
+      }
+      contents.add(Text('Время выполнения: ${texts.join(', ')}'));
+    }
+    int filesLimit = limits.fdCountLimit.toInt();
+    if (filesLimit > 0) {
+      contents.add(Text('Максимальное число файловых дескрипторов: $filesLimit'));
+    }
+    int procsLimit = limits.procCountLimit.toInt();
+    if (procsLimit > 0) {
+      contents.add(Text('Максимальное число процессов: $procsLimit'));
+    }
+    bool allowNetwork = limits.allowNetwork;
+    String allowNetworkText = allowNetwork? 'разрешен' : 'запрещен';
+    contents.add(Text('Доступ в Интернет: $allowNetworkText'));
+
     bool hasStatementFiles = _problemData.statementFiles.files.isNotEmpty;
     bool hasStyleFiles = _courseData.codeStyles.isNotEmpty;
     List<File> problemStyleFiles = List.empty(growable: true);
@@ -265,6 +309,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     }
     hasStyleFiles = problemStyleFiles.isNotEmpty;
     if (hasStatementFiles || hasStyleFiles) {
+      contents.add(SizedBox(height: 20));
       contents.add(Text('Файлы задания', style: theme.headline6));
       for (File file in _problemData.statementFiles.files + problemStyleFiles) {
         YCardLikeButton button = YCardLikeButton(file.name, () {
