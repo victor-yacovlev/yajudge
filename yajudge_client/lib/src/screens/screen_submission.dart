@@ -361,6 +361,10 @@ class SubmissionScreenState extends BaseScreenState {
     final gradingStatus = _submission!.gradingStatus;
     final graderName = _submission!.graderName;
     String statusName = statusMessageText(status, gradingStatus, graderName, false);
+    Color? statusColor = statusMessageColor(context, status);
+    if (gradingStatus != SubmissionGradingStatus.processed) {
+      statusColor = null;
+    }
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
 
     final whoCanRejudge = [
@@ -410,7 +414,12 @@ class SubmissionScreenState extends BaseScreenState {
         )
       );
     }
-    addText('Статус: $statusName');
+    leftColumn.add(
+        wrapIntoPadding(Row(children: [
+          makeText('Статус: '),
+          makeText(statusName, statusColor),
+        ]))
+    );
     addText('Отправлена: $dateSent');
     if (rightColumn.isEmpty) {
       return leftColumn;
