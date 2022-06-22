@@ -361,6 +361,57 @@ class SubmissionScreenState extends BaseScreenState {
     return contents;
   }
 
+  void manualStatusChange(SolutionStatus? newStatus) {
+    if (newStatus == null) {
+      return;
+    }
+  }
+
+  void showChangeStatusDialog(BuildContext context, SolutionStatus currentStatus) {
+    List<SolutionStatus> statuses = [
+      SolutionStatus.OK, SolutionStatus.SUMMON_FOR_DEFENCE,
+      SolutionStatus.PENDING_REVIEW, SolutionStatus.CODE_REVIEW_REJECTED,
+      SolutionStatus.PLAGIARISM_DETECTED, SolutionStatus.DISQUALIFIED,
+      SolutionStatus.COMPILATION_ERROR, SolutionStatus.WRONG_ANSWER,
+      SolutionStatus.TIME_LIMIT, SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.STYLE_CHECK_ERROR,
+    ];
+    final theme = Theme.of(context);
+    Text makeText(String text, [Color? color]) {
+      return Text(text,
+          style: theme.textTheme.bodyText1!.merge(TextStyle(
+            fontSize: 16,
+            color: color,
+          ))
+      );
+    }
+    final newStatus = showDialog<SolutionStatus>(context: context, builder: (BuildContext context) {
+      return SimpleDialog(
+        title: Text('Изменить статус', style: theme.textTheme.headline5),
+        children: statuses.map((status) {
+          final statusName = statusMessageText(status, SubmissionGradingStatus.processed, '', false);
+          final statusColor = statusMessageColor(context, status);
+          return SimpleDialogOption(
+            child: makeText(statusName, statusColor),
+            onPressed: () {
+              Navigator.pop(context, status);
+            },
+          );
+        }).toList(),
+      );
+    });
+    newStatus.then((SolutionStatus? newStatusValue) {
+      if (newStatusValue == null) {
+        return;
+      }
+      log.info('picked change status to ${newStatusValue.name}');
+      final service = ConnectionController.instance!.submissionsService;
+      final request = _submission!.deepCopy();
+      request.status = newStatusValue;
+      service.updateSubmissionStatus(request).then(_updateSubmission);
+    });
+  }
+
   List<Widget> buildSubmissionCommonItems(BuildContext context) {
     if (_submission == null) {
       return [];
@@ -370,16 +421,22 @@ class SubmissionScreenState extends BaseScreenState {
 
     Padding wrapIntoPadding(Widget w) {
       return Padding(
-          child: w,
+          child: Container(
+            constraints: BoxConstraints(
+              minHeight: 28,
+            ),
+            child: w,
+          ),
           padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
       );
     }
 
-    Text makeText(String text, [Color? color]) {
+    Text makeText(String text, [Color? color, bool underline = false]) {
       return Text(text,
           style: theme.textTheme.bodyText1!.merge(TextStyle(
             fontSize: 16,
             color: color,
+            decoration: underline? TextDecoration.underline : null,
           ))
       );
     }
@@ -400,13 +457,13 @@ class SubmissionScreenState extends BaseScreenState {
     }
     String dateSent = formatDateTime(_submission!.timestamp.toInt());
 
-    final whoCanRejudge = [
+    final whoCanRejudgeOrChangeStatus = [
       Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTURER,
     ];
 
     final rightColumn = <Widget>[];
 
-    if (screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanRejudge.contains(screen.role)) {
+    if (screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanRejudgeOrChangeStatus.contains(screen.role)) {
       rightColumn.add(
         ElevatedButton(
           onPressed: _doRejudge,
@@ -447,12 +504,18 @@ class SubmissionScreenState extends BaseScreenState {
         )
       );
     }
-    leftColumn.add(
-        wrapIntoPadding(Row(children: [
-          makeText('Статус: '),
-          makeText(statusName, statusColor),
-        ]))
-    );
+    bool canChangeStatus = screen.loggedUser.defaultRole==Role.ROLE_ADMINISTRATOR || whoCanRejudgeOrChangeStatus.contains(screen.role);
+    final statusItems = <Widget>[
+      makeText('Статус: '),
+      makeText(statusName, statusColor),
+    ];
+    if (canChangeStatus && gradingStatus==SubmissionGradingStatus.processed) {
+      statusItems.add(TextButton(onPressed: () {
+        showChangeStatusDialog(context, status);
+      }, child: makeText('Изменить', null, true)));
+    }
+    leftColumn.add(wrapIntoPadding(Row(children: statusItems)));
+    
     addText('Отправлена: $dateSent');
     if (rightColumn.isEmpty) {
       return leftColumn;
