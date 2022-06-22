@@ -433,7 +433,7 @@ class CourseScreenState extends BaseScreenState {
     String lessonPrefix = screen.selectedKey;
     String readingId = reading.id;
     String location = path.normalize('/$courseUrl/$lessonPrefix/$readingId');
-    Navigator.pushNamed(context, location);
+    Navigator.pushNamed(context, location).then((_) => _checkStatus());
   }
 
   void _navigateToProblem(ProblemData problem) {
@@ -441,7 +441,7 @@ class CourseScreenState extends BaseScreenState {
     String lessonPrefix = screen.selectedKey;
     String problemId = problem.id;
     String location = path.normalize('/$courseUrl/$lessonPrefix/$problemId');
-    Navigator.pushNamed(context, location);
+    Navigator.pushNamed(context, location).then((_) => _checkStatus());
   }
 
   List<Widget> _createReadingsIndex(BuildContext context, Lesson lesson) {
@@ -516,6 +516,9 @@ class CourseScreenState extends BaseScreenState {
           secondLineText += '. ';
         }
         secondLineText += secondLine;
+        if (problemStatus.finalSolutionStatus == SolutionStatus.OK) {
+          secondLineText += ' (${problemStatus.scoreGot} из ${problemStatus.scoreMax} баллов)';
+        }
       }
       else {
         iconData = problemIsRequired? Icons.error_outline : Icons.radio_button_off_outlined;

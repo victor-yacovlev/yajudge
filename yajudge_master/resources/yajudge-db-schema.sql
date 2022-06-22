@@ -8,7 +8,8 @@ create table if not exists courses
     url_prefix                                   varchar(50)  not null,
     must_solve_all_required_problems_to_complete boolean default false,
     disable_review                               boolean default false,
-    disable_defence                              boolean default true
+    disable_defence                              boolean default true,
+    course_start                                 timestamp
 );
 
 

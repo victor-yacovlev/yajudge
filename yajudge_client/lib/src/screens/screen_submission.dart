@@ -374,7 +374,7 @@ class SubmissionScreenState extends BaseScreenState {
       SolutionStatus.PLAGIARISM_DETECTED, SolutionStatus.DISQUALIFIED,
       SolutionStatus.COMPILATION_ERROR, SolutionStatus.WRONG_ANSWER,
       SolutionStatus.TIME_LIMIT, SolutionStatus.VALGRIND_ERRORS,
-      SolutionStatus.STYLE_CHECK_ERROR,
+      SolutionStatus.STYLE_CHECK_ERROR, SolutionStatus.HARD_DEADLINE_PASSED,
     ];
     final theme = Theme.of(context);
     Text makeText(String text, [Color? color]) {
@@ -419,12 +419,12 @@ class SubmissionScreenState extends BaseScreenState {
     final leftColumn = <Widget>[];
     final theme = Theme.of(context);
 
-    Padding wrapIntoPadding(Widget w) {
+    Padding wrapIntoPadding(Widget w, [double minHeight = 0]) {
       return Padding(
           child: Container(
-            constraints: BoxConstraints(
-              minHeight: 28,
-            ),
+            constraints: minHeight > 0 ? BoxConstraints(
+              minHeight: minHeight,
+            ) : null,
             child: w,
           ),
           padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
@@ -447,7 +447,11 @@ class SubmissionScreenState extends BaseScreenState {
       );
     }
 
-    final status = _submission!.status;
+    var status = _submission!.status;
+    final finalStatuses = {SolutionStatus.PENDING_REVIEW, SolutionStatus.OK};
+    if (isHardDeadlinePassed(_course!, _courseData!, _submission!) && finalStatuses.contains(status)) {
+      status = SolutionStatus.HARD_DEADLINE_PASSED;
+    }
     final gradingStatus = _submission!.gradingStatus;
     final graderName = _submission!.graderName;
     String statusName = statusMessageText(status, gradingStatus, graderName, false);
@@ -514,9 +518,11 @@ class SubmissionScreenState extends BaseScreenState {
         showChangeStatusDialog(context, status);
       }, child: makeText('Изменить', null, true)));
     }
-    leftColumn.add(wrapIntoPadding(Row(children: statusItems)));
+    leftColumn.add(wrapIntoPadding(Row(children: statusItems), 28));
     
     addText('Отправлена: $dateSent');
+
+
     if (rightColumn.isEmpty) {
       return leftColumn;
     }
@@ -530,6 +536,51 @@ class SubmissionScreenState extends BaseScreenState {
         ],
       )];
     }
+  }
+
+  List<Widget> buildDeadlineItems(BuildContext context) {
+    Padding wrapIntoPadding(Widget w) {
+      return Padding(
+          child: w,
+          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
+      );
+    }
+    final theme = Theme.of(context);
+    Text makeText(String text, [Color? color, bool underline = false]) {
+      return Text(text,
+          style: theme.textTheme.bodyText1!.merge(TextStyle(
+            fontSize: 16,
+            color: color,
+            decoration: underline? TextDecoration.underline : null,
+          ))
+      );
+    }
+    List<Widget> result = [];
+    final schedule = _courseData!.findScheduleByProblemId(_submission!.problemId);
+    DateTime submitted = DateTime.fromMillisecondsSinceEpoch(_submission!.timestamp.toInt() * 1000);
+    DateTime base = DateTime.fromMillisecondsSinceEpoch(_course!.courseStart.toInt() * 1000);
+    if (schedule.hasHardDeadline() && _course!.courseStart > 0) {
+      DateTime hardDeadline = DateTime.fromMillisecondsSinceEpoch(
+          base.millisecondsSinceEpoch + schedule.hardDeadline * 1000
+      );
+      DateTime softDeadLine = DateTime.fromMillisecondsSinceEpoch(
+          base.millisecondsSinceEpoch + schedule.softDeadline * 1000
+      );
+      if (submitted.millisecondsSinceEpoch > hardDeadline.millisecondsSinceEpoch) {
+        String dateFormat = formatDateTime(hardDeadline.millisecondsSinceEpoch ~/ 1000);
+        String message = 'Решение отправлено после жесткого дедлайна $dateFormat, оно не будет зачтено';
+        result.add(wrapIntoPadding(makeText(message, Colors.red)));
+      }
+      else if (submitted.millisecondsSinceEpoch > softDeadLine.millisecondsSinceEpoch) {
+        String dateFormat = formatDateTime(softDeadLine.millisecondsSinceEpoch ~/ 1000);
+        int penalty = schedule.softDeadlinePenalty(base, submitted, _problemMetadata!.softDeadlinePenaltyPerHour);
+        penalty = math.min(penalty, (_problemMetadata!.fullScoreMultiplier * 100).round());
+        String scoreFormat = formatScoreInRussian(penalty);
+        String message = 'Решение отправлено после дедлайна $dateFormat, штраф $scoreFormat';
+        result.add(wrapIntoPadding(makeText(message, Colors.red)));
+      }
+    }
+    return result;
   }
 
   List<Widget> buildLinkItems(BuildContext context) {
@@ -898,15 +949,17 @@ class SubmissionScreenState extends BaseScreenState {
     bool hasUnsavedComments = _hasUnsavedChanges;
     List<ScreenSubmitAction> result = [];
     final status = _submission?.status ?? SolutionStatus.ANY_STATUS_OR_NULL;
+    
     bool reviewableStatus =
         status == SolutionStatus.PENDING_REVIEW ||
         status == SolutionStatus.SUMMON_FOR_DEFENCE ||
         status == SolutionStatus.CODE_REVIEW_REJECTED
     ;
+    
     bool hasComments = _globalCommentController.text.trim().isNotEmpty ||
         _lineCommentController.comments.isNotEmpty;
 
-    if (reviewableStatus) {
+    if (reviewableStatus && !isHardDeadlinePassed(_course!, _courseData!, _submission!)) {
       result.add(
         ScreenSubmitAction(
           title: status==SolutionStatus.SUMMON_FOR_DEFENCE ? 'Зачесть решение' : 'Одобрить решение',
@@ -1009,6 +1062,7 @@ class SubmissionScreenState extends BaseScreenState {
     }
 
     contents.addAll(buildSubmissionCommonItems(context));
+    contents.addAll(buildDeadlineItems(context));
     contents.addAll(buildLinkItems(context));
 
     bool commentsAreReadOnly = !canMakeReview();
@@ -1089,6 +1143,7 @@ const statusesFull = {
   SolutionStatus.VALGRIND_ERRORS: 'Ошибки Valgrind',
   SolutionStatus.TIME_LIMIT: 'Лимит времени',
   SolutionStatus.CHECK_FAILED: 'Ошибка тестирования',
+  SolutionStatus.HARD_DEADLINE_PASSED: 'Прошел дедлайн',
 };
 
 const statusesShort = {
@@ -1105,6 +1160,7 @@ const statusesShort = {
   SolutionStatus.CODE_REVIEW_REJECTED: 'REJ',
   SolutionStatus.SUMMON_FOR_DEFENCE: 'SM',
   SolutionStatus.CHECK_FAILED: 'CF',
+  SolutionStatus.HARD_DEADLINE_PASSED: 'DL',
 };
 
 String statusMessageText(SolutionStatus status, SubmissionGradingStatus gradingStatus, String graderName, bool shortVariant) {
@@ -1155,6 +1211,8 @@ Color statusMessageColor(BuildContext buildContext, SolutionStatus status) {
     SolutionStatus.TIME_LIMIT,
     SolutionStatus.COMPILATION_ERROR,
     SolutionStatus.STYLE_CHECK_ERROR,
+    SolutionStatus.HARD_DEADLINE_PASSED,
+    SolutionStatus.DISQUALIFIED,
   };
   final theme = Theme.of(buildContext);
   Color color = theme.textTheme.bodyText1!.color!;

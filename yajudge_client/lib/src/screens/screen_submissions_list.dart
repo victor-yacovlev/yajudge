@@ -96,7 +96,7 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   void _updateSubmissionInList(SubmissionListEntry event) {
-    setState((){
+    setState(() {
       bool found = false;
       for (var entry in _submissionEntries) {
         if (entry.submissionId == event.submissionId) {
@@ -279,6 +279,10 @@ class SubmissionsListScreenState extends BaseScreenState {
     final textTheme = styleTheme.primaryTextTheme;
     bool first = true;
     for (final entry in statusesFull.entries) {
+      if (entry.key == SolutionStatus.HARD_DEADLINE_PASSED) {
+        // not real status
+        continue;
+      }
       Color textColor;
       if (first) {
         textColor = styleTheme.hintColor;
@@ -422,10 +426,13 @@ class SubmissionsListScreenState extends BaseScreenState {
           name += ' ${entry.sender.midName.trim()}';
         }
         String problemId = entry.problemId;
-        final solutionStatus = entry.status;
+        var solutionStatus = entry.status;
+        if (isHardDeadlinePassed(_course, _courseData, Submission(problemId: problemId, timestamp: entry.timestamp))) {
+          solutionStatus = SolutionStatus.HARD_DEADLINE_PASSED;
+        }
         final gradingStatus = entry.gradingStatus;
         String status = statusMessageText(solutionStatus, gradingStatus, '', narrow);
-        Color statusTextColor = statusMessageColor(context, entry.status);
+        Color statusTextColor = statusMessageColor(context, solutionStatus);
         if (const {SubmissionGradingStatus.assigned, SubmissionGradingStatus.queued}.contains(gradingStatus)) {
           statusTextColor = statusMessageColor(context, SolutionStatus.ANY_STATUS_OR_NULL);
         }

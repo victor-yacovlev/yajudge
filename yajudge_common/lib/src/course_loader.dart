@@ -205,6 +205,7 @@ class CourseLoader {
       codeStyles: _codeStyles,
       defaultLimits: _defaultLimits,
       sections: sectionsList,
+      scheduleProperties: SchedulePropertiesExtension.fromYaml(courseMap),
     );
     courseCache.lastChecked = DateTime.now();
     courseCache.loadError = null;
@@ -235,6 +236,7 @@ class CourseLoader {
     _section.name = title;
     _section.description = description;
     _section.lessons.addAll(lessonsList);
+    _section.scheduleProperties = SchedulePropertiesExtension.fromYaml(_sectionMap);
   }
 
   void _loadCourseLesson() {
@@ -277,7 +279,7 @@ class CourseLoader {
         String problemId;
         if (entry is String) {
           problemId = entry;
-          problemMetadata = ProblemMetadata(id: problemId, fullScoreMultiplier: 1.0);
+          problemMetadata = ProblemMetadata(id: problemId, fullScoreMultiplier: 1.0, softDeadlinePenaltyPerHour: 1);
         }
         else if (entry is YamlMap) {
           problemId = entry['id'];
@@ -285,12 +287,16 @@ class CourseLoader {
           bool skipCodeReview = entry['no_review'] is bool? entry['no_review'] : false;
           bool skipSolutionDefence = entry['no_defence'] is bool? entry['no_defence'] : false;
           double fullScore = entry['full_score'] is double? entry['full_score'] : 1.0;
+          final scheduleProperties = SchedulePropertiesExtension.fromYaml(entry);
+          int deadlinePenalty = entry['deadline_penalty'] is double? entry['deadline_penalty'] : 1;
           problemMetadata = ProblemMetadata(
             id: problemId,
             blocksNextProblems: blocksNext,
             fullScoreMultiplier: fullScore,
             skipCodeReview: skipCodeReview,
             skipSolutionDefence: skipSolutionDefence,
+            scheduleProperties: scheduleProperties,
+            softDeadlinePenaltyPerHour: deadlinePenalty,
           );
         } else {
           throw Exception('problems element in not a string or map');
@@ -307,6 +313,7 @@ class CourseLoader {
     _lesson.problems.addAll(problemsList);
     _lesson.problemsMetadata.addAll(problemsMetadataList);
     _lesson.readings.addAll(readingsList);
+    _lesson.scheduleProperties = SchedulePropertiesExtension.fromYaml(_lessonMap);
   }
 
   ProblemData _loadProblemData(String problemId) {

@@ -79,10 +79,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           }
 
           final problemStatus = await _getProblemStatus(
-              user: user,
-              course: course,
-              problemMetadata: problemMetadata,
-              problemBlocked: !lessonCompleted,
+            user: user,
+            course: course,
+            problemMetadata: problemMetadata,
+            problemBlocked: !lessonCompleted,
+            scheduleProperties: courseData.findScheduleByProblemId(problemMetadata.id),
           );
 
           if (problemStatus.completed) {
@@ -148,6 +149,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     required User user,
     required Course course,
     required ProblemMetadata problemMetadata,
+    required ScheduleProperties scheduleProperties,
     bool problemBlocked = false,
     bool withSubmissions = false,
   }) async {
@@ -184,8 +186,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     List<Submission> submissions = [];
     var problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
     var gradingStatus = SubmissionGradingStatus.processed;
+    final maxProblemScore = (problemMetadata.fullScoreMultiplier * 100).round();
     bool completed = false;
-    double scoreGot = 0.0;
+    int scoreGot = 0;
     Int64 submitted = Int64(0);
     for (List<dynamic> fields in rows) {
       int id = fields[0];
@@ -194,10 +197,12 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       gradingStatus = SubmissionGradingStatus.valueOf(fields[3])!;
       if (finalStatuses.contains(status)) {
         problemStatus = status;
-        submitted = timestamp;
+        if (submitted == 0) {
+          submitted = timestamp;
+        }
       }
       if (status == SolutionStatus.OK) {
-        scoreGot = problemMetadata.fullScoreMultiplier * 100;
+        scoreGot = maxProblemScore;
         completed = true;
       }
       if (withSubmissions) {
@@ -213,19 +218,38 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
     }
 
+    int deadlinePenalty = 0;
+    bool hardDeadlinePassed = false;
+
+    if (submitted > 0 && course.courseStart > 0) {
+      DateTime baseDateTime = DateTime.fromMillisecondsSinceEpoch(course.courseStart.toInt() * 1000);
+      DateTime submissionDateTime = DateTime.fromMillisecondsSinceEpoch(submitted.toInt() * 1000);
+      deadlinePenalty = scheduleProperties.softDeadlinePenalty(baseDateTime, submissionDateTime, problemMetadata.softDeadlinePenaltyPerHour);
+      hardDeadlinePassed = scheduleProperties.isHardDeadlinePassed(baseDateTime, submissionDateTime);
+      if (hardDeadlinePassed) {
+        deadlinePenalty = maxProblemScore;
+      }
+      scoreGot -= deadlinePenalty;
+    }
+
+    if (scoreGot < 0) {
+      scoreGot = 0;
+    }
+    
     final countLimit = await _submissionsCountLimit(user, course, problemMetadata.id);
     return ProblemStatus(
       problemId: problemMetadata.id,
       blockedByPrevious: problemBlocked,
       blocksNext: problemMetadata.blocksNextProblems,
       completed: completed,
-      scoreMax: problemMetadata.fullScoreMultiplier * 100,
+      scoreMax: maxProblemScore,
       scoreGot: scoreGot,
-      finalSolutionStatus: problemStatus,
+      finalSolutionStatus: hardDeadlinePassed? SolutionStatus.HARD_DEADLINE_PASSED : problemStatus,
       finalGradingStatus: gradingStatus,
       submitted: submitted,
       submissionCountLimit: countLimit,
       submissions: submissions,
+      deadlinePenaltyTotal: deadlinePenalty,
     );
   }
 
@@ -1050,6 +1074,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       course: request.course,
       problemMetadata: problemMetadata,
       withSubmissions: true,
+      scheduleProperties: courseData.findScheduleByProblemId(problemMetadata.id),
     );
     return futureProblemStatus;
   }
@@ -1122,6 +1147,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       course: course,
       problemMetadata: problemMetadata,
       withSubmissions: withSubmissions,
+      scheduleProperties: courseData.findScheduleByProblemId(problemId),
     );
 
     futureProblemStatus.then((ProblemStatus status) {

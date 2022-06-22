@@ -43,7 +43,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   ProblemStatus _problemStatus = ProblemStatus();
   List<File> _submissionFiles = [];
   grpc.ResponseStream<ProblemStatus>? _statusStream;
-  Timer? _statusCheckTimer;
 
   CourseProblemScreenOnePageState(this.screen) : super(title: '');
 
@@ -57,7 +56,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   @override
   void dispose() {
     _statusStream?.cancel();
-    _statusCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -95,15 +93,6 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         errorMessage = error;
         Future.delayed(Duration(seconds: 5), _loadProblemData);
       });
-    });
-  }
-
-  void _startLongPollSubscriptions() {
-    if (_statusCheckTimer != null) {
-      return;
-    }
-    _statusCheckTimer = Timer.periodic(Duration(seconds: 2), (timer) {
-      _checkStatus();
     });
   }
 
@@ -162,7 +151,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           _statusStream = null;
         });
         log.info('switching to fallback problem status checking using long poll');
-        _startLongPollSubscriptions();  // switch to polling mode
+        Timer(Duration(seconds: 2), _subscribeToNotifications);
       },
       onDone: () {
         log.info('problem status subscription done');
@@ -193,12 +182,20 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     PlatformsUtils.getInstance().saveLocalFile(file.name, file.data);
   }
 
+  TextStyle get mainTextStyle {
+    final textTheme = Theme.of(context).textTheme;
+    return textTheme.bodyText1!.merge(TextStyle(
+      fontSize: 16,
+      height: 1.5,
+    ));
+  }
+
   List<Widget> buildStatementItems(BuildContext context) {
-    List<Widget> contents = List.empty(growable: true);
-    TextTheme theme = Theme.of(context).textTheme;
+    List<Widget> contents = [];
+    final textTheme = Theme.of(context).textTheme;
 
     // TODO add common problem information
-    contents.add(Text('Общая информация', style: theme.headline6));
+    contents.add(Text('Общая информация', style: textTheme.headline6));
     String hardeness = '';
     int score = (_problemMetadata.fullScoreMultiplier * 100).toInt();
     if (_problemMetadata.fullScoreMultiplier == 1.0) {
@@ -231,11 +228,31 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     } else {
       actionsOnPassed = 'необходимо пройди код ревью и защитить решение';
     }
-    contents.add(Text('Сложность: $hardeness'));
-    contents.add(Text('Статус: $problemStatus'));
-    contents.add(Text('После прохождения тестов: $actionsOnPassed'));
+
+    contents.add(Text('Сложность: $hardeness', style: mainTextStyle));
+    contents.add(Text('Статус: $problemStatus', style: mainTextStyle));
+    final schedule = _courseData.findScheduleByProblemId(_problemMetadata.id);
+    final courseStart = DateTime.fromMillisecondsSinceEpoch(_course.courseStart.toInt() * 1000);
+    int penalty = _problemMetadata.softDeadlinePenaltyPerHour.round();
+    if (schedule.hasSoftDeadline() && courseStart.millisecondsSinceEpoch > 0 && penalty > 0) {
+      DateTime deadLine = DateTime.fromMillisecondsSinceEpoch(
+        courseStart.millisecondsSinceEpoch + schedule.softDeadline * 1000
+      );
+      String dateFormat = formatDateTime(deadLine.millisecondsSinceEpoch ~/ 1000, false);
+      String scoreFormat = formatScoreInRussian(penalty);
+      contents.add(Text('Мягкий дедлайн: $dateFormat, после этого штраф - минус $scoreFormat в час', style: mainTextStyle));
+    }
+    if (schedule.hasHardDeadline() && courseStart.millisecondsSinceEpoch > 0) {
+      DateTime deadLine = DateTime.fromMillisecondsSinceEpoch(
+          courseStart.millisecondsSinceEpoch + schedule.hardDeadline * 1000
+      );
+      String dateFormat = formatDateTime(deadLine.millisecondsSinceEpoch ~/ 1000, false);
+      contents.add(Text('Жесткий дедлайн: $dateFormat, после этого баллы за задачу не начисляются', style: mainTextStyle));
+    }
+    contents.add(Text('После прохождения тестов: $actionsOnPassed', style: mainTextStyle));
+
     contents.add(SizedBox(height: 20));
-    contents.add(Text('Постановка задачи', style: theme.headline6));
+    contents.add(Text('Постановка задачи', style: textTheme.headline6));
     contents.add(
       Container(
         decoration: BoxDecoration(
@@ -245,12 +262,12 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         ),
         margin: EdgeInsets.fromLTRB(5, 10, 5, 10),
         padding: EdgeInsets.fromLTRB(10, 10, 10, 10),
-        child: RichTextViewer(_problemData.statementText, _problemData.statementContentType, theme: theme)
+        child: RichTextViewer(_problemData.statementText, _problemData.statementContentType, theme: textTheme)
       )
     );
 
     contents.add(SizedBox(height: 20));
-    contents.add(Text('Ограничения ресурсов', style: theme.headline6));
+    contents.add(Text('Ограничения ресурсов', style: textTheme.headline6));
     final courseLimits = _courseData.defaultLimits;
     final problemLimits = _problemData.gradingOptions.limits;
     final limits = courseLimits.mergedWith(problemLimits);
@@ -264,7 +281,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       if (memoryTotalLimit > 0) {
         texts.add('$memoryTotalLimit Мб (всего)');
       }
-      contents.add(Text('Память: ${texts.join(', ')}'));
+      contents.add(Text('Память: ${texts.join(', ')}', style: mainTextStyle));
     }
     int cpuTimeLimit = limits.cpuTimeLimitSec.toInt();
     int timeLimit = limits.realTimeLimitSec.toInt();
@@ -276,19 +293,19 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       if (timeLimit > 0) {
         texts.add('$timeLimit сек. (астрономическое)');
       }
-      contents.add(Text('Время выполнения: ${texts.join(', ')}'));
+      contents.add(Text('Время выполнения: ${texts.join(', ')}', style: mainTextStyle));
     }
     int filesLimit = limits.fdCountLimit.toInt();
     if (filesLimit > 0) {
-      contents.add(Text('Максимальное число файловых дескрипторов: $filesLimit'));
+      contents.add(Text('Максимальное число файловых дескрипторов: $filesLimit', style: mainTextStyle));
     }
     int procsLimit = limits.procCountLimit.toInt();
     if (procsLimit > 0) {
-      contents.add(Text('Максимальное число процессов: $procsLimit'));
+      contents.add(Text('Максимальное число процессов: $procsLimit', style: mainTextStyle));
     }
     bool allowNetwork = limits.allowNetwork;
     String allowNetworkText = allowNetwork? 'разрешен' : 'запрещен';
-    contents.add(Text('Доступ в Интернет: $allowNetworkText'));
+    contents.add(Text('Доступ в Интернет: $allowNetworkText', style: mainTextStyle));
 
     bool hasStatementFiles = _problemData.statementFiles.files.isNotEmpty;
     bool hasStyleFiles = _courseData.codeStyles.isNotEmpty;
@@ -310,7 +327,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     hasStyleFiles = problemStyleFiles.isNotEmpty;
     if (hasStatementFiles || hasStyleFiles) {
       contents.add(SizedBox(height: 20));
-      contents.add(Text('Файлы задания', style: theme.headline6));
+      contents.add(Text('Файлы задания', style: textTheme.headline6));
       for (File file in _problemData.statementFiles.files + problemStyleFiles) {
         YCardLikeButton button = YCardLikeButton(file.name, () {
           _saveStatementFile(file);
@@ -360,7 +377,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         settings: RouteSettings(name: newUrl),
         pageBuilder: pageBuilder,
     );
-    Navigator.push(context, routeBuilder);
+    Navigator.push(context, routeBuilder).then((_) => _checkStatus());
   }
 
   List<Widget> buildNewSubmissionItems(BuildContext context) {
@@ -375,12 +392,12 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
     if (maxSubmissionsPerHour >= 0) {
       contents.add(Text('Ограничение на число посылок', style: theme.headline6!));
-      contents.add(Text('Количество посылок ограничено, тестируйте решение локально перед отправкой. '));
-      contents.add(Text('Вы можете отправлять не более $maxSubmissionsPerHour посылок в час. ' ));
+      contents.add(Text('Количество посылок ограничено, тестируйте решение локально перед отправкой. ', style: mainTextStyle,));
+      contents.add(Text('Вы можете отправлять не более $maxSubmissionsPerHour посылок в час. ', style: mainTextStyle));
 
       final countLimit = _problemStatus.submissionCountLimit;
       int submissionsLeft = submissionsCountLimitIsValid(countLimit)? countLimit.attemptsLeft : maxSubmissionsPerHour;
-      contents.add(Text('Осталось попыток: $submissionsLeft.'));
+      contents.add(Text('Осталось попыток: $submissionsLeft.', style: mainTextStyle));
       if (submissionsLeft == 0) {
         String nextReset = formatDateTime(countLimit.nextTimeReset.toInt());
         contents.add(Text('Вы сможете отправлять решения после $nextReset.'));
@@ -430,14 +447,18 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     final submissionsList = _problemStatus.submissions;
 
     if (submissionsList.isEmpty) {
-      contents.add(Text('Посылок пока нет'));
+      contents.add(Text('Посылок пока нет', style: mainTextStyle));
     }
     else {
       List<Submission> submissionsToShow = List.from(submissionsList);
       submissionsToShow.sort((a, b) => b.id.compareTo(a.id));
       for (Submission submission in submissionsToShow) {
         String firstLine = 'ID = ${submission.id}, ${formatDateTime(submission.timestamp.toInt())}';
-        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, submission.status, submission.gradingStatus);
+        var status = submission.status;
+        if (isHardDeadlinePassed(_course, _courseData, submission)) {
+          status = SolutionStatus.HARD_DEADLINE_PASSED;
+        }
+        Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, status, submission.gradingStatus);
         String secondLine = statusView.item1;
         IconData iconData = statusView.item2;
         Color iconColor = statusView.item3;
@@ -664,6 +685,11 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
       secondLine = 'Решение зачтено';
       iconColor = Theme.of(context).primaryColor;
       break;
+    case SolutionStatus.HARD_DEADLINE_PASSED:
+      iconData = Icons.local_fire_department;
+      secondLine = 'Решение после дедлайна';
+      iconColor = Theme.of(context).errorColor;
+      break;
     case SolutionStatus.ANY_STATUS_OR_NULL:
       break;
     case SolutionStatus.CHECK_FAILED:
@@ -672,8 +698,20 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
   return Tuple3(secondLine, iconData, iconColor);
 }
 
-String formatDateTime(int timestamp) {
-  DateFormat formatter = DateFormat('yyyy-MM-dd, HH:mm:ss');
+String formatDateTime(int timestamp, [bool withSeconds = false]) {
+  DateFormat formatter = DateFormat(withSeconds? 'yyyy-MM-dd, HH:mm:ss' : 'yyyy-MM-dd, HH:mm');
   DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
   return formatter.format(dateTime);
+}
+
+String formatScoreInRussian(int value) {
+  if (value % 10 == 1 && value != 11) {
+    return '$value балл';
+  }
+  else if ([2, 3, 4].contains(value % 10) && ![12, 13, 14].contains(value)) {
+    return '$value балла';
+  }
+  else {
+    return '$value баллов';
+  }
 }

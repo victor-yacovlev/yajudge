@@ -201,6 +201,8 @@ message ProblemMetadata {
   bool            blocks_next_problems    = 3;
   bool            skip_solution_defence   = 4;
   bool            skip_code_review        = 5;
+  ScheduleProperties schedule_properties  = 10;
+  int32           soft_deadline_penalty_per_hour = 11; // default is 1
 }
 
 
@@ -219,6 +221,7 @@ enum SolutionStatus {
   TIME_LIMIT          = 15;
   VALGRIND_ERRORS     = 16;
   OK                  = 100;
+  HARD_DEADLINE_PASSED= 300;  // UI usage only, should not appear in database
 }
 
 enum SubmissionGradingStatus {
@@ -232,12 +235,10 @@ message ProblemStatus {
   bool                blocks_next = 2;
   bool                blocked_by_previous = 3;
   bool                completed = 4;
-  double              score_got = 5;
-  double              score_max = 6;
-  int64               submitted = 7;
-  int64               soft_deadline = 8;
-  int64               hard_deadline = 9;
-  double              deadline_penalty = 10;
+  int32               score_got = 5;
+  int32               score_max = 6;
+  int64               submitted = 7;      // real time
+  int32               deadline_penalty_total = 10;
   SolutionStatus      final_solution_status = 11;
   SubmissionsCountLimit submission_count_limit = 12;
   repeated Submission submissions = 13;
@@ -319,6 +320,14 @@ message Solution {
   repeated Submission  history = 3;
 }
 
+message ScheduleProperties {
+  // <=0 for inherit from parent, relative to parent (in seconds) otherwise
+  int32       open_date     = 1;
+  // All deadline values: -1 for disable, 0 to inherit from parent, relative to open_date (in seconds) otherwise
+  int32       soft_deadline = 2;
+  int32       hard_deadline = 3;
+}
+
 message Lesson {
   string                    id                = 1;
   string                    name              = 3;
@@ -326,9 +335,7 @@ message Lesson {
   repeated TextReading      readings          = 5;
   repeated ProblemData      problems          = 6;
   repeated ProblemMetadata  problems_metadata = 7;
-  int64                     open_date         = 8;    // 0 for inherit from outer section
-  int64                     soft_deadline     = 9;    // 0 for inherit from outer section
-  int64                     hard_deadline     = 10;   // 0 for inherit from outer section
+  ScheduleProperties        schedule_properties = 10;
 }
 
 message Section {
@@ -336,9 +343,7 @@ message Section {
   string                name          = 2;
   string                description   = 3;
   repeated Lesson       lessons       = 4;
-  int64                 open_date     = 5;  // all dates are relative to course run start datetime
-  int64                 soft_deadline = 6;
-  int64                 hard_deadline = 7;
+  ScheduleProperties    schedule_properties = 10;
 }
 
 // Courses are stored in filesystem directories but not in database.
@@ -351,6 +356,7 @@ message CourseData {
   int32                   max_submission_file_size= 5;
   repeated CodeStyle      code_styles             = 6;
   GradingLimits           default_limits          = 7;
+  ScheduleProperties      schedule_properties     = 10;
 }
 
 message Course {
