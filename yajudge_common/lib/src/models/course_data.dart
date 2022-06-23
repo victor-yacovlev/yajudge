@@ -1,5 +1,4 @@
 import '../../yajudge_common.dart';
-import 'schedule_properties.dart';
 
 extension CourseDataExtension on CourseData {
 
@@ -115,22 +114,25 @@ extension CourseDataExtension on CourseData {
     return ProblemMetadata();
   }
 
-  ScheduleProperties findScheduleByProblemId(String problemId) {
-    ScheduleProperties schedule = scheduleProperties;
+  Lesson findEnclosingLessonForProblem(String problemId) {
     for (final section in sections) {
       for (final lesson in section.lessons) {
         for (final problem in lesson.problemsMetadata) {
           if (problem.id == problemId) {
-            return schedule
-                .mergeWith(section.scheduleProperties)
-                .mergeWith(lesson.scheduleProperties)
-                .mergeWith(problem.scheduleProperties)
-            ;
+            return lesson;
           }
         }
       }
     }
-    return ScheduleProperties();
+    return Lesson();
+  }
+
+  List<Lesson> allLessons() {
+    List<Lesson> result = [];
+    for (final section in sections) {
+      result.addAll(section.lessons);
+    }
+    return result;
   }
 
 }

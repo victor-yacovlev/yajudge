@@ -155,3 +155,14 @@ create table if not exists review_line_comments
     file_name       varchar(80) not null
 );
 
+create table lesson_schedules
+(
+    id                   serial
+        constraint lesson_schedules_pk
+            primary key,
+    courses_id           integer           not null,
+    datetime             timestamp         not null,
+    repeat_count         integer default 1 not null,
+    group_pattern        varchar(50),
+    repeat_interval_days integer default 0 not null
+);

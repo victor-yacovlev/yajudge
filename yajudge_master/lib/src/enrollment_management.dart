@@ -253,7 +253,7 @@ class EnrollmentManagementService extends EnrollmentsManagerServiceBase {
   }
 
   @override
-  Future<UserEnrollmentsResponse> getUserEnrollments(ServiceCall call, User request) async {
+  Future<UserEnrollmentsResponse> getUserEnrollments(ServiceCall? call, User request) async {
     List<Enrollment> result = [];
 
     // Group-wide enrollments

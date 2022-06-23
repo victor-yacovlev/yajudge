@@ -279,10 +279,6 @@ class SubmissionsListScreenState extends BaseScreenState {
     final textTheme = styleTheme.primaryTextTheme;
     bool first = true;
     for (final entry in statusesFull.entries) {
-      if (entry.key == SolutionStatus.HARD_DEADLINE_PASSED) {
-        // not real status
-        continue;
-      }
       Color textColor;
       if (first) {
         textColor = styleTheme.hintColor;
@@ -427,7 +423,7 @@ class SubmissionsListScreenState extends BaseScreenState {
         }
         String problemId = entry.problemId;
         var solutionStatus = entry.status;
-        if (isHardDeadlinePassed(_course, _courseData, Submission(problemId: problemId, timestamp: entry.timestamp))) {
+        if (entry.hardDeadlinePassed) {
           solutionStatus = SolutionStatus.HARD_DEADLINE_PASSED;
         }
         final gradingStatus = entry.gradingStatus;

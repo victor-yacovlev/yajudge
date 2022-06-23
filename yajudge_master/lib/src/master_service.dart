@@ -28,7 +28,7 @@ const studentsMethods = [
   'SubscribeToProblemStatusNotifications',
   'SubscribeToCourseStatusNotifications',
   'SubscribeToSubmissionResultNotifications',
-  'GetReviewHistory',
+  'GetReviewHistory', 'GetLessonSchedules',
 ];
 
 const maxErrorsPerMinute = 3;

@@ -173,28 +173,11 @@ class CourseLoader {
       YamlMap propsMap = loadYaml(securityContextFile.readAsStringSync());
       _defaultSecurityContext = securityContextFromYaml(propsMap);
     }
-    bool hasSections = false;
-    if (courseMap['sections'] != null) {
-      hasSections = true;
-    }
-    List<Section> sectionsList = [];
-    if (hasSections) {
-      YamlList sections = courseMap['sections'];
-      for (String entry in sections) {
-        _section = Section(id: entry);
-        final sectionFile = io.File('$rootPath/$entry/section.yaml');
-        updateCourseLastModified(sectionFile);
-        _sectionMap = loadYaml(sectionFile.readAsStringSync());
-        _loadCourseSection();
-        sectionsList.add(_section);
-      }
-    } else {
-      _section = Section().deepCopy();
-      _sectionMap = courseMap;
-      _loadCourseSection();
-      _section.name = '';
-      _section.description = '';
-      sectionsList.add(_section);
+
+    final defaultDeadlines = Deadlines(softPenalty: 1);
+    var courseDeadlines = defaultDeadlines;
+    if (courseMap.containsKey('deadlines')) {
+      courseDeadlines = DeadlinesExtension.fromYaml(courseMap['deadlines']).inherit(defaultDeadlines);
     }
     courseCache.data = CourseData(
       id: courseId,
@@ -203,9 +186,32 @@ class CourseLoader {
       maxSubmissionsPerHour: _maxSubmissionsPerHour,
       codeStyles: _codeStyles,
       defaultLimits: _defaultLimits,
-      sections: sectionsList,
-      scheduleProperties: SchedulePropertiesExtension.fromYaml(courseMap),
-    );
+      deadlines: courseDeadlines,
+    ).deepCopy();
+
+    bool hasSections = false;
+    if (courseMap['sections'] != null) {
+      hasSections = true;
+    }
+    if (hasSections) {
+      YamlList sections = courseMap['sections'];
+      for (String entry in sections) {
+        _section = Section(id: entry);
+        final sectionFile = io.File('$rootPath/$entry/section.yaml');
+        updateCourseLastModified(sectionFile);
+        _sectionMap = loadYaml(sectionFile.readAsStringSync());
+        _loadCourseSection();
+        courseCache.data!.sections.add(_section);
+      }
+    } else {
+      _section = Section().deepCopy();
+      _sectionMap = courseMap;
+      _loadCourseSection();
+      _section.name = '';
+      _section.description = '';
+      courseCache.data!.sections.add(_section);
+    }
+
     courseCache.lastChecked = DateTime.now();
     courseCache.loadError = null;
   }
@@ -213,7 +219,15 @@ class CourseLoader {
   void _loadCourseSection() {
     String title = _sectionMap['title'] is String? _sectionMap['title'] : '';
     String description = _sectionMap['description'] is String? _sectionMap['description'] : '';
-    List<Lesson> lessonsList = [];
+    var sectionDeadlines = courseCache.data!.deadlines;
+    if (_sectionMap.containsKey(['deadlines'])) {
+      sectionDeadlines = DeadlinesExtension.fromYaml(_sectionMap['deadlines'])
+          .inherit(courseCache.data!.deadlines);
+    }
+    _section = _section.deepCopy();
+    _section.name = title;
+    _section.description = description;
+    _section.deadlines = sectionDeadlines;
     YamlList lessons = _sectionMap['lessons'];
     for (String entry in lessons) {
       final lessonFile = io.File('$rootPath/${_section.id}/$entry/lesson.yaml');
@@ -229,27 +243,29 @@ class CourseLoader {
       }
       _lesson = Lesson(id: entry);
       _loadCourseLesson();
-      lessonsList.add(_lesson);
+      _section.lessons.add(_lesson);
     }
-    _section = _section.deepCopy();
-    _section.name = title;
-    _section.description = description;
-    _section.lessons.addAll(lessonsList);
-    _section.scheduleProperties = SchedulePropertiesExtension.fromYaml(_sectionMap);
   }
 
   void _loadCourseLesson() {
     final title = _lessonMap['title'] is String? _lessonMap['title'] : '';
     final description = _lessonMap['description'] is String? _lessonMap['description'] : '';
-    List<TextReading> readingsList = [];
-    List<ProblemData> problemsList = [];
-    List<ProblemMetadata> problemsMetadataList = [];
+    _lesson = _lesson.deepCopy();
+    _lesson.name = title;
+    _lesson.description = description;
+    var lessonDeadlines = _section.deadlines;
+    if (_lessonMap.containsKey('deadlines')) {
+      lessonDeadlines = DeadlinesExtension.fromYaml(_lessonMap['deadlines'])
+          .inherit(_section.deadlines);
+    }
+    _lesson.deadlines = lessonDeadlines;
+
     if (_lessonMap['readings'] is YamlList) {
       YamlList readings = _lessonMap['readings'];
       for (String entry in readings) {
         _textReading = TextReading(id: entry);
         _loadTextReading();
-        readingsList.add(_textReading);
+        _lesson.readings.add(_textReading);
       }
     }
     else if (_lessonMap['readings'] is String) {
@@ -258,7 +274,7 @@ class CourseLoader {
         if (entry.isNotEmpty) {
           _textReading = TextReading(id: entry);
           _loadTextReading();
-          readingsList.add(_textReading);
+          _lesson.readings.add(_textReading);
         }
       }
     }
@@ -267,7 +283,7 @@ class CourseLoader {
       if (readmeMd.existsSync()) {
         _textReading = TextReading(id: _lesson.id);
         _loadTextReading(_lesson.id, readmeMd.path);
-        readingsList.add(_textReading);
+        _lesson.readings.add(_textReading);
       }
     }
     if (_lessonMap['problems'] is YamlList) {
@@ -276,9 +292,10 @@ class CourseLoader {
         ProblemData problemData;
         ProblemMetadata problemMetadata;
         String problemId;
+        var problemDeadlines = Deadlines();
         if (entry is String) {
           problemId = entry;
-          problemMetadata = ProblemMetadata(id: problemId, fullScoreMultiplier: 1.0, softDeadlinePenaltyPerHour: 1);
+          problemMetadata = ProblemMetadata(id: problemId, fullScoreMultiplier: 1.0).deepCopy();
         }
         else if (entry is YamlMap) {
           problemId = entry['id'];
@@ -286,33 +303,24 @@ class CourseLoader {
           bool skipCodeReview = entry['no_review'] is bool? entry['no_review'] : false;
           bool skipSolutionDefence = entry['no_defence'] is bool? entry['no_defence'] : false;
           double fullScore = entry['full_score'] is double? entry['full_score'] : 1.0;
-          final scheduleProperties = SchedulePropertiesExtension.fromYaml(entry);
-          int deadlinePenalty = entry['deadline_penalty'] is double? entry['deadline_penalty'] : 1;
+          problemDeadlines = DeadlinesExtension.fromYaml(entry);
           problemMetadata = ProblemMetadata(
             id: problemId,
             blocksNextProblems: blocksNext,
             fullScoreMultiplier: fullScore,
             skipCodeReview: skipCodeReview,
             skipSolutionDefence: skipSolutionDefence,
-            scheduleProperties: scheduleProperties,
-            softDeadlinePenaltyPerHour: deadlinePenalty,
-          );
+          ).deepCopy();
         } else {
           throw Exception('problems element in not a string or map');
         }
+        problemMetadata.deadlines = problemDeadlines.inherit(_lesson.deadlines);
         problemsCache[problemId] = ProblemDataCacheItem();
         problemData = _loadProblemData(problemId);
-        problemsList.add(problemData);
-        problemsMetadataList.add(problemMetadata);
+        _lesson.problems.add(problemData);
+        _lesson.problemsMetadata.add(problemMetadata);
       }
     }
-    _lesson = _lesson.deepCopy();
-    _lesson.name = title;
-    _lesson.description = description;
-    _lesson.problems.addAll(problemsList);
-    _lesson.problemsMetadata.addAll(problemsMetadataList);
-    _lesson.readings.addAll(readingsList);
-    _lesson.scheduleProperties = SchedulePropertiesExtension.fromYaml(_lessonMap);
   }
 
   ProblemData _loadProblemData(String problemId) {

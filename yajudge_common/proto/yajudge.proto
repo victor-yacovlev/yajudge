@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-option go_package = "./;master_service";
-
 package service;
 
 enum Role {
@@ -201,8 +199,7 @@ message ProblemMetadata {
   bool            blocks_next_problems    = 3;
   bool            skip_solution_defence   = 4;
   bool            skip_code_review        = 5;
-  ScheduleProperties schedule_properties  = 10;
-  int32           soft_deadline_penalty_per_hour = 11; // default is 1
+  Deadlines       deadlines               = 10;
 }
 
 
@@ -221,7 +218,9 @@ enum SolutionStatus {
   TIME_LIMIT          = 15;
   VALGRIND_ERRORS     = 16;
   OK                  = 100;
-  HARD_DEADLINE_PASSED= 300;  // UI usage only, should not appear in database
+
+  // Values from 300 are possible at UI usage only and should not appear in database!
+  HARD_DEADLINE_PASSED= 300;
 }
 
 enum SubmissionGradingStatus {
@@ -320,12 +319,23 @@ message Solution {
   repeated Submission  history = 3;
 }
 
-message ScheduleProperties {
-  // <=0 for inherit from parent, relative to parent (in seconds) otherwise
-  int32       open_date     = 1;
-  // All deadline values: -1 for disable, 0 to inherit from parent, relative to open_date (in seconds) otherwise
-  int32       soft_deadline = 2;
-  int32       hard_deadline = 3;
+message Deadlines {
+  // all durations are in seconds
+  int32                soft_deadline = 1;
+  int32                hard_deadline = 2;
+  int32                soft_penalty = 3;
+}
+
+message LessonSchedule {
+  int64   datetime = 1; // seconds from epoch (UTC)
+
+  // the fields below are in use for database storage but should be expanded into plain schedule entries
+  int32   repeat_count = 10;
+  int32   repeat_interval = 11; // in seconds
+}
+
+message LessonScheduleSet {
+  map<string, int64> schedules = 1; // lesson full id (delimited by '/' and normalized) ---> seconds from epoch (UTC)
 }
 
 message Lesson {
@@ -335,7 +345,7 @@ message Lesson {
   repeated TextReading      readings          = 5;
   repeated ProblemData      problems          = 6;
   repeated ProblemMetadata  problems_metadata = 7;
-  ScheduleProperties        schedule_properties = 10;
+  Deadlines                 deadlines = 10;
 }
 
 message Section {
@@ -343,7 +353,7 @@ message Section {
   string                name          = 2;
   string                description   = 3;
   repeated Lesson       lessons       = 4;
-  ScheduleProperties    schedule_properties = 10;
+  Deadlines             deadlines = 10;
 }
 
 // Courses are stored in filesystem directories but not in database.
@@ -356,7 +366,7 @@ message CourseData {
   int32                   max_submission_file_size= 5;
   repeated CodeStyle      code_styles             = 6;
   GradingLimits           default_limits          = 7;
-  ScheduleProperties      schedule_properties     = 10;
+  Deadlines               deadlines     = 10;
 }
 
 message Course {
@@ -472,12 +482,18 @@ message CourseProgressResponse {
   repeated ProblemData        problems = 2;
 }
 
+message LessonScheduleRequest {
+  Course      course = 1;
+  User        user = 2;
+}
+
 service CourseManagement {
   rpc CreateOrUpdateCourse(Course) returns (Course) {}
   rpc CloneCourse(Course) returns (Course) {}
   rpc DeleteCourse(Course) returns (Nothing) {}
   rpc GetCourses(CoursesFilter) returns (CoursesList) {}
   rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
+  rpc GetLessonSchedules(LessonScheduleRequest) returns (LessonScheduleSet);
   rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
 
   rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse) {}
@@ -589,8 +605,8 @@ message SubmissionListQuery {
   string            problem_id_filter = 4;
   SolutionStatus    status_filter = 5;
   bool              show_mine_submissions = 6;
-  int32             limit = 7;
-  int32             offset = 8;
+  int32             limit = 20;
+  int32             offset = 21;
 }
 
 message SubmissionListEntry {
@@ -599,6 +615,7 @@ message SubmissionListEntry {
   User              sender = 3;
   int64             timestamp = 4;
   string            problem_id = 5;
+  bool              hard_deadline_passed = 6;
   SubmissionGradingStatus grading_status = 10;
 }
 

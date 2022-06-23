@@ -4,6 +4,7 @@ import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:protobuf/protobuf.dart';
+import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import 'graders_manager.dart';
@@ -49,6 +50,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future<CourseStatus> _getCourseStatus(User user, Course course) async {
     final courseDataId = course.dataId;
     final courseData = parent.courseManagementService.getCourseData(courseDataId);
+    final scheduleRequest = LessonScheduleRequest(user: user, course: course);
+    final scheduleSet = await parent.courseManagementService.getLessonSchedules(null, scheduleRequest);
     double courseScoreGot = 0.0;
     double courseScoreMax = 0.0;
     bool courseCompleted = true;
@@ -72,18 +75,19 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         lessonBlocked = !lessonCompleted;
 
         List<ProblemStatus> problemStatuses = [];
+        final lessonSchedule = scheduleSet.findByLesson(lesson.id);
+
         for (final problemMetadata in lesson.problemsMetadata) {
           problemsTotal ++;
           if (problemMetadata.blocksNextProblems) {
             problemsRequired ++;
           }
-
           final problemStatus = await _getProblemStatus(
             user: user,
             course: course,
             problemMetadata: problemMetadata,
             problemBlocked: !lessonCompleted,
-            scheduleProperties: courseData.findScheduleByProblemId(problemMetadata.id),
+            lessonSchedule: lessonSchedule,
           );
 
           if (problemStatus.completed) {
@@ -149,7 +153,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     required User user,
     required Course course,
     required ProblemMetadata problemMetadata,
-    required ScheduleProperties scheduleProperties,
+    required LessonSchedule lessonSchedule,
     bool problemBlocked = false,
     bool withSubmissions = false,
   }) async {
@@ -222,10 +226,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     bool hardDeadlinePassed = false;
 
     if (submitted > 0 && course.courseStart > 0) {
-      DateTime baseDateTime = DateTime.fromMillisecondsSinceEpoch(course.courseStart.toInt() * 1000);
-      DateTime submissionDateTime = DateTime.fromMillisecondsSinceEpoch(submitted.toInt() * 1000);
-      deadlinePenalty = scheduleProperties.softDeadlinePenalty(baseDateTime, submissionDateTime, problemMetadata.softDeadlinePenaltyPerHour);
-      hardDeadlinePassed = scheduleProperties.isHardDeadlinePassed(baseDateTime, submissionDateTime);
+      deadlinePenalty = problemMetadata.deadlines.softDeadlinePenalty(lessonSchedule, submitted.toInt());
+      hardDeadlinePassed = problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submitted.toInt());
       if (hardDeadlinePassed) {
         deadlinePenalty = maxProblemScore;
       }
@@ -308,7 +310,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   @override
   Future<SubmissionList> getSubmissions(ServiceCall call, SubmissionFilter request) async {
     await _checkAccessToCourse(call, request.user, request.course);
-    return _getSubmissions(request.user, request.course, request.problemId, request.status);
+    final submissions = await _getSubmissions(request.user, request.course, request.problemId, request.status);
+    return SubmissionList(submissions: submissions);
   }
 
   Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
@@ -369,7 +372,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         queryFilter += ' and courses_id=@course_id ';
         queryValues['course_id'] = request.courseId.toInt();
       }
-      if (request.statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
+      if (!{SolutionStatus.ANY_STATUS_OR_NULL, SolutionStatus.HARD_DEADLINE_PASSED}.contains(request.statusFilter)) {
         queryFilter += ' and status=@status ';
         queryValues['status'] = request.statusFilter.value;
       }
@@ -428,10 +431,42 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         )
       ));
     }
+
+    // check for hard deadlines passed
+    Map<int, LessonScheduleSet> scheduleSets = {};
+    final course = await parent.courseManagementService.getCourseInfo(request.courseId);
+    final courseData = parent.courseManagementService.getCourseData(course.dataId);
+    for (final entry in result) {
+      final submissionSender = entry.sender;
+      final schedulesKey = submissionSender.id.toInt();
+      LessonScheduleSet scheduleSet;
+      if (!scheduleSets.containsKey(schedulesKey)) {
+        final scheduleRequest = LessonScheduleRequest(course: course, user: submissionSender);
+        scheduleSet = await parent.courseManagementService.getLessonSchedules(call, scheduleRequest);
+        scheduleSets[schedulesKey] = scheduleSet;
+      }
+      else {
+        scheduleSet = scheduleSets[schedulesKey]!;
+      }
+      final lesson = courseData.findEnclosingLessonForProblem(entry.problemId);
+      final lessonSchedule = scheduleSet.findByLesson(lesson.id);
+      final problemMetadata = courseData.findProblemMetadataById(entry.problemId);
+      final deadlines = problemMetadata.deadlines;
+      if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
+        bool deadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, entry.timestamp.toInt());
+        entry.hardDeadlinePassed = deadlinePassed;
+      }
+    }
+    if (request.statusFilter == SolutionStatus.HARD_DEADLINE_PASSED) {
+      result.removeWhere((element) => element.hardDeadlinePassed == false);
+    }
+    else if (request.statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
+      result.removeWhere((element) => element.hardDeadlinePassed == true);
+    }
     return SubmissionListResponse(entries: result);
   }
 
-  Future<SubmissionList> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
+  Future<List<Submission>> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
     String query =
       '''
     select submissions.id, users_id, problem_id, timestamp, status,
@@ -441,7 +476,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     where users_id=users.id 
       ''';
     List<String> conditions = List.empty(growable: true);
-    Map<String,dynamic> queryArguments = Map();
+    Map<String,dynamic> queryArguments = {};
     conditions.add('courses_id=@courses_id');
     queryArguments['courses_id'] = course.id.toInt();
     if (user.id != 0) {
@@ -456,7 +491,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       conditions.add('status=@status');
       queryArguments['status'] = status.value;
     }
-    query += ' and ' + conditions.join(' and ');
+    query += ' and ${conditions.join(' and ')}';
     List<dynamic> rows = await connection.query(query, substitutionValues: queryArguments);
     List<Submission> result = [];
     for (List<dynamic> fields in rows) {
@@ -486,7 +521,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       );
       result.add(submission);
     }
-    return SubmissionList(submissions: result);
+    return result;
   }
 
   @override
@@ -741,6 +776,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     request = request.deepCopy();
     request.gradingStatus = SubmissionGradingStatus.processed;
+    bool hardDeadlinePassed = false;
     if (request.status == SolutionStatus.OK) {
       final course = await parent.courseManagementService.getCourseInfo(request.course.id);
       final problemId = request.problemId;
@@ -765,6 +801,17 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
             request.status = oldStatus;
           }
         }
+      }
+      final courseData = parent.courseManagementService.getCourseData(course.dataId);
+      final lesson = courseData.findEnclosingLessonForProblem(problemId);
+      final sender = await parent.userManagementService.getUserById(request.user.id);
+      final scheduleSet = await parent.courseManagementService.getLessonSchedules(
+          call, LessonScheduleRequest(course: course, user: sender)
+      );
+      final lessonSchedule = scheduleSet.findByLesson(lesson.id);
+      final deadlines = problemMetadata.deadlines;
+      if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
+        hardDeadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, request.timestamp.toInt());
       }
     }
     await connection.transaction((connection) async {
@@ -852,7 +899,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
     request.testResults.clear();
     request.testResults.addAll(testResults);
-    _notifySubmissionResultChanged(request);
+    _notifySubmissionResultChanged(request, hardDeadlinePassed);
     return request;
   }
 
@@ -902,7 +949,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
   Future<List<Submission>> getUnfinishedSubmissionToGrade(String graderName) async {
     List<dynamic> rows = await connection.query(
-        '''
+      '''
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
       where grading_status=@grading_status and grader_name=@grader_name and courses_id=courses.id
@@ -1069,17 +1116,21 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   Future<ProblemStatus> checkProblemStatus(ServiceCall call, ProblemStatusRequest request) async {
     final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
     final problemMetadata = courseData.findProblemMetadataById(request.problemId);
+    final lesson = courseData.findEnclosingLessonForProblem(request.problemId);
+    final scheduleRequest = LessonScheduleRequest(course: request.course, user: request.user);
+    final scheduleSet = await parent.courseManagementService.getLessonSchedules(call, scheduleRequest);
+    final lessonSchedule = scheduleSet.findByLesson(lesson.id);
     final futureProblemStatus = _getProblemStatus(
       user: request.user,
       course: request.course,
       problemMetadata: problemMetadata,
       withSubmissions: true,
-      scheduleProperties: courseData.findScheduleByProblemId(problemMetadata.id),
+      lessonSchedule: lessonSchedule,
     );
     return futureProblemStatus;
   }
 
-  void _notifySubmissionResultChanged(Submission submission) {
+  void _notifySubmissionResultChanged(Submission submission, [bool hardDeadlinePassed = false]) {
 
     // controllers related to problem views
     final key = '${submission.id}';
@@ -1103,13 +1154,14 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
     for (final controller in listViews) {
       final listEntry = submission.asSubmissionListEntry();
+      listEntry.hardDeadlinePassed = hardDeadlinePassed;
       controller.add(listEntry);
     }
 
   }
 
 
-  void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) {
+  void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) async {
     final courseKey = '${user.id}/${course.id}';
     final problemKey = '${user.id}/${course.id}/$problemId';
 
@@ -1141,20 +1193,22 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
     final courseData = parent.courseManagementService.getCourseData(course.dataId);
     final problemMetadata = courseData.findProblemMetadataById(problemId);
-
-    final futureProblemStatus = _getProblemStatus(
+    final lesson = courseData.findEnclosingLessonForProblem(problemId);
+    final scheduleRequest = LessonScheduleRequest(course: course, user: user);
+    final scheduleSet = await parent.courseManagementService.getLessonSchedules(null, scheduleRequest);
+    final lessonSchedule = scheduleSet.findByLesson(lesson.id);
+    final problemStatus = await _getProblemStatus(
       user: user,
       course: course,
       problemMetadata: problemMetadata,
       withSubmissions: withSubmissions,
-      scheduleProperties: courseData.findScheduleByProblemId(problemId),
+      lessonSchedule: lessonSchedule,
     );
 
-    futureProblemStatus.then((ProblemStatus status) {
-      for (final controller in problemControllers) {
-        controller.sink.add(status);
-      }
-    });
+    for (final controller in problemControllers) {
+      controller.sink.add(problemStatus);
+    }
+
   }
 
 

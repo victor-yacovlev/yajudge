@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
@@ -366,6 +368,66 @@ class CourseManagementService extends CourseManagementServiceBase {
       entries.add(entry);
     }
     return CourseProgressResponse(entries: entries, problems: problems);
+  }
+
+  @override
+  Future<LessonScheduleSet> getLessonSchedules(ServiceCall? call, LessonScheduleRequest request) async {
+    final userEnrollments = await parent.enrollmentManagementService.getUserEnrollments(call, request.user);
+    final courseData = getCourseData(request.course.dataId);
+    final allLessons = courseData.allLessons();
+    String groupPattern = '';
+    for (final enrollment in userEnrollments.enrollments) {
+      if (enrollment.course.id == request.course.id) {
+        groupPattern = enrollment.groupPattern;
+        break;
+      }
+    }
+    final queryValues = <String,dynamic>{'course_id': request.course.id.toInt()};
+    String query = '''
+    select datetime, repeat_count, repeat_interval_days
+    from lesson_schedules
+    where courses_id=@course_id
+    ''';
+    if (groupPattern.isNotEmpty) {
+      query += ' and group_pattern=@group_pattern';
+      queryValues['group_pattern'] = groupPattern;
+    }
+    var rows = [];
+    try {
+      rows = await connection.query(query, substitutionValues: queryValues);
+    }
+    catch (e) {
+      log.severe('query error: $e');
+    }
+    final entries = <LessonSchedule>[];
+    for (final row in rows) {
+      DateTime dateTime = row[0];
+      int repeatCount = row[1];
+      int repeatIntervalDays = row[2];
+      entries.add(LessonSchedule(
+        datetime: Int64(dateTime.toUtc().millisecondsSinceEpoch ~/ 1000),
+        repeatCount: repeatCount,
+        repeatInterval: Duration(days: repeatIntervalDays).inSeconds,
+      ));
+    }
+    final expandedTimestamps = <int>[];
+    for (final entry in entries) {
+      int base = entry.datetime.toInt();
+      int interval = entry.repeatInterval;
+      for (int i=0; i<entry.repeatCount; i++) {
+        int timestamp = base + i*interval;
+        expandedTimestamps.add(timestamp);
+      }
+    }
+    expandedTimestamps.sort();
+    final result = LessonScheduleSet().deepCopy();
+    int entriesCount = math.min(expandedTimestamps.length, allLessons.length);
+    for (int i=0; i<entriesCount; i++) {
+      final lesson = allLessons[i];
+      final datetime = Int64(expandedTimestamps[i]);
+      result.schedules[lesson.id] = datetime;
+    }
+    return result;
   }
 
 }

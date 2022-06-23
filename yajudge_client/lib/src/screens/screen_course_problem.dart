@@ -39,6 +39,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   CourseData _courseData = CourseData();
   ProblemData _problemData = ProblemData();
   ProblemMetadata _problemMetadata = ProblemMetadata();
+  LessonScheduleSet _scheduleSet = LessonScheduleSet();
 
   ProblemStatus _problemStatus = ProblemStatus();
   List<File> _submissionFiles = [];
@@ -57,6 +58,18 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   void dispose() {
     _statusStream?.cancel();
     super.dispose();
+  }
+
+  void _loadSchedule() {
+    final service = ConnectionController.instance!.coursesService;
+    final request = LessonScheduleRequest(course: _course, user: screen.loggedUser);
+    service.getLessonSchedules(request).then((response) {
+      if (mounted) {
+        setState(() {
+          _scheduleSet = response;
+        });
+      }
+    });
   }
 
   void _loadProblemData() {
@@ -78,6 +91,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
         });
         _subscribeToNotifications();
         _checkStatus();
+        _loadSchedule();
       })
       .onError((error, _) {
         setState(() {
@@ -231,22 +245,19 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
     contents.add(Text('Сложность: $hardeness', style: mainTextStyle));
     contents.add(Text('Статус: $problemStatus', style: mainTextStyle));
-    final schedule = _courseData.findScheduleByProblemId(_problemMetadata.id);
-    final courseStart = DateTime.fromMillisecondsSinceEpoch(_course.courseStart.toInt() * 1000);
-    int penalty = _problemMetadata.softDeadlinePenaltyPerHour.round();
-    if (schedule.hasSoftDeadline() && courseStart.millisecondsSinceEpoch > 0 && penalty > 0) {
-      DateTime deadLine = DateTime.fromMillisecondsSinceEpoch(
-        courseStart.millisecondsSinceEpoch + schedule.softDeadline * 1000
-      );
-      String dateFormat = formatDateTime(deadLine.millisecondsSinceEpoch ~/ 1000, false);
+    final lesson = _courseData.findEnclosingLessonForProblem(_problemMetadata.id);
+    final lessonSchedule = _scheduleSet.findByLesson(lesson.id);
+    final deadlines = _problemMetadata.deadlines;
+    int penalty = deadlines.softPenalty;
+    if (lessonSchedule.datetime > 0 && deadlines.softDeadline > 0 && penalty > 0) {
+      int deadline = lessonSchedule.datetime.toInt() + deadlines.softDeadline;
+      String dateFormat = formatDateTime(deadline);
       String scoreFormat = formatScoreInRussian(penalty);
       contents.add(Text('Мягкий дедлайн: $dateFormat, после этого штраф - минус $scoreFormat в час', style: mainTextStyle));
     }
-    if (schedule.hasHardDeadline() && courseStart.millisecondsSinceEpoch > 0) {
-      DateTime deadLine = DateTime.fromMillisecondsSinceEpoch(
-          courseStart.millisecondsSinceEpoch + schedule.hardDeadline * 1000
-      );
-      String dateFormat = formatDateTime(deadLine.millisecondsSinceEpoch ~/ 1000, false);
+    if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
+      int deadline = lessonSchedule.datetime.toInt() + deadlines.hardDeadline;
+      String dateFormat = formatDateTime(deadline);
       contents.add(Text('Жесткий дедлайн: $dateFormat, после этого баллы за задачу не начисляются', style: mainTextStyle));
     }
     contents.add(Text('После прохождения тестов: $actionsOnPassed', style: mainTextStyle));
@@ -455,7 +466,8 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       for (Submission submission in submissionsToShow) {
         String firstLine = 'ID = ${submission.id}, ${formatDateTime(submission.timestamp.toInt())}';
         var status = submission.status;
-        if (isHardDeadlinePassed(_course, _courseData, submission)) {
+        final lessonSchedule = LessonSchedule(); // TODO implement me
+        if (_problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submission.timestamp.toInt())) {
           status = SolutionStatus.HARD_DEADLINE_PASSED;
         }
         Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, status, submission.gradingStatus);
@@ -698,9 +710,9 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
   return Tuple3(secondLine, iconData, iconColor);
 }
 
-String formatDateTime(int timestamp, [bool withSeconds = false]) {
+String formatDateTime(int timestamp, {bool withSeconds = false, bool isUtc = true}) {
   DateFormat formatter = DateFormat(withSeconds? 'yyyy-MM-dd, HH:mm:ss' : 'yyyy-MM-dd, HH:mm');
-  DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+  DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: isUtc);
   return formatter.format(dateTime);
 }
 
