@@ -1,10 +1,9 @@
 // ignore_for_file: unused_field
 
-import 'generated/yajudge.pb.dart';
+import '../yajudge_common.dart';
 import 'package:path/path.dart' as path;
 import 'package:yaml/yaml.dart';
 import 'package:protobuf/protobuf.dart';
-import 'model_utils.dart';
 import 'dart:io' as io;
 
 const courseReloadInterval = Duration(seconds: 10);
