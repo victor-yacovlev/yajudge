@@ -21,7 +21,7 @@ extension DeadlinesExtension on Deadlines {
   }
 
   bool hardDeadlinePassed(LessonSchedule lessonSchedule, int submissionTimestamp) {
-    if (hardDeadline == 0) {
+    if (hardDeadline == 0 || lessonSchedule.datetime == 0) {
       return false;
     }
     int deadlineInSeconds = lessonSchedule.datetime.toInt() + hardDeadline;
