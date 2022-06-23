@@ -225,7 +225,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     int deadlinePenalty = 0;
     bool hardDeadlinePassed = false;
 
-    if (submitted > 0 && course.courseStart > 0) {
+    if (submitted > 0 && lessonSchedule.datetime > 0) {
       deadlinePenalty = problemMetadata.deadlines.softDeadlinePenalty(lessonSchedule, submitted.toInt());
       hardDeadlinePassed = problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submitted.toInt());
       if (hardDeadlinePassed) {
