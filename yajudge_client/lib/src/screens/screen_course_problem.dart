@@ -282,15 +282,29 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     final courseLimits = _courseData.defaultLimits;
     final problemLimits = _problemData.gradingOptions.limits;
     final limits = courseLimits.mergedWith(problemLimits);
+    final executableTarget = _problemData.gradingOptions.executableTarget;
     int memoryTotalLimit = limits.memoryMaxLimitMb.toInt();
     int memoryStackLimit = limits.stackSizeLimitMb.toInt();
+    const procLimitDisabledTargets = {
+      ExecutableTarget.JavaJar, ExecutableTarget.JavaClass,
+    };
+    const fdLimitDisabledTargets = {
+      ExecutableTarget.JavaJar, ExecutableTarget.JavaClass,
+    };
     if (memoryTotalLimit > 0 || memoryStackLimit > 0) {
       List<String> texts = [];
       if (memoryStackLimit > 0) {
         texts.add('$memoryStackLimit Мб (стек)');
       }
       if (memoryTotalLimit > 0) {
-        texts.add('$memoryTotalLimit Мб (всего)');
+        String whatToLimit = 'всего';
+        const heapOnlyLimitedTargets = {
+          ExecutableTarget.JavaClass, ExecutableTarget.JavaJar,
+        };
+        if (heapOnlyLimitedTargets.contains(executableTarget)) {
+          whatToLimit = 'куча';
+        }
+        texts.add('$memoryTotalLimit Мб ($whatToLimit)');
       }
       contents.add(Text('Память: ${texts.join(', ')}', style: mainTextStyle));
     }
@@ -307,12 +321,12 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       contents.add(Text('Время выполнения: ${texts.join(', ')}', style: mainTextStyle));
     }
     int filesLimit = limits.fdCountLimit.toInt();
-    if (filesLimit > 0) {
+    if (filesLimit > 0 && !fdLimitDisabledTargets.contains(executableTarget)) {
       contents.add(Text('Максимальное число файловых дескрипторов: $filesLimit', style: mainTextStyle));
     }
     int procsLimit = limits.procCountLimit.toInt();
-    if (procsLimit > 0) {
-      contents.add(Text('Максимальное число процессов: $procsLimit', style: mainTextStyle));
+    if (procsLimit > 0 && !procLimitDisabledTargets.contains(executableTarget)) {
+      contents.add(Text('Максимальное число процессов и потоков: $procsLimit', style: mainTextStyle));
     }
     bool allowNetwork = limits.allowNetwork;
     String allowNetworkText = allowNetwork? 'разрешен' : 'запрещен';
