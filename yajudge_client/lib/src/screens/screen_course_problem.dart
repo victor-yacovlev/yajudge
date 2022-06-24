@@ -713,7 +713,8 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
 String formatDateTime(int timestamp, {bool withSeconds = false, bool isUtc = true}) {
   DateFormat formatter = DateFormat(withSeconds? 'yyyy-MM-dd, HH:mm:ss' : 'yyyy-MM-dd, HH:mm');
   DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: isUtc);
-  return formatter.format(dateTime);
+  DateTime localTime = dateTime.toLocal();
+  return formatter.format(localTime);
 }
 
 String formatScoreInRussian(int value) {
