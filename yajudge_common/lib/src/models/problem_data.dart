@@ -6,7 +6,13 @@ extension ProblemDataExtension on ProblemData {
     // must be called only after deepCopy
 
     final limits = gradingOptions.limits;
-    gradingOptions = GradingOptions(limits: limits);
+    final executableTarget = gradingOptions.executableTarget;
+    final buildSystem = gradingOptions.buildSystem;
+    gradingOptions = GradingOptions(
+      limits: limits,
+      executableTarget: executableTarget,
+      buildSystem: buildSystem,
+    );
     graderFiles = FileSet();
   }
 
