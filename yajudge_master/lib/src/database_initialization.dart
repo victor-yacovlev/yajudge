@@ -7,7 +7,7 @@ import 'dart:io' as io;
 final tablesRequired = {
   'personal_enrollments', 'group_enrollments', 'users', 'sessions', 'submission_files',
   'submission_results', 'submissions', 'courses', 'code_reviews', 'review_line_comments',
-  'lesson_schedules',
+  'lesson_schedules', 'submission_deadlines',
 };
 
 Future<bool> checkTablesExists(MasterService masterService) async {

@@ -9,7 +9,7 @@ create table if not exists courses
     must_solve_all_required_problems_to_complete boolean default false,
     disable_review                               boolean default false,
     disable_defence                              boolean default true,
-    course_start                                 timestamp
+    need_update_deadlines                        boolean default false not null
 );
 
 
@@ -166,3 +166,40 @@ create table lesson_schedules
     group_pattern        varchar(50),
     repeat_interval_days integer default 0 not null
 );
+
+create table submission_deadlines
+(
+    submissions_id integer not null
+        constraint submission_deadlines_pk
+            primary key,
+    hard           timestamp,
+    soft           timestamp
+);
+
+drop trigger if exists update_lesson_schedule on lesson_schedules;
+drop trigger if exists insert_lesson_schedule on lesson_schedules;
+drop trigger if exists delete_lesson_schedule on lesson_schedules;
+create or replace function mark_course_deadlines_dirty() returns trigger
+    language plpgsql
+as $$
+declare
+    courses_id integer := 0;
+begin
+    if (tg_op = 'DELETE') then
+        courses_id = old.courses_id;
+    else
+        courses_id = new.courses_id;
+    end if;
+    update courses set need_update_deadlines=true where id=courses_id;
+    return new;
+end
+$$;
+
+create trigger update_lesson_schedule after update on lesson_schedules
+    for each row execute function mark_course_deadlines_dirty();
+
+create trigger insert_lesson_schedule after insert on lesson_schedules
+    for each row execute function mark_course_deadlines_dirty();
+
+create trigger delete_lesson_schedule after delete on lesson_schedules
+    for each row execute function mark_course_deadlines_dirty();

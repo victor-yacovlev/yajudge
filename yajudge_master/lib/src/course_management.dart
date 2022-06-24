@@ -9,8 +9,6 @@ import 'package:yajudge_common/yajudge_common.dart';
 
 import './master_service.dart';
 
-const courseReloadInterval = Duration(seconds: 15);
-
 class CourseDataCacheItem {
   final CourseData? data;
   final DateTime? lastModified;
@@ -240,7 +238,7 @@ class CourseManagementService extends CourseManagementServiceBase {
   }
 
   @override
-  Future<CoursesList> getCourses(ServiceCall call, CoursesFilter request) async {
+  Future<CoursesList> getCourses(ServiceCall? call, CoursesFilter request) async {
     List<Enrollment> enrollments = [];
     final enrollmentsService = parent.enrollmentManagementService;
     final usersService = parent.userManagementService;

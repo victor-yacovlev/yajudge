@@ -9,6 +9,7 @@ import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart';
 import 'course_management.dart';
+import 'deadlines_manager.dart';
 import 'submission_management.dart';
 import 'user_management.dart';
 import 'enrollment_management.dart';
@@ -45,6 +46,8 @@ class MasterService {
   late final SubmissionManagementService submissionManagementService;
   late final EnrollmentManagementService enrollmentManagementService;
   late final CodeReviewManagementService codeReviewManagementService;
+  late final DeadlinesManager deadlinesManager;
+
   late final Server grpcServer;
   final DemoModeProperties? demoModeProperties;
   final AbstractGrpcWebProxyService? grpcWebProxyService;
@@ -90,8 +93,10 @@ class MasterService {
         ],
         [checkAuth]
     );
+    deadlinesManager = DeadlinesManager(this, connection);
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
+    deadlinesManager.start();
     grpcWebProxyService?.start();
   }
 
