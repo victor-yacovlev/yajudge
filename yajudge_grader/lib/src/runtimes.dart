@@ -22,7 +22,10 @@ abstract class DetectedError extends Error {
   String get message;
 }
 
-class ValgrindError extends DetectedError {
+abstract class DetectedRuntimeError extends DetectedError {
+}
+
+class ValgrindError extends DetectedRuntimeError {
   final String output;
   final int errorsCount;
   ValgrindError(this.output, this.errorsCount);
@@ -30,11 +33,18 @@ class ValgrindError extends DetectedError {
   String get message => output;
 }
 
-class SanitizerError extends DetectedError {
+class SanitizerError extends DetectedRuntimeError {
   final List<String> outputLines;
   SanitizerError(this.outputLines);
   @override
   String get message => 'Sanitizer errors:\n${outputLines.join('\n')}';
+}
+
+class JavaRuntimeError extends DetectedRuntimeError {
+  final String lastExceptionMessage;
+  JavaRuntimeError(this.lastExceptionMessage);
+  @override
+  String get message => lastExceptionMessage;
 }
 
 class RunTestArtifact {
@@ -72,7 +82,7 @@ class RunTestArtifact {
     for (int i=0; i<outLength; i++) {
       final symbol = s[i];
       int code = symbol.codeUnitAt(0);
-      if (code < 32 && code != 10 || code == 0xFF) {
+      if (code < 32 && code != 10 && code != 9 || code == 0xFF) {
         result += r'\' + code.toString();
       }
       else {
@@ -91,13 +101,16 @@ class RunTestArtifact {
     }
     int valgrindErrorsCount = 0;
     String valgrindOutput = '';
-    if (signalKilled != 0 || detectedError is SanitizerError) {
+    if (signalKilled != 0) {
       status = SolutionStatus.RUNTIME_ERROR;
     }
     if (detectedError is ValgrindError) {
       status = SolutionStatus.VALGRIND_ERRORS;
       valgrindErrorsCount = (detectedError as ValgrindError).errorsCount;
       valgrindOutput = (detectedError as ValgrindError).output;
+    }
+    else if (detectedError is DetectedRuntimeError) {
+      status = SolutionStatus.RUNTIME_ERROR;
     }
     if (timeoutExceed) {
       status = SolutionStatus.TIME_LIMIT;
@@ -475,6 +488,18 @@ class JavaRuntime extends AbstractRuntime {
 
   @override
   RunTestArtifact postProcessArtifact(RunTestArtifact artifact, String testBaseName) {
+    if (artifact.exitStatus == 1) {
+      // Parse java runtime error
+      final errorText = utf8.decode(artifact.stderr, allowMalformed: true);
+      final rxJavaException = RegExp(r'Exception in thread "(.+)" (.+):');
+      final matches = rxJavaException.allMatches(errorText).toList();
+      if (matches.isNotEmpty) {
+        final lastMatch = matches.last;
+        final errorStart = lastMatch.start;
+        final exceptionMessage = errorText.substring(errorStart);
+        artifact.detectedError = JavaRuntimeError(exceptionMessage);
+      }
+    }
     return artifact;
   }
 

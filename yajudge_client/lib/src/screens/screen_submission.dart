@@ -871,11 +871,13 @@ class SubmissionScreenState extends BaseScreenState {
           child: Text('Ошибка выполнения на тесте $brokenTestNumber:', style: fileHeadStyle))
       );
       final signalNumber = brokenTestCase.signalKilled;
-      final errorDescription = runtimeErrorDescription(signalNumber);
-      contents.add(Container(
-          padding: fileHeadPadding,
-          child: Text(errorDescription))
-      );
+      if (signalNumber > 0) {
+        final errorDescription = runtimeErrorDescription(signalNumber);
+        contents.add(Container(
+            padding: fileHeadPadding,
+            child: Text(errorDescription))
+        );
+      }
     }
     else if (_submission!.status == SolutionStatus.VALGRIND_ERRORS) {
       final brokenTestCase = findFirstBrokenTest();
