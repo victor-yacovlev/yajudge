@@ -166,9 +166,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     try {
       rows = await connection.query(
           '''
-      select id,status,timestamp,grading_status from submissions
+      select id,status,datetime,grading_status from submissions
       where users_id=@users_id and courses_id=@courses_id and problem_id=@problem_id
-      order by timestamp asc 
+      order by datetime asc 
       ''',
           substitutionValues: {
             'users_id': usersId,
@@ -193,16 +193,16 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     final maxProblemScore = (problemMetadata.fullScoreMultiplier * 100).round();
     bool completed = false;
     int scoreGot = 0;
-    Int64 submitted = Int64(0);
+    int submitted = 0;
     for (List<dynamic> fields in rows) {
       int id = fields[0];
       final status = SolutionStatus.valueOf(fields[1])!;
-      final timestamp = Int64(fields[2]);
+      final datetime = fields[2] as DateTime;
       gradingStatus = SubmissionGradingStatus.valueOf(fields[3])!;
       if (finalStatuses.contains(status)) {
         problemStatus = status;
         if (submitted == 0) {
-          submitted = timestamp;
+          submitted = datetime.millisecondsSinceEpoch ~/ 1000;
         }
       }
       if (status == SolutionStatus.OK) {
@@ -217,7 +217,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           gradingStatus: gradingStatus,
           user: user,
           course: course,
-          timestamp: timestamp,
+          datetime: Int64(datetime.millisecondsSinceEpoch ~/ 1000),
         ));
       }
     }
@@ -226,8 +226,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     bool hardDeadlinePassed = false;
 
     if (submitted > 0 && lessonSchedule.datetime > 0) {
-      deadlinePenalty = problemMetadata.deadlines.softDeadlinePenalty(lessonSchedule, submitted.toInt());
-      hardDeadlinePassed = problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submitted.toInt());
+      deadlinePenalty = problemMetadata.deadlines.softDeadlinePenalty(lessonSchedule, submitted);
+      hardDeadlinePassed = problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submitted);
       if (hardDeadlinePassed) {
         deadlinePenalty = maxProblemScore;
       }
@@ -248,7 +248,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       scoreGot: scoreGot,
       finalSolutionStatus: hardDeadlinePassed? SolutionStatus.HARD_DEADLINE_PASSED : problemStatus,
       finalGradingStatus: gradingStatus,
-      submitted: submitted,
+      submitted: Int64(submitted),
       submissionCountLimit: countLimit,
       submissions: submissions,
       deadlinePenaltyTotal: deadlinePenalty,
@@ -265,28 +265,30 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     int userId = user.id.toInt();
 
     // min time = current time - one hour
-    int minTime = DateTime.now().subtract(Duration(hours: 1)).toUtc().millisecondsSinceEpoch ~/ 1000;
+    DateTime minDateTime = DateTime.now().subtract(Duration(hours: 1)).toUtc();
     List<dynamic> rows = await connection.query(
       '''
-      select timestamp 
+      select datetime 
       from submissions 
-      where users_id=@users_id and courses_id=@courses_id and problem_id=@problem_id and timestamp>=@timestamp 
-      order by timestamp
+      where users_id=@users_id and courses_id=@courses_id and problem_id=@problem_id and datetime>=@datetime 
+      order by datetime
       ''',
       substitutionValues: {
         'users_id': userId,
         'courses_id': courseId,
         'problem_id': problemId,
-        'timestamp': minTime,
+        'datetime': minDateTime,
       }
     );
     int submissionsCount = 0;
-    int earliestSubmission = 0;
+    DateTime? earliestSubmission;
     for (List<dynamic> fields in rows) {
       submissionsCount += 1;
-      int currentSubmission = fields[0];
-      if (currentSubmission>=minTime && (currentSubmission<=earliestSubmission || earliestSubmission==0)) {
-        earliestSubmission = currentSubmission;
+      DateTime submissionDateTime = fields[0];
+      if (submissionDateTime.isAfter(minDateTime)) {
+        if (earliestSubmission==null || submissionDateTime.isBefore(earliestSubmission)) {
+          earliestSubmission = submissionDateTime;
+        }
       }
     }
     final courseData = parent.courseManagementService.getCourseData(course.dataId);
@@ -296,13 +298,16 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     if (limit < 0) {
       limit = 0;
     }
-    int nextTimeReset = earliestSubmission;
-    if (nextTimeReset != 0) {
-      nextTimeReset += 60 * 60;
+    DateTime? nextTimeReset = earliestSubmission;
+    if (nextTimeReset != null) {
+      nextTimeReset = nextTimeReset.add(Duration(hours: 1));
+    }
+    else {
+      nextTimeReset = DateTime.fromMillisecondsSinceEpoch(0);
     }
     return SubmissionsCountLimit(
       attemptsLeft: limit,
-      nextTimeReset: Int64(nextTimeReset),
+      nextTimeReset: Int64(nextTimeReset.toUtc().millisecondsSinceEpoch ~/ 1000),
       serverTime: Int64(DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000),
     );
   }
@@ -341,13 +346,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   @override
   Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
     String queryBegin = '''
-      select submissions.id, problem_id, timestamp, status,
+      select submissions.id, problem_id, datetime, status,
         users.first_name, users.last_name, users.mid_name,
         users.group_name, grading_status
       from submissions, users
       where users_id=users.id 
       ''';
-    String queryEnd = ' order by timestamp desc ';
+    String queryEnd = ' order by datetime desc ';
     String queryFilter = '';
     Map<String,dynamic> queryValues = {};
     if (request.limit > 0) {
@@ -410,7 +415,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     for (final row in queryRows) {
       int id = row[0];
       String problemId = row[1];
-      int timestamp = row[2];
+      DateTime dateTime = row[2];
       int status = row[3];
       String firstName = row[4];
       String lastName = row[5];
@@ -420,7 +425,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       result.add(SubmissionListEntry(
         submissionId: Int64(id),
         problemId: problemId,
-        timestamp: Int64(timestamp),
+        datetime: Int64(dateTime.millisecondsSinceEpoch ~/ 1000),
         status: SolutionStatus.valueOf(status),
         gradingStatus: gradingStatus,
         sender: User(
@@ -453,7 +458,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       final problemMetadata = courseData.findProblemMetadataById(entry.problemId);
       final deadlines = problemMetadata.deadlines;
       if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
-        bool deadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, entry.timestamp.toInt());
+        bool deadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, entry.datetime.toInt());
         entry.hardDeadlinePassed = deadlinePassed;
       }
     }
@@ -469,7 +474,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future<List<Submission>> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
     String query =
       '''
-    select submissions.id, users_id, problem_id, timestamp, status,
+    select submissions.id, users_id, problem_id, datetime, status,
        users.first_name, users.last_name, users.mid_name,
        users.group_name 
     from submissions, users
@@ -498,7 +503,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       int id = fields[0];
       int usersId = fields[1];
       String problemId = fields[2];
-      int timestamp = fields[3];
+      DateTime dateTime = fields[3];
       int problemStatus = fields[4];
       String firstName = fields[5];
       String lastName = fields[6];
@@ -516,7 +521,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         user: submittedUser,
         course: course,
         problemId: problemId,
-        timestamp: Int64(timestamp),
+        datetime: Int64(dateTime.millisecondsSinceEpoch ~/ 1000),
         status: SolutionStatus.valueOf(problemStatus)!,
       );
       result.add(submission);
@@ -530,7 +535,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     int submissionId = request.id.toInt();
     final query =
     '''
-    select users_id, problem_id, timestamp, status, style_error_log, compile_error_log, grading_status
+    select users_id, problem_id, datetime, status, style_error_log, compile_error_log, grading_status
     from submissions
     where id=@id order by id asc
       ''';
@@ -541,7 +546,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     final firstSubmissionRow = submissionRows.first;
     int userId = firstSubmissionRow[0];
     String problemId = firstSubmissionRow[1];
-    int timestamp = firstSubmissionRow[2];
+    DateTime dateTime = firstSubmissionRow[2];
     final status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
     String? styleErrorLog = firstSubmissionRow[4];
     String? compileErrorLog = firstSubmissionRow[5];
@@ -589,7 +594,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return Submission(
       id: Int64(submissionId),
       user: User(id: Int64(userId)),
-      timestamp: Int64(timestamp),
+      datetime: Int64(dateTime.millisecondsSinceEpoch ~/ 1000),
       status: status,
       gradingStatus: gradingStatus,
       problemId: problemId,
@@ -691,8 +696,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     }
     List<dynamic> submissionsRows = await connection.query(
       '''
-      insert into submissions(users_id,courses_id,problem_id,status,timestamp,grading_status)
-      values (@users_id,@courses_id,@problem_id,@status,@timestamp,@grading_status)
+      insert into submissions(users_id,courses_id,problem_id,status,datetime,grading_status)
+      values (@users_id,@courses_id,@problem_id,@status,@datetime,@grading_status)
       returning id
       ''',
       substitutionValues: {
@@ -701,7 +706,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         'problem_id': request.problemId,
         'status': SolutionStatus.ANY_STATUS_OR_NULL.value,
         'grading_status': SubmissionGradingStatus.queued.value,
-        'timestamp': DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000,
+        'datetime': DateTime.now().toUtc(),
       }
     );
     int submissionId = submissionsRows[0][0];
@@ -811,7 +816,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       final lessonSchedule = scheduleSet.findByLesson(lesson.id);
       final deadlines = problemMetadata.deadlines;
       if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
-        hardDeadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, request.timestamp.toInt());
+        hardDeadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, request.datetime.toInt());
       }
     }
     await connection.transaction((connection) async {
@@ -923,7 +928,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
       where grading_status=@grading_status and courses_id=courses.id
-      order by timestamp
+      order by datetime
       ''',
       substitutionValues: {'grading_status': SubmissionGradingStatus.queued.value}
     );
@@ -953,7 +958,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
       where grading_status=@grading_status and grader_name=@grader_name and courses_id=courses.id
-      order by timestamp
+      order by datetime
       limit 1
       ''',
         substitutionValues: {
@@ -1250,7 +1255,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
           }
       );
       final rows = await connection.query(
-          'select users_id, first_name, last_name, mid_name, timestamp, grader_name, status '
+          'select users_id, first_name, last_name, mid_name, datetime, grader_name, status '
           'from submissions, users '
           'where submissions.id=@id and users.id=submissions.users_id',
           substitutionValues: {
@@ -1262,7 +1267,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       final firstName = (firstRow[1] as String?) ?? '';
       final lastName = (firstRow[2] as String?) ?? '';
       final midName = (firstRow[3] as String?) ?? '';
-      final timestamp = Int64(firstRow[4] as int);
+      final datetime = firstRow[4] as DateTime;
       final graderName = firstRow[5] as String;
       final status = firstRow[6] as int;
       submission.user = User(id: userId, firstName: firstName, lastName: lastName, midName: midName);
@@ -1272,7 +1277,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
       submission.testResults.clear();
       submission.graderScore = 0.0;
       submission.graderName = graderName;
-      submission.timestamp = timestamp;
+      submission.datetime = Int64(datetime.millisecondsSinceEpoch ~/ 1000);
       _notifySubmissionResultChanged(submission);
     }
 

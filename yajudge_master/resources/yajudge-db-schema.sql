@@ -87,6 +87,7 @@ create table submissions
     id                serial
         constraint submissions_pk
             primary key,
+    datetime          timestamp         not null,
     users_id          integer           not null
         constraint submissions_users_id_fk
             references users,
@@ -95,11 +96,10 @@ create table submissions
             references courses,
     problem_id        varchar(100)      not null,
     status            integer           not null,
-    timestamp         bigint            not null,
+    grading_status    integer default 0 not null,
     grader_name       varchar(100),
     style_error_log   varchar,
-    compile_error_log varchar,
-    grading_status    integer default 0 not null
+    compile_error_log varchar
 );
 
 
@@ -139,7 +139,7 @@ create table if not exists code_reviews
     submissions_id integer not null,
     author_id      integer not null,
     global_comment varchar,
-    timestamp      bigint  not null
+    datetime       timestamp not null
 );
 
 

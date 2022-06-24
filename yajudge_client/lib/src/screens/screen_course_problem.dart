@@ -464,10 +464,10 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       List<Submission> submissionsToShow = List.from(submissionsList);
       submissionsToShow.sort((a, b) => b.id.compareTo(a.id));
       for (Submission submission in submissionsToShow) {
-        String firstLine = 'ID = ${submission.id}, ${formatDateTime(submission.timestamp.toInt())}';
+        String firstLine = 'ID = ${submission.id}, ${formatDateTime(submission.datetime.toInt())}';
         var status = submission.status;
         final lessonSchedule = LessonSchedule(); // TODO implement me
-        if (_problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submission.timestamp.toInt())) {
+        if (_problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submission.datetime.toInt())) {
           status = SolutionStatus.HARD_DEADLINE_PASSED;
         }
         Tuple3<String,IconData,Color> statusView = visualizeSolutionStatus(context, status, submission.gradingStatus);

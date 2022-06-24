@@ -299,7 +299,7 @@ message Submission {
   int64               id            = 1;
   User                user          = 2;
   Course              course        = 3;
-  int64               timestamp     = 4;
+  int64               datetime      = 4;  // seconds since epoch UTC
   FileSet             solution_files= 5;
   SolutionStatus      status        = 6;
   double              grader_score  = 7;
@@ -373,7 +373,6 @@ message Course {
   int64             id            = 1;
   string            name          = 2;
   string            data_id       = 3;
-  int64             course_start  = 4;  // UTC timestamp for course start, other times are relative
   string            url_prefix    = 5;
   bool              disable_review = 7;
   bool              disable_defence = 8;
@@ -613,7 +612,7 @@ message SubmissionListEntry {
   int64             submission_id = 1;
   SolutionStatus    status = 2;
   User              sender = 3;
-  int64             timestamp = 4;
+  int64             datetime = 4;
   string            problem_id = 5;
   bool              hard_deadline_passed = 6;
   SubmissionGradingStatus grading_status = 10;
@@ -677,7 +676,7 @@ message LineComment {
 
 message CodeReview {
   int64                   id            = 1;
-  int64                   timestamp     = 2;
+  int64                   datetime      = 2;  // seconds from epoch UTC
   int64                   submission_id = 3;
   User                    author        = 4;
   repeated LineComment    line_comments = 5;

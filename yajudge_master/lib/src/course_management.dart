@@ -186,7 +186,7 @@ class CourseManagementService extends CourseManagementServiceBase {
   Future<Course> getCourseInfo(Int64 id) async {
     final query = '''
     select 
-      name, course_data, url_prefix, disable_review, disable_defence, course_start
+      name, course_data, url_prefix, disable_review, disable_defence
     from courses
     where id=@id
     ''';
@@ -200,7 +200,6 @@ class CourseManagementService extends CourseManagementServiceBase {
     String urlPrefix = row[2];
     bool skipReview = row[3];
     bool skipDefence = row[4];
-    DateTime courseStart = row[5] is DateTime? row[5] as DateTime : DateTime.fromMicrosecondsSinceEpoch(0);
     return Course(
       id: id,
       name: name,
@@ -208,14 +207,13 @@ class CourseManagementService extends CourseManagementServiceBase {
       urlPrefix: urlPrefix,
       disableReview: skipReview,
       disableDefence: skipDefence,
-      courseStart: Int64(courseStart.millisecondsSinceEpoch ~/ 1000),
     );
   }
 
   Future<Course> getCourseInfoByUrlPrefix(String urlPrefix) async {
     final query = '''
     select 
-      id, name, course_data, disable_review, disable_defence, course_start
+      id, name, course_data, disable_review, disable_defence
     from courses
     where url_prefix=@url_prefix
     ''';
@@ -229,7 +227,6 @@ class CourseManagementService extends CourseManagementServiceBase {
     String dataId = row[2];
     bool skipReview = row[3];
     bool skipDefence = row[4];
-    DateTime courseStart = row[5] is DateTime? row[5] as DateTime : DateTime.fromMicrosecondsSinceEpoch(0);
     return Course(
       id: Int64(id),
       name: name,
@@ -237,7 +234,6 @@ class CourseManagementService extends CourseManagementServiceBase {
       urlPrefix: urlPrefix,
       disableReview: skipReview,
       disableDefence: skipDefence,
-      courseStart: Int64(courseStart.millisecondsSinceEpoch ~/ 1000),
     );
   }
 
@@ -257,7 +253,7 @@ class CourseManagementService extends CourseManagementServiceBase {
       }
     }
     List<dynamic> allCourses = await connection
-        .query('select id,name,course_data,url_prefix,disable_review,disable_defence,course_start from courses');
+        .query('select id,name,course_data,url_prefix,disable_review,disable_defence from courses');
     List<CoursesList_CourseListEntry> res = List.empty(growable: true);
     for (List<dynamic> row in allCourses) {
       Course candidate = Course();
@@ -267,8 +263,6 @@ class CourseManagementService extends CourseManagementServiceBase {
       candidate.urlPrefix = row[3];
       candidate.disableReview = row[4];
       candidate.disableDefence = row[5];
-      DateTime courseStart = row[6] is DateTime? row[6] as DateTime : DateTime.fromMicrosecondsSinceEpoch(0);
-      candidate.courseStart = Int64(courseStart.millisecondsSinceEpoch ~/ 1000);
       Role courseRole = Role.ROLE_STUDENT;
       bool enrollmentFound = false;
       for (Enrollment enr in enrollments) {

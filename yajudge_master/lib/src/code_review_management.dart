@@ -33,19 +33,20 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       }
     }
     review.author = await parent.userManagementService.getUserBySession(Session(cookie: call.session));
-    review.timestamp = Int64(DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    DateTime reviewDateTime = DateTime.now().toUtc();
+    review.datetime = Int64(reviewDateTime.millisecondsSinceEpoch ~/ 1000);
     if (!updateReview) {
       // create new review
       final query = '''
-      insert into code_reviews(submissions_id,author_id,global_comment,timestamp)
-      values (@submissions_id,@author_id,@global_comment,@timestamp)
+      insert into code_reviews(submissions_id,author_id,global_comment,datetime)
+      values (@submissions_id,@author_id,@global_comment,@datetime)
       returning id
       ''';
       final rows = await connection.query(query, substitutionValues: {
         'submissions_id': review.submissionId.toInt(),
         'author_id': review.author.id.toInt(),
         'global_comment': review.globalComment,
-        'timestamp': review.timestamp.toInt(),
+        'datetime': reviewDateTime,
       });
       final idRow = rows.single;
       final idValue = idRow.single as int;
@@ -63,14 +64,14 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       set
         author_id=@author_id,
         global_comment=@global_comment,
-        timestamp=@timestamp
+        datetime=@datetime
       where
         id=@id
       ''';
       await connection.query(updateQuery, substitutionValues: {
         'author_id': review.author.id.toInt(),
         'global_comment': review.globalComment,
-        'timestamp': review.timestamp.toInt(),
+        'datetime': DateTime.fromMillisecondsSinceEpoch(review.datetime.toInt() * 1000, isUtc: true),
         'id': existingReview.id.toInt(),
       });
       await _addLineComments(review.lineComments, existingReview.id);
@@ -86,7 +87,9 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
   Future<ReviewHistory> getReviewHistory(ServiceCall call, Submission request) async {
     final submission = await parent.submissionManagementService.getSubmissionResult(call, request);
     final problemId = submission.problemId;
-    final maxTimestamp = submission.timestamp;
+    final maxDateTime = DateTime.fromMillisecondsSinceEpoch(
+        submission.datetime.toInt() * 1000, isUtc: true
+    );
     final userId = submission.user.id;
     final courseId = submission.course.id;
     final query = '''
@@ -95,13 +98,13 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       courses_id=@courseId and
       problem_id=@problemId and
       users_id=@userId and
-      timestamp<=@maxTimestamp
+      datetime<=@maxDateTime
     ''';
     final rows = await connection.query(query, substitutionValues: {
       'courseId': courseId.toInt(),
       'problemId': problemId,
       'userId': userId.toInt(),
-      'maxTimestamp': maxTimestamp.toInt(),
+      'maxDateTime': maxDateTime,
     });
     final ids = rows.map<int>((e) => e[0] as int);
     List<CodeReview> reviews = [];
@@ -118,7 +121,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
 
   Future<CodeReview?> _getCodeReviewForSubmission(int submissionId) async {
     final query = '''
-    select id, author_id, global_comment, timestamp
+    select id, author_id, global_comment, datetime
     from code_reviews
     where submissions_id=@id
     ''';
@@ -130,7 +133,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
     final id = row[0] as int;
     final authorId = row[1] as int;
     final globalComment = row[2] is String? row[2] as String : '';
-    final timestamp = row[3] as int;
+    final datetime = row[3] as DateTime;
     final author = (await parent.userManagementService.getUserById(Int64(authorId))).deepCopy();
     author.password = '';
     final lineComments = await _getLineComments(Int64(id));
@@ -139,7 +142,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       submissionId: Int64(submissionId),
       author: author,
       globalComment: globalComment,
-      timestamp: Int64(timestamp),
+      datetime: Int64(datetime.millisecondsSinceEpoch ~/ 1000),
       lineComments: lineComments,
     );
     return result;

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
-import 'package:grpc/grpc_connection_interface.dart';
 import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:intl/intl.dart';
@@ -416,7 +415,7 @@ class SubmissionsListScreenState extends BaseScreenState {
       List<TableRow> tableItems = [];
       for (final entry in _submissionEntries) {
         String id = '${entry.submissionId}';
-        String dateTime = formatDateTime(entry.timestamp);
+        String dateTime = formatDateTime(entry.datetime);
         String name = '${entry.sender.lastName} ${entry.sender.firstName}';
         if (!aboutNarrow) {
           name += ' ${entry.sender.midName.trim()}';

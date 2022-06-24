@@ -199,7 +199,7 @@ class SubmissionScreenState extends BaseScreenState {
     setState(() {
       log.info('got review history of size ${history.reviews.length}');
       _reviewHistory = history.deepCopy();
-      _reviewHistory!.reviews.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      _reviewHistory!.reviews.sort((a, b) => a.datetime.compareTo(b.datetime));
       CodeReview? currentReview = _reviewHistory!.findBySubmissionId(screen.submissionId);
       if (currentReview != null) {
         log.info('current review global comment: ${currentReview.globalComment}');
@@ -467,7 +467,7 @@ class SubmissionScreenState extends BaseScreenState {
     var status = _submission!.status;
     final finalStatuses = {SolutionStatus.PENDING_REVIEW, SolutionStatus.OK};
     final lessonSchedule = LessonSchedule(); // TODO implement me
-    bool hardDeadlinePassed = _problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, _submission!.timestamp.toInt());
+    bool hardDeadlinePassed = _problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, _submission!.datetime.toInt());
     if (hardDeadlinePassed && finalStatuses.contains(status)) {
       status = SolutionStatus.HARD_DEADLINE_PASSED;
     }
@@ -478,7 +478,7 @@ class SubmissionScreenState extends BaseScreenState {
     if (gradingStatus != SubmissionGradingStatus.processed) {
       statusColor = null;
     }
-    String dateSent = formatDateTime(_submission!.timestamp.toInt());
+    String dateSent = formatDateTime(_submission!.datetime.toInt());
 
     final whoCanRejudgeOrChangeStatus = [
       Role.ROLE_TEACHER_ASSISTANT, Role.ROLE_TEACHER, Role.ROLE_LECTURER,
@@ -577,7 +577,7 @@ class SubmissionScreenState extends BaseScreenState {
     List<Widget> result = [];
     final lesson = _courseData!.findEnclosingLessonForProblem(_submission!.problemId);
     final lessonSchedule = _scheduleSet.findByLesson(lesson.id);
-    int submitted = _submission!.timestamp.toInt();
+    int submitted = _submission!.datetime.toInt();
     if (lessonSchedule.datetime > 0) {
       bool hardDeadlinePassed = _problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, submitted);
       int penalty = _problemMetadata!.deadlines.softDeadlinePenalty(lessonSchedule, submitted);
@@ -977,7 +977,7 @@ class SubmissionScreenState extends BaseScreenState {
 
     final lessonSchedule = LessonSchedule(); // TODO implement me
     
-    if (reviewableStatus && !_problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, _submission!.timestamp.toInt())) {
+    if (reviewableStatus && !_problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, _submission!.datetime.toInt())) {
       result.add(
         ScreenSubmitAction(
           title: status==SolutionStatus.SUMMON_FOR_DEFENCE ? 'Зачесть решение' : 'Одобрить решение',

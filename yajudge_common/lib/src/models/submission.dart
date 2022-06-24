@@ -10,7 +10,7 @@ extension SubmissionExtension on Submission {
       status: status,
       gradingStatus: gradingStatus,
       sender: user,
-      timestamp: timestamp,
+      datetime: datetime,
       problemId: problemId,
     ).deepCopy();
   }
