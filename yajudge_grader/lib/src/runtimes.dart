@@ -491,7 +491,7 @@ class JavaRuntime extends AbstractRuntime {
     if (artifact.exitStatus == 1) {
       // Parse java runtime error
       final errorText = utf8.decode(artifact.stderr, allowMalformed: true);
-      final rxJavaException = RegExp(r'Exception in thread "(.+)" (.+):');
+      final rxJavaException = RegExp(r'Exception in thread "(.+)" (.+)');
       final matches = rxJavaException.allMatches(errorText).toList();
       if (matches.isNotEmpty) {
         final lastMatch = matches.last;
