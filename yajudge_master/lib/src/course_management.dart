@@ -101,7 +101,9 @@ class CourseManagementService extends CourseManagementServiceBase {
     try {
       DateTime lastModified = loader.problemLastModified(problemId);
       if (lastModified.millisecondsSinceEpoch > request.cachedTimestamp.toInt()) {
-        ProblemData problemData = loader.problemData(problemId);
+        CourseData courseData = loader.courseData();
+        ProblemData problemData = loader.problemData(problemId).deepCopy();
+        problemData.gradingOptions.limits = courseData.defaultLimits.mergedWith(problemData.gradingOptions.limits);
         log.fine('sent problem data on $courseId/$problemId [last modified $lastModified] to grader');
         return ProblemContentResponse(
           problemId: problemId,
