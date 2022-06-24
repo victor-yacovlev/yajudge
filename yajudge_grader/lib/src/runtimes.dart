@@ -510,6 +510,12 @@ class JavaRuntime extends AbstractRuntime {
       javaExecutable = 'java';
     }
     List<String> javaOptions = runtimeProperties.property('runtime_options');
+    if (gradingLimits.stackSizeLimitMb > 0) {
+      javaOptions.add('-Xss${gradingLimits.stackSizeLimitMb}m');
+    }
+    if (gradingLimits.memoryMaxLimitMb > 0) {
+      javaOptions.add('-Xmx${gradingLimits.memoryMaxLimitMb}m');
+    }
     List<String> entryPoint = [];
     if (artifact.executableTarget == ExecutableTarget.JavaClass) {
       String fileName = '';
@@ -545,11 +551,16 @@ class JavaRuntime extends AbstractRuntime {
       }
       entryPoint = ['-jar', fileName];
     }
+    final jreLimits = gradingLimits.deepCopy();
+    jreLimits.stackSizeLimitMb = Int64(0);
+    jreLimits.memoryMaxLimitMb = Int64(0);
+    jreLimits.procCountLimit = Int64(0);
+    jreLimits.fdCountLimit = Int64(0);
     return runner.start(
       submission,
       [javaExecutable] + javaOptions + entryPoint + arguments,
       workingDirectory: workDir,
-      limits: gradingLimits,
+      limits: jreLimits,
       coprocessFileName: coprocessFileName,
       runTargetIsScript: true,
       targetName: targetName,
