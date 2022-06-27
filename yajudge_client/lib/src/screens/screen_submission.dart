@@ -53,7 +53,6 @@ class SubmissionScreenState extends BaseScreenState {
   ProblemMetadata? _problemMetadata;
   Course? _course;
   grpc.ResponseStream<Submission>? _statusStream;
-  LessonScheduleSet _scheduleSet = LessonScheduleSet();
   WhatToRejudge _whatToRejudge = WhatToRejudge.thisSubmission;
   late final LineCommentController _lineCommentController;
   late final TextEditingController _globalCommentController;
@@ -75,7 +74,6 @@ class SubmissionScreenState extends BaseScreenState {
       _course = screen.course;
       _loadSubmission(true);
       _loadCodeReviews();
-      _loadSchedule();
     }
     else {
       _loadCourse();
@@ -106,12 +104,6 @@ class SubmissionScreenState extends BaseScreenState {
     });
   }
 
-  void _loadSchedule() {
-    final service = ConnectionController.instance!.coursesService;
-    final request = LessonScheduleRequest(course: _course!, user: screen.loggedUser);
-    service.getLessonSchedules(request).then(_updateSchedule);
-  }
-
   void _loadCourse() {
     CoursesController.instance!
         .loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
@@ -136,7 +128,6 @@ class SubmissionScreenState extends BaseScreenState {
             _courseData = courseData;
           });
           _loadSubmission(true);
-          _loadSchedule();
           _loadCodeReviews();
         })
         .onError((Object error, StackTrace stackTrace) {
@@ -271,15 +262,6 @@ class SubmissionScreenState extends BaseScreenState {
       },
       cancelOnError: true,
     );
-  }
-
-  void _updateSchedule(LessonScheduleSet scheduleSet) {
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _scheduleSet = scheduleSet;
-    });
   }
 
   void _updateSubmission(Submission submission) {
@@ -466,8 +448,7 @@ class SubmissionScreenState extends BaseScreenState {
 
     var status = _submission!.status;
     final finalStatuses = {SolutionStatus.PENDING_REVIEW, SolutionStatus.OK};
-    final lessonSchedule = LessonSchedule(); // TODO implement me
-    bool hardDeadlinePassed = _problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, _submission!.datetime.toInt());
+    bool hardDeadlinePassed = submissionHardDeadlinePassed();
     if (hardDeadlinePassed && finalStatuses.contains(status)) {
       status = SolutionStatus.HARD_DEADLINE_PASSED;
     }
@@ -575,21 +556,24 @@ class SubmissionScreenState extends BaseScreenState {
       );
     }
     List<Widget> result = [];
-    final lesson = _courseData!.findEnclosingLessonForProblem(_submission!.problemId);
-    final lessonSchedule = _scheduleSet.findByLesson(lesson.id);
     int submitted = _submission!.datetime.toInt();
-    if (lessonSchedule.datetime > 0) {
-      bool hardDeadlinePassed = _problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, submitted);
-      int penalty = _problemMetadata!.deadlines.softDeadlinePenalty(lessonSchedule, submitted);
+    int hardDeadline = _submission!.hardDeadline.toInt();
+    int softDeadline = _submission!.softDeadline.toInt();
+    bool hardDeadlinePassed = false;
+    if (hardDeadline > 0) {
+      hardDeadlinePassed = submitted > hardDeadline;
       if (hardDeadlinePassed) {
-        int deadline = lessonSchedule.datetime.toInt() + _problemMetadata!.deadlines.hardDeadline;
-        String dateFormat = formatDateTime(deadline);
+        String dateFormat = formatDateTime(hardDeadline);
         String message = 'Решение отправлено после жесткого дедлайна $dateFormat, оно не будет зачтено';
         result.add(wrapIntoPadding(makeText(message, Colors.red)));
       }
-      else if (penalty > 0) {
-        int deadline = lessonSchedule.datetime.toInt() + _problemMetadata!.deadlines.softDeadline;
-        String dateFormat = formatDateTime(deadline);
+    }
+    if (!hardDeadlinePassed && softDeadline > 0) {
+      int secondsOverdue = submitted - softDeadline;
+      int hoursOverdue = secondsOverdue ~/ 60 ~/ 60;
+      int penalty = _problemMetadata!.deadlines.softDeadline * hoursOverdue;
+      if (penalty > 0) {
+        String dateFormat = formatDateTime(softDeadline);
         penalty = math.min(penalty, (_problemMetadata!.fullScoreMultiplier * 100).round());
         String scoreFormat = formatScoreInRussian(penalty);
         String message = 'Решение отправлено после дедлайна $dateFormat, штраф $scoreFormat';
@@ -597,6 +581,19 @@ class SubmissionScreenState extends BaseScreenState {
       }
     }
     return result;
+  }
+
+  bool submissionHardDeadlinePassed() {
+    if (_submission == null) {
+      return false;
+    }
+    int submitted = _submission!.datetime.toInt();
+    int hardDeadline = _submission!.hardDeadline.toInt();
+    bool hardDeadlinePassed = false;
+    if (hardDeadline > 0) {
+      hardDeadlinePassed = submitted > hardDeadline;
+    }
+    return hardDeadlinePassed;
   }
 
   List<Widget> buildLinkItems(BuildContext context) {
@@ -977,9 +974,7 @@ class SubmissionScreenState extends BaseScreenState {
     bool hasComments = _globalCommentController.text.trim().isNotEmpty ||
         _lineCommentController.comments.isNotEmpty;
 
-    final lessonSchedule = LessonSchedule(); // TODO implement me
-    
-    if (reviewableStatus && !_problemMetadata!.deadlines.hardDeadlinePassed(lessonSchedule, _submission!.datetime.toInt())) {
+    if (reviewableStatus && !submissionHardDeadlinePassed()) {
       result.add(
         ScreenSubmitAction(
           title: status==SolutionStatus.SUMMON_FOR_DEFENCE ? 'Зачесть решение' : 'Одобрить решение',

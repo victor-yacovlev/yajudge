@@ -4,7 +4,6 @@ import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
 import 'package:protobuf/protobuf.dart';
-import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import 'graders_manager.dart';
@@ -50,11 +49,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future<CourseStatus> _getCourseStatus(User user, Course course) async {
     final courseDataId = course.dataId;
     final courseData = parent.courseManagementService.getCourseData(courseDataId);
-    final scheduleRequest = LessonScheduleRequest(user: user, course: course);
-    final scheduleSet = await parent.courseManagementService.getLessonSchedules(null, scheduleRequest);
     double courseScoreGot = 0.0;
     double courseScoreMax = 0.0;
-    bool courseCompleted = true;
     int problemsTotal = 0;
     int problemsRequired = 0;
     int problemsSolved = 0;
@@ -75,7 +71,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         lessonBlocked = !lessonCompleted;
 
         List<ProblemStatus> problemStatuses = [];
-        final lessonSchedule = scheduleSet.findByLesson(lesson.id);
 
         for (final problemMetadata in lesson.problemsMetadata) {
           problemsTotal ++;
@@ -87,7 +82,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
             course: course,
             problemMetadata: problemMetadata,
             problemBlocked: !lessonCompleted,
-            lessonSchedule: lessonSchedule,
           );
 
           if (problemStatus.completed) {
@@ -107,7 +101,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           if (problemMetadata.blocksNextProblems && !problemStatus.completed) {
             lessonCompleted = false;
             sectionCompleted = false;
-            courseCompleted = false;
           }
 
           problemStatuses.add(problemStatus);
@@ -153,7 +146,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     required User user,
     required Course course,
     required ProblemMetadata problemMetadata,
-    required LessonSchedule lessonSchedule,
     bool problemBlocked = false,
     bool withSubmissions = false,
   }) async {
@@ -187,13 +179,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       SolutionStatus.CODE_REVIEW_REJECTED,
       SolutionStatus.SUMMON_FOR_DEFENCE,
     ];
+    Submission? finalSubmission;
     List<Submission> submissions = [];
     var problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
     var gradingStatus = SubmissionGradingStatus.processed;
     final maxProblemScore = (problemMetadata.fullScoreMultiplier * 100).round();
     bool completed = false;
     int scoreGot = 0;
-    int submitted = 0;
     for (List<dynamic> fields in rows) {
       int id = fields[0];
       final status = SolutionStatus.valueOf(fields[1])!;
@@ -201,9 +193,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       gradingStatus = SubmissionGradingStatus.valueOf(fields[3])!;
       if (finalStatuses.contains(status)) {
         problemStatus = status;
-        if (submitted == 0) {
-          submitted = datetime.millisecondsSinceEpoch ~/ 1000;
-        }
+        finalSubmission = Submission(
+          id: Int64(id),
+          course: course,
+          problemId: problemMetadata.id,
+          user: user,
+          datetime: Int64(datetime.millisecondsSinceEpoch ~/ 1000),
+        );
       }
       if (status == SolutionStatus.OK) {
         scoreGot = maxProblemScore;
@@ -224,14 +220,26 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
     int deadlinePenalty = 0;
     bool hardDeadlinePassed = false;
+    int softDeadline = 0;
+    int hardDeadline = 0;
 
-    if (submitted > 0 && lessonSchedule.datetime > 0) {
-      deadlinePenalty = problemMetadata.deadlines.softDeadlinePenalty(lessonSchedule, submitted);
-      hardDeadlinePassed = problemMetadata.deadlines.hardDeadlinePassed(lessonSchedule, submitted);
-      if (hardDeadlinePassed) {
-        deadlinePenalty = maxProblemScore;
+    if (finalSubmission != null) {
+      softDeadline = await parent.deadlinesManager.softDeadline(finalSubmission);
+      hardDeadline = await parent.deadlinesManager.hardDeadline(finalSubmission);
+    }
+
+    if (softDeadline > 0) {
+      int secondsOverdue = finalSubmission!.datetime.toInt() - softDeadline;
+      int hoursOverdue = secondsOverdue ~/ 60 ~/ 60;
+      deadlinePenalty = hoursOverdue * problemMetadata.deadlines.softPenalty;
+      if (deadlinePenalty < 0) {
+        deadlinePenalty = 0;
       }
       scoreGot -= deadlinePenalty;
+    }
+
+    if (hardDeadline > 0) {
+      hardDeadlinePassed = finalSubmission!.datetime.toInt() > hardDeadline;
     }
 
     if (scoreGot < 0) {
@@ -248,7 +256,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       scoreGot: scoreGot,
       finalSolutionStatus: hardDeadlinePassed? SolutionStatus.HARD_DEADLINE_PASSED : problemStatus,
       finalGradingStatus: gradingStatus,
-      submitted: Int64(submitted),
+      submitted: finalSubmission==null? Int64() : finalSubmission.datetime,
       submissionCountLimit: countLimit,
       submissions: submissions,
       deadlinePenaltyTotal: deadlinePenalty,
@@ -349,8 +357,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       select submissions.id, problem_id, datetime, status,
         users.first_name, users.last_name, users.mid_name,
         users.group_name, grading_status
-      from submissions, users
-      where users_id=users.id 
+      from submissions, users, submission_deadlines
+      where users_id=users.id and submissions.id=submission_deadlines.submissions_id 
       ''';
     String queryEnd = ' order by datetime desc ';
     String queryFilter = '';
@@ -374,12 +382,18 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         queryValues['user_id'] = currentUser.id.toInt();
       }
       if (request.courseId > 0) {
-        queryFilter += ' and courses_id=@course_id ';
+        queryFilter += ' and submissions.courses_id=@course_id ';
         queryValues['course_id'] = request.courseId.toInt();
       }
       if (!{SolutionStatus.ANY_STATUS_OR_NULL, SolutionStatus.HARD_DEADLINE_PASSED}.contains(request.statusFilter)) {
         queryFilter += ' and status=@status ';
         queryValues['status'] = request.statusFilter.value;
+      }
+      if (request.statusFilter == SolutionStatus.HARD_DEADLINE_PASSED) {
+        queryFilter += ' and datetime>hard ';
+      }
+      else if (request.statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
+        queryFilter += ' and (hard<=\'1971-01-01\' or datetime<=hard) ';
       }
       if (request.problemIdFilter.isNotEmpty) {
         queryFilter += ' and problem_id=@problem_id ';
@@ -422,52 +436,36 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       String midName = row[6] is String? row[6] : '';
       String groupName = row[7] is String? row[7] : '';
       final gradingStatus = SubmissionGradingStatus.valueOf(row[8])!;
-      result.add(SubmissionListEntry(
-        submissionId: Int64(id),
+      final sender = User(
+        firstName: firstName,
+        lastName: lastName,
+        midName: midName,
+        groupName: groupName,
+      );
+      final submission = Submission(
+        id: Int64(id),
         problemId: problemId,
         datetime: Int64(dateTime.millisecondsSinceEpoch ~/ 1000),
         status: SolutionStatus.valueOf(status),
         gradingStatus: gradingStatus,
-        sender: User(
-          firstName: firstName,
-          lastName: lastName,
-          midName: midName,
-          groupName: groupName,
-        )
+        user: sender,
+      );
+      int hardDeadline = await parent.deadlinesManager.hardDeadline(submission);
+      bool hardDeadlinePassed = false;
+      if (hardDeadline > 0) {
+        hardDeadlinePassed = submission.datetime.toInt() > hardDeadline;
+      }
+      result.add(SubmissionListEntry(
+        submissionId: submission.id,
+        problemId: submission.problemId,
+        datetime: submission.datetime,
+        status: submission.status,
+        gradingStatus: submission.gradingStatus,
+        sender: submission.user,
+        hardDeadlinePassed: hardDeadlinePassed,
       ));
     }
 
-    // check for hard deadlines passed
-    Map<int, LessonScheduleSet> scheduleSets = {};
-    final course = await parent.courseManagementService.getCourseInfo(request.courseId);
-    final courseData = parent.courseManagementService.getCourseData(course.dataId);
-    for (final entry in result) {
-      final submissionSender = entry.sender;
-      final schedulesKey = submissionSender.id.toInt();
-      LessonScheduleSet scheduleSet;
-      if (!scheduleSets.containsKey(schedulesKey)) {
-        final scheduleRequest = LessonScheduleRequest(course: course, user: submissionSender);
-        scheduleSet = await parent.courseManagementService.getLessonSchedules(call, scheduleRequest);
-        scheduleSets[schedulesKey] = scheduleSet;
-      }
-      else {
-        scheduleSet = scheduleSets[schedulesKey]!;
-      }
-      final lesson = courseData.findEnclosingLessonForProblem(entry.problemId);
-      final lessonSchedule = scheduleSet.findByLesson(lesson.id);
-      final problemMetadata = courseData.findProblemMetadataById(entry.problemId);
-      final deadlines = problemMetadata.deadlines;
-      if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
-        bool deadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, entry.datetime.toInt());
-        entry.hardDeadlinePassed = deadlinePassed;
-      }
-    }
-    if (request.statusFilter == SolutionStatus.HARD_DEADLINE_PASSED) {
-      result.removeWhere((element) => element.hardDeadlinePassed == false);
-    }
-    else if (request.statusFilter != SolutionStatus.ANY_STATUS_OR_NULL) {
-      result.removeWhere((element) => element.hardDeadlinePassed == true);
-    }
     return SubmissionListResponse(entries: result);
   }
 
@@ -591,7 +589,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       }
     }
 
-    return Submission(
+    final submission = Submission(
       id: Int64(submissionId),
       user: User(id: Int64(userId)),
       datetime: Int64(dateTime.millisecondsSinceEpoch ~/ 1000),
@@ -604,6 +602,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       buildErrorLog: compileErrorLog,
       course: request.course,
     );
+
+    return parent.deadlinesManager.updateSubmissionWithDeadlines(submission);
   }
 
   Future<List<TestResult>> getSubmissionTestResults(SolutionStatus solutionStatus, int submissionId) async {
@@ -711,6 +711,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     );
     int submissionId = submissionsRows[0][0];
     request.updateId(submissionId);
+    await parent.deadlinesManager.insertNewSubmission(request);
     for (File file in request.solutionFiles.files) {
       await connection.query(
         '''
@@ -781,7 +782,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     request = request.deepCopy();
     request.gradingStatus = SubmissionGradingStatus.processed;
-    bool hardDeadlinePassed = false;
     if (request.status == SolutionStatus.OK) {
       final course = await parent.courseManagementService.getCourseInfo(request.course.id);
       final problemId = request.problemId;
@@ -806,17 +806,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
             request.status = oldStatus;
           }
         }
-      }
-      final courseData = parent.courseManagementService.getCourseData(course.dataId);
-      final lesson = courseData.findEnclosingLessonForProblem(problemId);
-      final sender = await parent.userManagementService.getUserById(request.user.id);
-      final scheduleSet = await parent.courseManagementService.getLessonSchedules(
-          call, LessonScheduleRequest(course: course, user: sender)
-      );
-      final lessonSchedule = scheduleSet.findByLesson(lesson.id);
-      final deadlines = problemMetadata.deadlines;
-      if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
-        hardDeadlinePassed = deadlines.hardDeadlinePassed(lessonSchedule, request.datetime.toInt());
       }
     }
     await connection.transaction((connection) async {
@@ -904,7 +893,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
     request.testResults.clear();
     request.testResults.addAll(testResults);
-    _notifySubmissionResultChanged(request, hardDeadlinePassed);
+    _notifySubmissionResultChanged(request);
     return request;
   }
 
@@ -948,7 +937,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         problemId: problemId,
         solutionFiles: FileSet(files: files),
       ));
-    };
+    }
     return result;
   }
 
@@ -1121,21 +1110,18 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   Future<ProblemStatus> checkProblemStatus(ServiceCall call, ProblemStatusRequest request) async {
     final courseData = parent.courseManagementService.getCourseData(request.course.dataId);
     final problemMetadata = courseData.findProblemMetadataById(request.problemId);
-    final lesson = courseData.findEnclosingLessonForProblem(request.problemId);
-    final scheduleRequest = LessonScheduleRequest(course: request.course, user: request.user);
-    final scheduleSet = await parent.courseManagementService.getLessonSchedules(call, scheduleRequest);
-    final lessonSchedule = scheduleSet.findByLesson(lesson.id);
     final futureProblemStatus = _getProblemStatus(
       user: request.user,
       course: request.course,
       problemMetadata: problemMetadata,
       withSubmissions: true,
-      lessonSchedule: lessonSchedule,
     );
     return futureProblemStatus;
   }
 
-  void _notifySubmissionResultChanged(Submission submission, [bool hardDeadlinePassed = false]) {
+  void _notifySubmissionResultChanged(Submission submission) async {
+
+    submission = await parent.deadlinesManager.updateSubmissionWithDeadlines(submission);
 
     // controllers related to problem views
     final key = '${submission.id}';
@@ -1159,6 +1145,10 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
     for (final controller in listViews) {
       final listEntry = submission.asSubmissionListEntry();
+      bool hardDeadlinePassed = false;
+      if (submission.hardDeadline > 0) {
+        hardDeadlinePassed = submission.hardDeadline < submission.datetime;
+      }
       listEntry.hardDeadlinePassed = hardDeadlinePassed;
       controller.add(listEntry);
     }
@@ -1198,16 +1188,11 @@ values (@submissions_id,@test_number,@stdout,@stderr,
 
     final courseData = parent.courseManagementService.getCourseData(course.dataId);
     final problemMetadata = courseData.findProblemMetadataById(problemId);
-    final lesson = courseData.findEnclosingLessonForProblem(problemId);
-    final scheduleRequest = LessonScheduleRequest(course: course, user: user);
-    final scheduleSet = await parent.courseManagementService.getLessonSchedules(null, scheduleRequest);
-    final lessonSchedule = scheduleSet.findByLesson(lesson.id);
     final problemStatus = await _getProblemStatus(
       user: user,
       course: course,
       problemMetadata: problemMetadata,
       withSubmissions: withSubmissions,
-      lessonSchedule: lessonSchedule,
     );
 
     for (final controller in problemControllers) {
@@ -1317,8 +1302,8 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   }
 
   @override
-  Stream<Submission> subscribeToSubmissionResultNotifications(ServiceCall call, Submission submission) {
-    final key = '${submission.id}';
+  Stream<Submission> subscribeToSubmissionResultNotifications(ServiceCall call, Submission request) {
+    final key = '${request.id}';
     StreamController<Submission> controller = StreamController<Submission>();
     controller.onCancel = () {
       log.info('removing controller from submission status listeners with key $key');

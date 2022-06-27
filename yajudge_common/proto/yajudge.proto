@@ -311,6 +311,10 @@ message Submission {
   repeated TestResult test_results  = 13;
 
   SubmissionGradingStatus grading_status = 100;
+
+  // not to be stored directly in database
+  int64               soft_deadline = 300;
+  int64               hard_deadline = 301;
 }
 
 message Solution {

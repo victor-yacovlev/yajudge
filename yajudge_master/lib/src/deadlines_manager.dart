@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:postgres/postgres.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'master_service.dart';
 
@@ -162,6 +163,36 @@ class DeadlinesManager {
     });
   }
 
+  Future insertNewSubmission(Submission submission) async {
+    final user = submission.user;
+    final course = await parent.courseManagementService.getCourseInfo(submission.course.id);
+    final courseData = parent.courseManagementService.getCourseData(course.dataId);
+    final lesson = courseData.findEnclosingLessonForProblem(submission.problemId);
+    final deadlines = lesson.deadlines;
+    final request = LessonScheduleRequest(course: course, user: user);
+    final scheduleSet = await parent.courseManagementService.getLessonSchedules(null, request);
+    final lessonSchedule = scheduleSet.findByLesson(lesson.id);
+    int softDeadLine = 0;
+    int hardDeadLine = 0;
+    if (deadlines.softDeadline > 0 && lessonSchedule.datetime > 0) {
+      softDeadLine = deadlines.softDeadline + lessonSchedule.datetime.toInt();
+    }
+    if (deadlines.hardDeadline > 0 && lessonSchedule.datetime > 0) {
+      hardDeadLine = deadlines.hardDeadline + lessonSchedule.datetime.toInt();
+    }
+    await connection.execute('''
+      insert into submission_deadlines(submissions_id,hard,soft,courses_id)
+      values (@sid,@hard,@sift,@cid)
+      ''',
+      substitutionValues: {
+        'sid': submission.id.toInt(),
+        'cid': course.id.toInt(),
+        'hard': DateTime.fromMillisecondsSinceEpoch(hardDeadLine * 1000, isUtc: true),
+        'soft': DateTime.fromMillisecondsSinceEpoch(softDeadLine * 1000, isUtc: true),
+      }
+    );
+  }
+
   Future<int> hardDeadline(Submission submission) async {
     final rows = await connection.query(
       'select hard from submission_deadlines where submissions_id=@id',
@@ -186,6 +217,15 @@ class DeadlinesManager {
     final row = rows.single;
     final value = row.single as DateTime;
     return value.millisecondsSinceEpoch ~/ 1000;
+  }
+
+  Future<Submission> updateSubmissionWithDeadlines(Submission submission) async {
+    submission = submission.deepCopy();
+    int hard = await hardDeadline(submission);
+    int soft = await softDeadline(submission);
+    submission.hardDeadline = Int64(hard);
+    submission.softDeadline = Int64(soft);
+    return submission;
   }
 
 }
