@@ -1,3 +1,5 @@
+import 'package:protobuf/protobuf.dart';
+
 import '../../yajudge_common.dart';
 
 extension SubmissionListEntryExtension on SubmissionListEntry {
@@ -6,7 +8,57 @@ extension SubmissionListEntryExtension on SubmissionListEntry {
   }
 }
 
+extension SubmissionListResponseExtension on SubmissionListResponse {
+
+  SubmissionListResponse mergeWith(SubmissionListResponse other) {
+    if (!query.equals(other.query)) {
+      return other.deepCopy();
+    }
+    if (other.query.offset == 0) {
+      return other.deepCopy();
+    }
+    final newResponse = deepCopy();
+    newResponse.entries.addAll(other.entries);
+    newResponse.totalCount = other.totalCount;
+    return newResponse;
+  }
+
+  void updateEntry(SubmissionListEntry entry) {
+    bool found = false;
+    for (var entry in entries) {
+      if (entry.submissionId == entry.submissionId) {
+        entry.updateStatus(entry.status);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      entries.insert(0, entry);
+    }
+  }
+
+  bool get hasMoreItems {
+    return totalCount > entries.length;
+  }
+
+  bool get isEmpty {
+    return entries.isEmpty;
+  }
+
+}
+
 extension SubmissionListQueryExtension on SubmissionListQuery {
+
+  bool equals(SubmissionListQuery other) {
+    bool nameMatch = nameQuery.trim() == other.nameQuery.trim();
+    bool problemMatch = problemIdFilter.trim() == other.problemIdFilter.trim();
+    bool courseMatch = courseId == other.courseId;
+    bool submissionMatch = submissionId == other.submissionId;
+    bool statusMatch = statusFilter == other.statusFilter;
+    bool showMineMatch = showMineSubmissions == other.showMineSubmissions;
+    return nameMatch && problemMatch && courseMatch && submissionMatch && statusMatch && showMineMatch;
+  }
+
   bool match(Submission submission, User currentUser) {
     if (submissionId!=0 && submissionId==submission.id) {
       return true;

@@ -624,6 +624,8 @@ message SubmissionListEntry {
 
 message SubmissionListResponse {
   repeated SubmissionListEntry entries = 1;
+  int32     total_count = 2;
+  SubmissionListQuery query = 3;
 }
 
 message Empty {}

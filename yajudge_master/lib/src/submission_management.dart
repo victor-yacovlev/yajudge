@@ -353,7 +353,12 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   @override
   Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
-    String queryBegin = '''
+    String countQueryBegin = '''
+      select count(submissions.id)
+      from submissions, users, submission_deadlines
+      where users_id=users.id and submissions.id=submission_deadlines.submissions_id
+    ''';
+    String dataQueryBegin = '''
       select submissions.id, problem_id, datetime, status,
         users.first_name, users.last_name, users.mid_name,
         users.group_name, grading_status
@@ -423,10 +428,14 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         }
       }
     }
-    final query = queryBegin + queryFilter + queryEnd;
-    List<dynamic> queryRows = await connection.query(query, substitutionValues: queryValues);
+    final countQuery = countQueryBegin + queryFilter;
+    final dataQuery = dataQueryBegin + queryFilter + queryEnd;
+    final countQueryRows = await connection.query(countQuery, substitutionValues: queryValues);
+    final countRow = countQueryRows.single;
+    final countValue = countRow.single as int;
+    final dataQueryRows = await connection.query(dataQuery, substitutionValues: queryValues);
     List<SubmissionListEntry> result = [];
-    for (final row in queryRows) {
+    for (final row in dataQueryRows) {
       int id = row[0];
       String problemId = row[1];
       DateTime dateTime = row[2];
@@ -466,7 +475,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       ));
     }
 
-    return SubmissionListResponse(entries: result);
+    return SubmissionListResponse(
+      entries: result,
+      query: request,
+      totalCount: countValue,
+    );
   }
 
   Future<List<Submission>> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {

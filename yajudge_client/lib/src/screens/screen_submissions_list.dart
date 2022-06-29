@@ -12,6 +12,8 @@ import '../controllers/courses_controller.dart';
 import 'screen_base.dart';
 import 'screen_submission.dart';
 
+const itemCountLimit = 30;
+
 class SubmissionsListScreen extends BaseScreen {
 
   final String courseUrlPrefix;
@@ -45,7 +47,7 @@ class SubmissionsListScreenState extends BaseScreenState {
   CourseData _courseData = CourseData();
   List<Tuple2<String,String>> _courseProblems = [];
   final _nameEditController = TextEditingController();
-  List<SubmissionListEntry> _submissionEntries = [];
+  SubmissionListResponse _response = SubmissionListResponse();
   grpc.ResponseStream<SubmissionListEntry>? _statusStream;
 
   SubmissionsListScreenState({
@@ -96,17 +98,7 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _updateSubmissionInList(SubmissionListEntry event) {
     setState(() {
-      bool found = false;
-      for (var entry in _submissionEntries) {
-        if (entry.submissionId == event.submissionId) {
-          entry.updateStatus(event.status);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        _submissionEntries.insert(0, event);
-      }
+      _response.updateEntry(event);
     });
   }
 
@@ -234,12 +226,14 @@ class SubmissionsListScreenState extends BaseScreenState {
   void _sendListQuery(SubmissionListQuery query) {
     final submissionsService = ConnectionController.instance!.submissionsService;
     final futureList = submissionsService.getSubmissionList(query);
+    query.offset = _response.entries.length;
+    query.limit = itemCountLimit;
     futureList.then(_setSubmissionsList);
   }
 
   void _setSubmissionsList(SubmissionListResponse listResponse) {
     setState(() {
-      _submissionEntries = listResponse.entries;
+      _response = _response.mergeWith(listResponse);
     });
     _subscribeToNotifications();
   }
@@ -390,71 +384,54 @@ class SubmissionsListScreenState extends BaseScreenState {
     Navigator.push(context, routeBuilder).then((_) {reload();});
   }
 
-  @override
-  @protected
-  Widget buildCentralWidget(BuildContext context) {
-
+  Widget buildSubmissionsTable(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final narrow = screenWidth < NarrowWidthThereshold;
     final aboutNarrow = screenWidth < AboutNarrowWidthThereshold;
 
-    if (_courseData.id.isEmpty) {
-      return Center(child: Text('Загрузка данных...'));
-    }
-    String formatDateTime(Int64 timestamp) {
-      DateFormat formatter = DateFormat(aboutNarrow? 'MM/dd, HH:mm' : 'yyyy-MM-dd, HH:mm:ss');
-      DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt() * 1000);
-      return formatter.format(dateTime);
-    }
-    Widget searchBox = _createSearchBoxWidget(context);
-    Widget resultsView;
-    if (_submissionEntries.isEmpty) {
-      resultsView = Center(child: Text('Нет посылок'));
-    }
-    else {
-      List<TableRow> tableItems = [];
-      for (final entry in _submissionEntries) {
-        String id = '${entry.submissionId}';
-        String dateTime = formatDateTime(entry.datetime);
-        String name = '${entry.sender.lastName} ${entry.sender.firstName}';
-        if (!aboutNarrow) {
-          name += ' ${entry.sender.midName.trim()}';
+    List<TableRow> tableItems = [];
+    for (final entry in _response.entries) {
+      String id = '${entry.submissionId}';
+      String dateTime = formatDateTime(entry.datetime);
+      String name = '${entry.sender.lastName} ${entry.sender.firstName}';
+      if (!aboutNarrow) {
+        name += ' ${entry.sender.midName.trim()}';
+      }
+      String problemId = entry.problemId;
+      var solutionStatus = entry.status;
+      if (entry.hardDeadlinePassed) {
+        solutionStatus = SolutionStatus.HARD_DEADLINE_PASSED;
+      }
+      final gradingStatus = entry.gradingStatus;
+      String status = statusMessageText(solutionStatus, gradingStatus, '', narrow);
+      Color statusTextColor = statusMessageColor(context, solutionStatus);
+      if (const {SubmissionGradingStatus.assigned, SubmissionGradingStatus.queued}.contains(gradingStatus)) {
+        statusTextColor = statusMessageColor(context, SolutionStatus.ANY_STATUS_OR_NULL);
+      }
+      TableCell makeClickableCellFromText(String text, [Color? color]) {
+        TextStyle textStyle = Theme.of(context).textTheme.bodyText1!;
+        if (narrow) {
+          textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
         }
-        String problemId = entry.problemId;
-        var solutionStatus = entry.status;
-        if (entry.hardDeadlinePassed) {
-          solutionStatus = SolutionStatus.HARD_DEADLINE_PASSED;
+        if (color != null) {
+          textStyle = textStyle.copyWith(color: color);
         }
-        final gradingStatus = entry.gradingStatus;
-        String status = statusMessageText(solutionStatus, gradingStatus, '', narrow);
-        Color statusTextColor = statusMessageColor(context, solutionStatus);
-        if (const {SubmissionGradingStatus.assigned, SubmissionGradingStatus.queued}.contains(gradingStatus)) {
-          statusTextColor = statusMessageColor(context, SolutionStatus.ANY_STATUS_OR_NULL);
-        }
-        TableCell makeClickableCellFromText(String text, [Color? color]) {
-          TextStyle textStyle = Theme.of(context).textTheme.bodyText1!;
-          if (narrow) {
-            textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
-          }
-          if (color != null) {
-            textStyle = textStyle.copyWith(color: color);
-          }
-          return TableCell(
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  child: Container(
-                    height: 32,
-                    padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
-                    alignment: Alignment.centerLeft,
-                    child: Text(text, style: textStyle),
-                  ),
-                  onTap: () => _navigateToSubmission(entry.submissionId, entry.problemId),
+        return TableCell(
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                child: Container(
+                  height: 32,
+                  padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
+                  alignment: Alignment.centerLeft,
+                  child: Text(text, style: textStyle),
                 ),
-              )
-          );
-        }
-        final tableRow = TableRow(
+                onTap: () => _navigateToSubmission(entry.submissionId, entry.problemId),
+              ),
+            )
+        );
+      }
+      final tableRow = TableRow(
           children: [
             makeClickableCellFromText(id),
             makeClickableCellFromText(dateTime),
@@ -462,27 +439,27 @@ class SubmissionsListScreenState extends BaseScreenState {
             makeClickableCellFromText(problemId),
             makeClickableCellFromText(status, statusTextColor),
           ]
-        );
-        tableItems.add(tableRow);
-      }
-      BorderSide borderSide = BorderSide(
-          color: Theme.of(context).colorScheme.secondary.withAlpha(50)
       );
-      TableCell makeSimpleCellFromText(String text) {
-        TextStyle textStyle = Theme.of(context).textTheme.bodyText1!.copyWith(fontWeight: FontWeight.bold);
-        if (narrow) {
-          textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
-        }
-        return TableCell(
-            child: Container(
-              height: 32,
-              padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
-              alignment: Alignment.centerLeft,
-              child: Text(text, style: textStyle),
-            )
-        );
+      tableItems.add(tableRow);
+    }
+    BorderSide borderSide = BorderSide(
+        color: Theme.of(context).colorScheme.secondary.withAlpha(50)
+    );
+    TableCell makeSimpleCellFromText(String text) {
+      TextStyle textStyle = Theme.of(context).textTheme.bodyText1!.copyWith(fontWeight: FontWeight.bold);
+      if (narrow) {
+        textStyle = textStyle.copyWith(fontSize: textStyle.fontSize! - 2);
       }
-      final headerRow = TableRow(
+      return TableCell(
+          child: Container(
+            height: 32,
+            padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
+            alignment: Alignment.centerLeft,
+            child: Text(text, style: textStyle),
+          )
+      );
+    }
+    final headerRow = TableRow(
         decoration: BoxDecoration(
           color: Theme.of(context).secondaryHeaderColor,
         ),
@@ -493,35 +470,74 @@ class SubmissionsListScreenState extends BaseScreenState {
           makeSimpleCellFromText('ID задачи'),
           makeSimpleCellFromText(narrow? 'Статус' : 'Статус выполнения'),
         ]
-      );
-      final table = Table(
-        border: TableBorder(
+    );
+    final table = Table(
+      border: TableBorder(
           horizontalInside: borderSide,
           top: borderSide,
           bottom: borderSide,
           left: borderSide,
           right: borderSide
-        ),
-        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-        columnWidths: {
-          0: FixedColumnWidth(narrow? 35 : 50),
-          1: FixedColumnWidth(narrow? 80 : (aboutNarrow? 100 : 180)),
-          2: FlexColumnWidth(),
-          3: FixedColumnWidth(narrow? 180 : 230),
-          4: FixedColumnWidth(narrow? 50 : 180),
-        },
-        children: [headerRow] + tableItems,
-      );
-      double availableHeight = MediaQuery.of(context).size.height - 258;
-      resultsView = Container(
-        constraints: BoxConstraints(
+      ),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      columnWidths: {
+        0: FixedColumnWidth(narrow? 35 : 50),
+        1: FixedColumnWidth(narrow? 80 : (aboutNarrow? 100 : 180)),
+        2: FlexColumnWidth(),
+        3: FixedColumnWidth(narrow? 180 : 230),
+        4: FixedColumnWidth(narrow? 50 : 180),
+      },
+      children: [headerRow] + tableItems,
+    );
+    double availableHeight = MediaQuery.of(context).size.height - 258;
+    bool hasMoreItems = _response.hasMoreItems;
+    final tableWithLoadMoreItems = Column(
+      children: hasMoreItems ? [
+        table,
+        TextButton(onPressed: _loadMoreItems, child: Text('Загрузить еще')),
+      ] : [table],
+    );
+    return Container(
+      constraints: BoxConstraints(
           maxHeight: availableHeight
-        ),
-        child: SingleChildScrollView(
-          child: table,
-        ),
-        padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
-      );
+      ),
+      child: SingleChildScrollView(
+        child: tableWithLoadMoreItems,
+      ),
+      padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
+    );
+  }
+
+  void _loadMoreItems() {
+    _sendListQuery(query);
+  }
+
+  String formatDateTime(Int64 timestamp) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final aboutNarrow = screenWidth < AboutNarrowWidthThereshold;
+
+    DateFormat formatter = DateFormat(aboutNarrow? 'MM/dd, HH:mm' : 'yyyy-MM-dd, HH:mm:ss');
+    DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt() * 1000);
+    return formatter.format(dateTime);
+  }
+
+  @override
+  @protected
+  Widget buildCentralWidget(BuildContext context) {
+
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    if (_courseData.id.isEmpty) {
+      return Center(child: Text('Загрузка данных...'));
+    }
+
+    Widget searchBox = _createSearchBoxWidget(context);
+    Widget resultsView;
+    if (_response.isEmpty) {
+      resultsView = Center(child: Text('Нет посылок'));
+    }
+    else {
+      resultsView = buildSubmissionsTable(context);
     }
     return Column(children: [ SizedBox(height: 8), searchBox, SizedBox(height: 8), resultsView ]);
   }
