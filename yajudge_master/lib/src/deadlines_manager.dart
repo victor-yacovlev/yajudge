@@ -203,6 +203,10 @@ class DeadlinesManager {
     }
     final row = rows.single;
     final value = row.single as DateTime;
+    if (value.isBefore(DateTime(2021))) {
+      // 2021 is birth year of YaJudge
+      return 0; // invalid deadline
+    }
     return value.millisecondsSinceEpoch ~/ 1000;
   }
 
@@ -216,6 +220,10 @@ class DeadlinesManager {
     }
     final row = rows.single;
     final value = row.single as DateTime;
+    if (value.isBefore(DateTime(2021))) {
+      // 2021 is birth year of YaJudge
+      return 0; // invalid deadline
+    }
     return value.millisecondsSinceEpoch ~/ 1000;
   }
 
