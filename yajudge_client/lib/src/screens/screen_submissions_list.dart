@@ -170,6 +170,8 @@ class SubmissionsListScreenState extends BaseScreenState {
       FocusManager.instance.primaryFocus?.unfocus();
     });
     if (changed) {
+      query.offset = 0;
+      query.limit = itemCountLimit;
       _sendListQuery(query);
     }
   }
@@ -182,6 +184,8 @@ class SubmissionsListScreenState extends BaseScreenState {
       FocusManager.instance.primaryFocus?.unfocus();
     });
     if (changed) {
+      query.offset = 0;
+      query.limit = itemCountLimit;
       _sendListQuery(query);
     }
   }
@@ -190,6 +194,8 @@ class SubmissionsListScreenState extends BaseScreenState {
     value ??= false;
     setState(() {
       query.showMineSubmissions = value!;
+      query.offset = 0;
+      query.limit = itemCountLimit;
     });
     _sendListQuery(query);
   }
@@ -211,11 +217,15 @@ class SubmissionsListScreenState extends BaseScreenState {
         query.submissionId = Int64(submissionId);
         query.nameQuery = '';
       }
+      query.limit = itemCountLimit;
+      query.offset = 0;
     });
     _sendListQuery(query);
   }
 
   void reload() {
+    query.offset = 0;
+    query.limit = itemCountLimit;
     _sendListQuery(query);
   }
 
