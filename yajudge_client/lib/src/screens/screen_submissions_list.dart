@@ -12,7 +12,7 @@ import '../controllers/courses_controller.dart';
 import 'screen_base.dart';
 import 'screen_submission.dart';
 
-const itemCountLimit = 30;
+const itemCountLimit = 100;
 
 class SubmissionsListScreen extends BaseScreen {
 
@@ -196,8 +196,8 @@ class SubmissionsListScreenState extends BaseScreenState {
       query.showMineSubmissions = value!;
       query.offset = 0;
       query.limit = itemCountLimit;
+      _sendListQuery(query);
     });
-    _sendListQuery(query);
   }
 
   void _processSearch(String? userName) {
@@ -232,9 +232,12 @@ class SubmissionsListScreenState extends BaseScreenState {
   void _sendListQuery(SubmissionListQuery query) {
     final submissionsService = ConnectionController.instance!.submissionsService;
     final futureList = submissionsService.getSubmissionList(query);
-    query.offset = _response.entries.length;
-    query.limit = itemCountLimit;
     futureList.then(_setSubmissionsList);
+    futureList.onError((error, stackTrace) {
+      String message = 'getSubmissionList: $error \n $stackTrace';
+      log.severe(message);
+      return SubmissionListResponse();
+    });
   }
 
   void _setSubmissionsList(SubmissionListResponse listResponse) {
@@ -515,7 +518,11 @@ class SubmissionsListScreenState extends BaseScreenState {
   }
 
   void _loadMoreItems() {
-    _sendListQuery(query);
+    setState(() {
+      query.limit = itemCountLimit;
+      query.offset = _response.entries.length;
+      _sendListQuery(query);
+    });
   }
 
   String formatDateTime(Int64 timestamp) {
