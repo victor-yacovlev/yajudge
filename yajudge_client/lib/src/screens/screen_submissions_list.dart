@@ -200,23 +200,19 @@ class SubmissionsListScreenState extends BaseScreenState {
         userName = _nameEditController.text.trim();
       }
     }
-    SubmissionListQuery newQuery = query.copyWith((s) {
-      if (userName != null) {
-        s.nameQuery = userName.trim();
-      }
-      s.submissionId = Int64(0);
-    });
-    int? submissionId = int.tryParse(newQuery.nameQuery);
-    if (submissionId != null && submissionId > 0) {
-      newQuery = newQuery.copyWith((s) {
-        s.submissionId = Int64(submissionId);
-        s.nameQuery = '';
-      });
-    }
     setState(() {
-      query = newQuery.deepCopy();
+      query = query.deepCopy();
+      if (userName != null) {
+        query.nameQuery = userName.trim();
+      }
+      query.submissionId = Int64(0);
+      int? submissionId = int.tryParse(query.nameQuery);
+      if (submissionId != null && submissionId > 0) {
+        query.submissionId = Int64(submissionId);
+        query.nameQuery = '';
+      }
     });
-    _sendListQuery(newQuery);
+    _sendListQuery(query);
   }
 
   void reload() {
