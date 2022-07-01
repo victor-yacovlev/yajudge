@@ -34,8 +34,8 @@ class SubmissionsListScreen extends BaseScreen {
   }
 }
 
-const AboutNarrowWidthThereshold = 850;
-const NarrowWidthThereshold = 685;
+const aboutNarrowWidthThreshold = 850;
+const narrowWidthThreshold = 685;
 
 
 class SubmissionsListScreenState extends BaseScreenState {
@@ -262,7 +262,14 @@ class SubmissionsListScreenState extends BaseScreenState {
       menuItems.add(DropdownMenuItem<String>(child: itemText, value: itemValue));
     }
     String currentValue = query.problemIdFilter;
-    if (!_courseProblems.contains(currentValue)) {
+    bool isValid = false;
+    for (final pair in _courseProblems) {
+      if (pair.item1 == currentValue) {
+        isValid = true;
+        break;
+      }
+    }
+    if (!isValid) {
       currentValue = '';
     }
     return Container(
@@ -395,8 +402,8 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   Widget buildSubmissionsTable(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final narrow = screenWidth < NarrowWidthThereshold;
-    final aboutNarrow = screenWidth < AboutNarrowWidthThereshold;
+    final narrow = screenWidth < narrowWidthThreshold;
+    final aboutNarrow = screenWidth < aboutNarrowWidthThreshold;
 
     List<TableRow> tableItems = [];
     for (final entry in _response.entries) {
@@ -527,7 +534,7 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   String formatDateTime(Int64 timestamp) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final aboutNarrow = screenWidth < AboutNarrowWidthThereshold;
+    final aboutNarrow = screenWidth < aboutNarrowWidthThreshold;
 
     DateFormat formatter = DateFormat(aboutNarrow? 'MM/dd, HH:mm' : 'yyyy-MM-dd, HH:mm:ss');
     DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp.toInt() * 1000);
@@ -537,8 +544,6 @@ class SubmissionsListScreenState extends BaseScreenState {
   @override
   @protected
   Widget buildCentralWidget(BuildContext context) {
-
-    final screenWidth = MediaQuery.of(context).size.width;
 
     if (_courseData.id.isEmpty) {
       return Center(child: Text('Загрузка данных...'));
