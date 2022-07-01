@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:args/args.dart';
 import 'package:logging/logging.dart';
+import 'package:mongo_dart/mongo_dart.dart';
 import 'dart:io' as io;
 import 'package:yajudge_common/yajudge_common.dart';
-import 'src/grpc_web_proxy.dart';
 import 'src/master_service.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yaml/yaml.dart';
@@ -128,10 +128,34 @@ Future<void> main(List<String> arguments) async {
     });
   });
 
-  AbstractGrpcWebProxyService? grpcWebProxyService;
-  if (config['web_rpc'] is YamlMap) {
-    final webRpcProperties = WebRpcProperties.fromYamlConfig(config['web_rpc']);
-    grpcWebProxyService = AbstractGrpcWebProxyService.create(webRpcProperties: webRpcProperties, rpcProperties: rpcProperties);
+  final bigDataStorageYaml = config['big_data_storage'];
+  Db? bigDataStorage;
+  if (bigDataStorageYaml is YamlMap) {
+    DatabaseProperties storageProperties;
+    try {
+      storageProperties = DatabaseProperties.fromYamlConfig(bigDataStorageYaml);
+    }
+    catch (e) {
+      final message = 'Cant get big_data_storage properties from config: $e';
+      print(message);
+      Logger.root.shout(message);
+      io.exit(1);
+    }
+    final uri =
+        'mongodb://'
+        '${storageProperties.user}:${storageProperties.password}'
+        '@${storageProperties.host}:${storageProperties.port}'
+        '/${storageProperties.dbName}'
+    ;
+    bigDataStorage = Db(uri);
+    try {
+      await bigDataStorage.open();
+    }
+    catch (error) {
+      final message = 'Fatal error: no connection to Mongo database: $error';
+      Logger.root.shout(message);
+      io.exit(1);
+    }
   }
 
   futureConnectionOpen.then((_) async {
@@ -140,10 +164,10 @@ Future<void> main(List<String> arguments) async {
     try {
       final masterService = MasterService(
         connection: postgreSQLConnection,
+        storageDb: bigDataStorage,
         rpcProperties: rpcProperties,
         locationProperties: locationProperties,
         demoModeProperties: demoModeProperties,
-        grpcWebProxyService: grpcWebProxyService,
       );
       ArgResults? command = parsedArguments.command;
       bool initDbMode = command!=null && command.name=='initialize-database';

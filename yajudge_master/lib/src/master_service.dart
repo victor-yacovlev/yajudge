@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
+import 'package:mongo_dart/mongo_dart.dart';
 import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart';
@@ -13,7 +14,6 @@ import 'deadlines_manager.dart';
 import 'submission_management.dart';
 import 'user_management.dart';
 import 'enrollment_management.dart';
-import 'grpc_web_proxy.dart';
 import 'code_review_management.dart';
 
 const notLoggedMethods = ['StartSession', 'Authorize'];
@@ -39,6 +39,7 @@ class MasterService {
   final Logger log = Logger('MasterService');
   int _errorsLastMinute = 0;
   final PostgreSQLConnection connection;
+  final Db? storageDb;
   final RpcProperties rpcProperties;
   final MasterLocationProperties locationProperties;
   late final UserManagementService userManagementService;
@@ -50,14 +51,13 @@ class MasterService {
 
   late final Server grpcServer;
   final DemoModeProperties? demoModeProperties;
-  final AbstractGrpcWebProxyService? grpcWebProxyService;
 
   MasterService({
     required this.connection,
+    this.storageDb,
     required this.rpcProperties,
     required this.locationProperties,
     this.demoModeProperties,
-    this.grpcWebProxyService,
   })
   {
     userManagementService = UserManagementService(parent: this, connection: connection);
@@ -74,16 +74,17 @@ class MasterService {
       locationProperties: locationProperties,
     );
     submissionManagementService = SubmissionManagementService(
-        parent: this,
-        connection: connection,
+      parent: this,
+      connection: connection,
+      storageDb: storageDb,
     );
     enrollmentManagementService = EnrollmentManagementService(
-        parent: this,
-        connection: connection,
+      parent: this,
+      connection: connection,
     );
     codeReviewManagementService = CodeReviewManagementService(
-        parent: this,
-        connection: connection,
+      parent: this,
+      connection: connection,
     );
     grpcServer = Server(
         [
@@ -97,7 +98,6 @@ class MasterService {
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
     deadlinesManager.start();
-    grpcWebProxyService?.start();
   }
 
   FutureOr<GrpcError?> checkAuth(ServiceCall call, ServiceMethod method) async {
@@ -175,7 +175,6 @@ class MasterService {
 
   void shutdown(String reason, [bool error = false]) async {
     log.info('shutting down due to $reason');
-    grpcWebProxyService?.stop();
     grpcServer.shutdown();
     io.sleep(Duration(seconds: 2));
     log.info('shutdown');

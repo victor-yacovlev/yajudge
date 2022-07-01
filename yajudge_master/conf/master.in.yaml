@@ -11,6 +11,16 @@ database:
   # database password must be stored in separate file not readable by most users
   password_file: '@CONFIGURATION_DIRECTORY/database-password.txt'
 
+#big_data_storage:
+#  # Dedicated MongoDB to store submission results, will fall back into database table if disabled.
+#  # Remove or comment this section to disable dedicated storage
+#  # Uncomment this section to enable
+#  host: localhost
+#  port: 27017
+#  name: yajudge
+#  user: yajudge
+#  password_file: '@CONFIGURATION_DIRECTORY/big-data-storage-password.txt'
+
 rpc:
   host: any
   port: 9095

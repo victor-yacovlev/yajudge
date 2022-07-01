@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
+import 'package:mongo_dart/mongo_dart.dart';
 import 'package:postgres/postgres.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
@@ -21,6 +24,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   final Logger log = Logger('SubmissionManager');
   final PostgreSQLConnection connection;
+  final Db? storageDb;
   final MasterService parent;
 
   final Map<String,List<StreamController<ProblemStatus>>> _problemStatusStreamControllers = {};
@@ -34,6 +38,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   SubmissionManagementService({
     required this.parent,
     required this.connection,
+    this.storageDb,
   })
   {
     Timer.periodic(Duration(seconds: 2), (_) { processSubmissionsQueue(); });
@@ -592,7 +597,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       SolutionStatus.WRONG_ANSWER,
     ];
     if (brokenStatuses.contains(status)) {
-      final allTestResults = await getSubmissionTestResults(status, submissionId);
+      final allTestResults = await getSubmissionTestResults(status, request);
       // find first broken test and send it only to save network traffic
       for (final test in allTestResults) {
         if (test.status == status) {
@@ -619,18 +624,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return parent.deadlinesManager.updateSubmissionWithDeadlines(submission);
   }
 
-  Future<List<TestResult>> getSubmissionTestResults(SolutionStatus solutionStatus, int submissionId) async {
-    final haveTestsStatuses = [
-      SolutionStatus.OK,
-      SolutionStatus.WRONG_ANSWER,
-      SolutionStatus.RUNTIME_ERROR,
-      SolutionStatus.VALGRIND_ERRORS,
-      SolutionStatus.TIME_LIMIT,
-    ];
-    if (!haveTestsStatuses.contains(solutionStatus)) {
-      return [];
-    }
-    String query =
+  Future<List<TestResult>> getSubmissionResultsFromSQL(Submission submission) async {
+    final query =
     '''
     select test_number, stdout, stderr, standard_match, signal_killed, 
       valgrind_errors, valgrind_output, killed_by_timer, checker_output,
@@ -639,7 +634,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     where submissions_id=@id 
       ''';
     final testResultsRows = await connection.query(query, substitutionValues: {
-      'id': submissionId,
+      'id': submission.id.toInt(),
     });
     List<TestResult> results = [];
     for (final row in testResultsRows) {
@@ -669,6 +664,46 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       ));
     }
     return results;
+  }
+  Future<List<TestResult>> getSubmissionResultsFromMongo(Submission submission) async {
+    final collection = storageDb!.collection('submissionResults');
+    final stream = collection.find(where.eq('_id', submission.id.toInt()));
+    final documents = await stream.toList();
+    List<TestResult> results = [];
+    for (final doc in documents) {
+      if (doc.containsKey('testResults')) {
+        final testResultsObjects = doc['testResults'] as Iterable;
+        final testResults = testResultsObjects.map((e) => TestResultExtension.fromMap(e));
+        results.addAll(testResults);
+      }
+    }
+    return results;
+  }
+
+  Future<List<TestResult>> getSubmissionTestResults(SolutionStatus solutionStatus, Submission submission) async {
+    final haveTestsStatuses = [
+      SolutionStatus.OK,
+      SolutionStatus.WRONG_ANSWER,
+      SolutionStatus.RUNTIME_ERROR,
+      SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.TIME_LIMIT,
+    ];
+    if (!haveTestsStatuses.contains(solutionStatus)) {
+      return [];
+    }
+    if (storageDb == null) {
+      return getSubmissionResultsFromSQL(submission);
+    }
+    else {
+      final mongoResults = await getSubmissionResultsFromMongo(submission);
+      if (mongoResults.isEmpty) {
+        // MongoDB might be attached later while PostgreSQL database became too big
+        return getSubmissionResultsFromSQL(submission);
+      }
+      else {
+        return mongoResults;
+      }
+    }
   }
 
   @override
@@ -790,11 +825,88 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return request;
   }
 
+  Future insertSubmissionResultsIntoMongo(Submission submission) async {
+    final collection = storageDb!.collection('submissionResults');
+    final bsonEntries = submission.testResults.map((e) => e.toBson()).toList();
+    final testResults = BsonArray(bsonEntries);
+    final mongoDocument = {
+      '_id': submission.id.toInt(),
+      'testResults': testResults,
+    };
+    try {
+      await collection.insert(mongoDocument);
+    }
+    catch (error) {
+      log.severe('cant insert data into MongoDB: $error');
+    }
+  }
+  
+  Future insertSubmissionResultsIntoSQL(Submission submission) async {
+    for (TestResult test in submission.testResults) {
+      await connection.query(
+          '''
+insert into submission_results(
+                               submissions_id,
+                               test_number,
+                               stdout,
+                               stderr,
+                               status,
+                               exit_status,
+                               standard_match,
+                               killed_by_timer,
+                               signal_killed,
+                               valgrind_errors,
+                               valgrind_output,
+                               checker_output
+)
+values (@submissions_id,@test_number,@stdout,@stderr,
+        @status,@exit_status,@standard_match,@killed_by_timer,
+        @signal_killed,
+        @valgrind_errors,@valgrind_output,
+        @checker_output)          
+          ''',
+          substitutionValues: {
+            'submissions_id': submission.id.toInt(),
+            'test_number': test.testNumber,
+            'stdout': test.stdout,
+            'stderr': test.stderr,
+            'status': test.status.value,
+            'exit_status': test.exitStatus,
+            'standard_match': test.standardMatch,
+            'killed_by_timer': test.killedByTimer,
+            'signal_killed': test.signalKilled,
+            'valgrind_errors': test.valgrindErrors,
+            'valgrind_output': test.valgrindOutput,
+            'checker_output': test.checkerOutput,
+          }
+      );
+    }
+  }
+  
+  Future deleteSubmissionResultsFromSQL(Submission submission) async {
+    await connection.query(
+        ''' 
+        delete from submission_results where submissions_id=@id
+        ''',
+        substitutionValues: { 'id': submission.id.toInt() }
+    );
+  }
+
+  Future deleteSubmissionResultsFromMongo(Submission submission) async {
+    final collection = storageDb!.collection('submissionResults');
+    await collection.deleteMany(where.eq('_id', submission.id.toInt()));
+  }
+  
+
   @override
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     request = request.deepCopy();
     request.gradingStatus = SubmissionGradingStatus.processed;
+    final submissionResultsDeleter = storageDb==null?
+        deleteSubmissionResultsFromSQL : deleteSubmissionResultsFromMongo;
+    final submissionResultsInserter = storageDb==null?
+        insertSubmissionResultsIntoSQL : insertSubmissionResultsIntoMongo;
     if (request.status == SolutionStatus.OK) {
       final course = await parent.courseManagementService.getCourseInfo(request.course.id);
       final problemId = request.problemId;
@@ -840,54 +952,14 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           'grading_status': SubmissionGradingStatus.processed.value,
         }
       );
+
       // there might be older test results in case of rejudging submission
       // so delete them if exists
-      await connection.query(
-        ''' 
-        delete from submission_results where submissions_id=@id
-        ''',
-        substitutionValues: { 'id': request.id.toInt() }
-      );
+      await submissionResultsDeleter(request);
+
       // insert new test results
-      for (TestResult test in request.testResults) {
-        connection.query(
-          '''
-insert into submission_results(
-                               submissions_id,
-                               test_number,
-                               stdout,
-                               stderr,
-                               status,
-                               exit_status,
-                               standard_match,
-                               killed_by_timer,
-                               signal_killed,
-                               valgrind_errors,
-                               valgrind_output,
-                               checker_output
-)
-values (@submissions_id,@test_number,@stdout,@stderr,
-        @status,@exit_status,@standard_match,@killed_by_timer,
-        @signal_killed,
-        @valgrind_errors,@valgrind_output,
-        @checker_output)          
-          ''',
-          substitutionValues: {
-            'submissions_id': request.id.toInt(),
-            'test_number': test.testNumber,
-            'stdout': test.stdout,
-            'stderr': test.stderr,
-            'status': test.status.value,
-            'exit_status': test.exitStatus,
-            'standard_match': test.standardMatch,
-            'killed_by_timer': test.killedByTimer,
-            'signal_killed': test.signalKilled,
-            'valgrind_errors': test.valgrindErrors,
-            'valgrind_output': test.valgrindOutput,
-            'checker_output': test.checkerOutput,
-          }
-        );
-      }
+      await submissionResultsInserter(request);
+
     });
     _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
     // clean unnecessary test results
@@ -1239,12 +1311,10 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
 
     Future<void> rejudgeSubmission(Submission submission) async {
-      await connection.query(
-          'delete from submission_results where submissions_id=@id',
-          substitutionValues: {
-            'id': submission.id.toInt(),
-          }
-      );
+      final submissionResultsDeleter = storageDb==null?
+        deleteSubmissionResultsFromSQL : deleteSubmissionResultsFromMongo;
+      await submissionResultsDeleter(submission);
+
       await connection.query(
           'update submissions set grading_status=@new_status where id=@id',
           substitutionValues: {
