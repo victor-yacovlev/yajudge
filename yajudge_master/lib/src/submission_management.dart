@@ -1187,6 +1187,15 @@ values (@id,@data)
       }
       listEntry.hardDeadlinePassed = hardDeadlinePassed;
       controller.add(listEntry);
+      final id = listEntry.submissionId.toInt();
+      final status = listEntry.status.name;
+      final grading = listEntry.gradingStatus.name;
+      final logEntry = '{ id: $id, status: $status, grading: $grading }';
+      log.fine('sent list notification entry $logEntry');
+    }
+
+    if (listViews.isEmpty) {
+      log.fine('no list views subscribed to get updates on submission ${submission.id}');
     }
 
   }
@@ -1331,6 +1340,7 @@ values (@id,@data)
       }
     }
     final response = request.deepCopy();
+    response.submission = request.submission.deepCopy();
     response.submission.gradingStatus = SubmissionGradingStatus.queued;
     return response;
   }
@@ -1423,27 +1433,64 @@ values (@id,@data)
   }
 
   @override
-  Stream<SubmissionListEntry> subscribeToSubmissionListNotifications(ServiceCall call, SubmissionListNotificationsRequest request) {
+  Stream<SubmissionListEntry> subscribeToSubmissionListNotifications(ServiceCall call, SubmissionListNotificationsRequest request) async* {
     final key = call.session;
-    if (_submissionListListeners.containsKey(key)) {
-      _submissionListListeners[key]!.controller.close();
+
+    Future cancelExistingSubscription() async {
+      if (_submissionListListeners.containsKey(key)) {
+        final entry = _submissionListListeners[key]!;
+        _submissionListListeners.remove(key);
+        final existingController = entry.controller;
+        if (!existingController.isClosed) {
+          await existingController.close();
+        }
+        log.fine('canceled and forgot list notification subscription for client $key');
+      }
     }
 
-    final controller = StreamController<SubmissionListEntry>();
+    await cancelExistingSubscription();
 
-    parent.userManagementService.getUserBySession(Session(cookie: call.session))
-    .then((user) {
-      final entry = SubmissionListNotificationsEntry(user, request, controller);
-      _submissionListListeners[key] = entry;
+    final controller = StreamController<SubmissionListEntry>();
+    final user = await parent.userManagementService.getUserBySession(Session(cookie: call.session));
+    final listener = SubmissionListNotificationsEntry(user, request, controller);
+    _submissionListListeners[key] = listener;
+
+    const maxInactivityTime = Duration(minutes: 15);
+
+    Timer.periodic(Duration(seconds: 5), (timer) {
+      final lastSeen = parent.lastSessionClientSeen[key] ?? DateTime(2021);
+      final now = DateTime.now();
+      final deadline = lastSeen.add(maxInactivityTime);
+      if (now.isAfter(deadline)) {
+        timer.cancel();
+        cancelExistingSubscription();
+      }
     });
 
-    controller.onCancel = () {
-      if (_submissionListListeners.containsKey(key)) {
-        _submissionListListeners.remove(key);
+    final submissionsList = request.submissionIds;
+    int minId = 0;
+    int maxId = 0;
+    for (final id in submissionsList) {
+      if (id.toInt() > maxId) {
+        maxId = id.toInt();
       }
-    };
+      if (id.toInt() < minId || minId == 0) {
+        minId = id.toInt();
+      }
+    }
+    if (minId > 0 && maxId > 0) {
+      log.fine(
+          'subscribed to list [$minId...$maxId] notification by client $key'
+      );
+    }
+    else {
+      log.fine(
+          'subscribed to list notification by client $key'
+      );
+    }
 
-    return controller.stream;
+    yield* controller.stream;
+
   }
 
 
