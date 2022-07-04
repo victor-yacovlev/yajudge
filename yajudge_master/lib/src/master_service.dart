@@ -48,6 +48,7 @@ class MasterService {
   late final EnrollmentManagementService enrollmentManagementService;
   late final CodeReviewManagementService codeReviewManagementService;
   late final DeadlinesManager deadlinesManager;
+  final lastSessionClientSeen = <String,DateTime>{};
 
   late final Server grpcServer;
   final DemoModeProperties? demoModeProperties;
@@ -137,6 +138,7 @@ class MasterService {
         return GrpcError.permissionDenied('not allowed for method ${method.name}');
       }
     }
+    lastSessionClientSeen[session.cookie] = DateTime.now();
     return null;
   }
 
