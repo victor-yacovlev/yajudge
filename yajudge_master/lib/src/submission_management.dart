@@ -625,46 +625,28 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   }
 
   Future<List<TestResult>> getSubmissionResultsFromSQL(Submission submission) async {
-    final query =
-    '''
-    select test_number, stdout, stderr, standard_match, signal_killed, 
-      valgrind_errors, valgrind_output, killed_by_timer, checker_output,
-      status, exit_status
-    from submission_results
-    where submissions_id=@id 
-      ''';
-    final testResultsRows = await connection.query(query, substitutionValues: {
-      'id': submission.id.toInt(),
-    });
-    List<TestResult> results = [];
-    for (final row in testResultsRows) {
-      int testNumber = row[0];
-      String stdout = row[1];
-      String stderr = row[2];
-      bool standardMatch = row[3];
-      int signalKilled = row[4];
-      int valgrindErrors = row[5];
-      String valgrindOutput = row[6];
-      bool killedByTimer = row[7];
-      String checkerOutput = row[8];
-      int status = row[9];
-      int exitStatus = row[10];
-      results.add(TestResult(
-        testNumber: testNumber,
-        stdout: stdout,
-        stderr: stderr,
-        signalKilled: signalKilled,
-        status: SolutionStatus.valueOf(status)!,
-        killedByTimer: killedByTimer,
-        valgrindErrors: valgrindErrors,
-        valgrindOutput: valgrindOutput,
-        exitStatus: exitStatus,
-        standardMatch: standardMatch,
-        checkerOutput: checkerOutput,
-      ));
+    final rows = await connection.query('''
+      select submission_protobuf_gzipped 
+      from submission_results 
+      where id=@id
+      ''',
+      substitutionValues: { 'id': submission.id.toInt() },
+    );
+    if (rows.isEmpty) {
+      return [];
     }
-    return results;
+    try {
+      final submissionProtobufGzipped = rows.single.single as List<int>;
+      final submissionProtobuf = gzip.decode(submissionProtobufGzipped);
+      submission = Submission.fromBuffer(submissionProtobuf);
+    }
+    catch (e) {
+      log.severe('cant get submission results dump from SQL: $e');
+      return [];
+    }
+    return submission.testResults;
   }
+
   Future<List<TestResult>> getSubmissionResultsFromMongo(Submission submission) async {
     final collection = storageDb!.collection('submissionResults');
     final stream = collection.find(where.eq('_id', submission.id.toInt()));
@@ -842,53 +824,24 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   }
   
   Future insertSubmissionResultsIntoSQL(Submission submission) async {
-    for (TestResult test in submission.testResults) {
-      await connection.query(
-          '''
-insert into submission_results(
-                               submissions_id,
-                               test_number,
-                               stdout,
-                               stderr,
-                               status,
-                               exit_status,
-                               standard_match,
-                               killed_by_timer,
-                               signal_killed,
-                               valgrind_errors,
-                               valgrind_output,
-                               checker_output
-)
-values (@submissions_id,@test_number,@stdout,@stderr,
-        @status,@exit_status,@standard_match,@killed_by_timer,
-        @signal_killed,
-        @valgrind_errors,@valgrind_output,
-        @checker_output)          
-          ''',
-          substitutionValues: {
-            'submissions_id': submission.id.toInt(),
-            'test_number': test.testNumber,
-            'stdout': test.stdout,
-            'stderr': test.stderr,
-            'status': test.status.value,
-            'exit_status': test.exitStatus,
-            'standard_match': test.standardMatch,
-            'killed_by_timer': test.killedByTimer,
-            'signal_killed': test.signalKilled,
-            'valgrind_errors': test.valgrindErrors,
-            'valgrind_output': test.valgrindOutput,
-            'checker_output': test.checkerOutput,
-          }
-      );
-    }
+    final submissionProtobuf = submission.writeToBuffer();
+    final submissionProtobufGzipped = gzip.encode(submissionProtobuf);
+    await connection.query(
+        '''
+insert into submission_results(id,submission_protobuf_gzipped)
+values (@id,@data)          
+        ''',
+        substitutionValues: {
+          'id': submission.id.toInt(),
+          'data': submissionProtobufGzipped,
+        }
+    );
   }
   
-  Future deleteSubmissionResultsFromSQL(Submission submission) async {
-    await connection.query(
-        ''' 
-        delete from submission_results where submissions_id=@id
-        ''',
-        substitutionValues: { 'id': submission.id.toInt() }
+  Future deleteSubmissionResultsFromSQL(Submission submission) {
+    return connection.execute(
+      'delete from submission_results where id=@id',
+      substitutionValues: { 'id': submission.id.toInt()}
     );
   }
 
@@ -933,9 +886,8 @@ values (@submissions_id,@test_number,@stdout,@stderr,
         }
       }
     }
-    await connection.transaction((connection) async {
-      // modify submission itself
-      await connection.query(
+
+    await connection.query(
         '''
         update 
           submissions set status=@status, grader_name=@grader_name,
@@ -951,17 +903,16 @@ values (@submissions_id,@test_number,@stdout,@stderr,
           'compile_error_log': request.buildErrorLog,
           'grading_status': SubmissionGradingStatus.processed.value,
         }
-      );
+    );
 
-      // there might be older test results in case of rejudging submission
-      // so delete them if exists
-      await submissionResultsDeleter(request);
+    // there might be older test results in case of rejudging submission
+    // so delete them if exists
+    await submissionResultsDeleter(request);
 
-      // insert new test results
-      await submissionResultsInserter(request);
+    // insert new test results
+    await submissionResultsInserter(request);
 
-    });
-    _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
+    await _notifyProblemStatusChanged(request.user, request.course, request.problemId, true);
     // clean unnecessary test results
     const brokenStatuses = [
       SolutionStatus.RUNTIME_ERROR, SolutionStatus.VALGRIND_ERRORS,
@@ -978,7 +929,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     }
     request.testResults.clear();
     request.testResults.addAll(testResults);
-    _notifySubmissionResultChanged(request);
+    await _notifySubmissionResultChanged(request);
     return request;
   }
 
@@ -1204,7 +1155,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
     return futureProblemStatus;
   }
 
-  void _notifySubmissionResultChanged(Submission submission) async {
+  Future _notifySubmissionResultChanged(Submission submission) async {
 
     submission = await parent.deadlinesManager.updateSubmissionWithDeadlines(submission);
 
@@ -1241,7 +1192,7 @@ values (@submissions_id,@test_number,@stdout,@stderr,
   }
 
 
-  void _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) async {
+  Future _notifyProblemStatusChanged(User user, Course course, String problemId, bool withSubmissions) async {
     final courseKey = '${user.id}/${course.id}';
     final problemKey = '${user.id}/${course.id}/$problemId';
 

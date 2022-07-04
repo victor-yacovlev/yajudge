@@ -13,23 +13,12 @@ create table if not exists courses
 );
 
 
-create table if not exists submission_results
+create table submission_results
 (
-    id              serial
+    id                          integer not null
         constraint submission_results_pk
             primary key,
-    submissions_id  integer                               not null,
-    test_number     integer                               not null,
-    stdout          varchar                               not null,
-    stderr          varchar                               not null,
-    status          integer                               not null,
-    standard_match  boolean                               not null,
-    signal_killed   integer                               not null,
-    valgrind_errors integer                               not null,
-    valgrind_output varchar                               not null,
-    killed_by_timer boolean                               not null,
-    checker_output  varchar default ''::character varying not null,
-    exit_status     integer default 0                     not null
+    submission_protobuf_gzipped bytea   not null
 );
 
 
