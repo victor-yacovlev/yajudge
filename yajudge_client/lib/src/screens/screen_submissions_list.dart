@@ -78,7 +78,12 @@ class SubmissionsListScreenState extends BaseScreenState {
     log.info('subscribing to list notifications');
     _statusStream?.cancel();
     final submissionsService = ConnectionController.instance!.submissionsService;
-    _statusStream = submissionsService.subscribeToSubmissionListNotifications(query);
+    final loadedIds = _response.entries.map((e) => e.submissionId);
+    final request = SubmissionListNotificationsRequest(
+      filterRequest: query,
+      submissionIds: loadedIds,
+    );
+    _statusStream = submissionsService.subscribeToSubmissionListNotifications(request);
     _statusStream!.listen((event) {
       log.info('got submission update on ${event.submissionId}');
       _updateSubmissionInList(event);

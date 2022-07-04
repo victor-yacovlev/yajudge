@@ -93,3 +93,14 @@ extension SubmissionListQueryExtension on SubmissionListQuery {
     return statusMatch && problemMatch && nameMatch && !hideThisSubmission;
   }
 }
+
+extension SubmissionListNotificationsRequestExtension on SubmissionListNotificationsRequest {
+  bool match(Submission submission, User currentUser) {
+    if (submissionIds.contains(submission.id)) {
+      return true;
+    }
+    else {
+      return filterRequest.match(submission, currentUser);
+    }
+  }
+}

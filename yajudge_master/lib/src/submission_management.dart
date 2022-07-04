@@ -14,10 +14,10 @@ import 'master_service.dart';
 
 class SubmissionListNotificationsEntry {
   final User user;
-  final SubmissionListQuery query;
+  final SubmissionListNotificationsRequest request;
   final StreamController<SubmissionListEntry> controller;
 
-  SubmissionListNotificationsEntry(this.user, this.query, this.controller);
+  SubmissionListNotificationsEntry(this.user, this.request, this.controller);
 }
 
 class SubmissionManagementService extends SubmissionManagementServiceBase {
@@ -755,14 +755,14 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         }
       );
     }
-    _notifyProblemStatusChanged(currentUser, request.course, request.problemId, true);
-    _notifySubmissionResultChanged(request);
-    pushSubmissionToGrader(request);
+    await _notifyProblemStatusChanged(currentUser, request.course, request.problemId, true);
+    await _notifySubmissionResultChanged(request);
+    await pushSubmissionToGrader(request);
     return Submission(id: Int64(submissionId));
   }
 
-  void assignGrader(Submission submission, String graderName) {
-    connection.query('''
+  Future assignGrader(Submission submission, String graderName) async {
+    await connection.query('''
       update submissions
       set grading_status=@grading_status, grader_name=@grader_name
       where id=@id
@@ -776,7 +776,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     final assignedSubmission = submission.deepCopy();
     assignedSubmission.graderName = graderName;
     assignedSubmission.gradingStatus = SubmissionGradingStatus.assigned;
-    _notifySubmissionResultChanged(assignedSubmission);
+    await _notifySubmissionResultChanged(assignedSubmission);
   }
 
   void unassignGrader(String graderName) {
@@ -1173,9 +1173,9 @@ values (@id,@data)
 
     List<StreamController<SubmissionListEntry>> listViews = [];
     for (final watcher in _submissionListListeners.values) {
-      final query = watcher.query;
+      final request = watcher.request;
       final user = watcher.user;
-      if (query.match(submission, user)) {
+      if (request.match(submission, user)) {
         listViews.add(watcher.controller);
       }
     }
@@ -1297,7 +1297,7 @@ values (@id,@data)
       submission.graderScore = 0.0;
       submission.graderName = graderName;
       submission.datetime = Int64(datetime.millisecondsSinceEpoch ~/ 1000);
-      _notifySubmissionResultChanged(submission);
+      await _notifySubmissionResultChanged(submission);
     }
 
     if (request.submission.id != 0) {
@@ -1423,7 +1423,7 @@ values (@id,@data)
   }
 
   @override
-  Stream<SubmissionListEntry> subscribeToSubmissionListNotifications(ServiceCall call, SubmissionListQuery request) {
+  Stream<SubmissionListEntry> subscribeToSubmissionListNotifications(ServiceCall call, SubmissionListNotificationsRequest request) {
     final key = call.session;
     if (_submissionListListeners.containsKey(key)) {
       _submissionListListeners[key]!.controller.close();
