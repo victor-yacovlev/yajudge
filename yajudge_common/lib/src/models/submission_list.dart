@@ -3,8 +3,9 @@ import 'package:protobuf/protobuf.dart';
 import '../../yajudge_common.dart';
 
 extension SubmissionListEntryExtension on SubmissionListEntry {
-  void updateStatus(SolutionStatus newStatus) {
+  void updateStatus(SolutionStatus newStatus, SubmissionGradingStatus newGradingStatus) {
     status = newStatus;
+    gradingStatus = newGradingStatus;
   }
 }
 
@@ -23,17 +24,23 @@ extension SubmissionListResponseExtension on SubmissionListResponse {
     return newResponse;
   }
 
-  void updateEntry(SubmissionListEntry entry) {
+  void updateEntry(SubmissionListEntry newEntry) {
     bool found = false;
     for (var entry in entries) {
-      if (entry.submissionId == entry.submissionId) {
-        entry.updateStatus(entry.status);
+      if (entry.submissionId == newEntry.submissionId) {
+        entry.updateStatus(newEntry.status, newEntry.gradingStatus);
         found = true;
         break;
       }
     }
     if (!found) {
-      entries.insert(0, entry);
+      final sender = newEntry.sender;
+      String fullName = '${sender.firstName} ${sender.lastName} ${sender.midName}';
+      fullName = fullName.trim();
+      if (fullName.isNotEmpty) {
+        entries.add(newEntry);
+        entries.sort((a,b) => a.submissionId.compareTo(b.submissionId));
+      }
     }
   }
 

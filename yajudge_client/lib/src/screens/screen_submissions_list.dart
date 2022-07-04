@@ -68,7 +68,6 @@ class SubmissionsListScreenState extends BaseScreenState {
   void initState() {
     super.initState();
     _loadCourse();
-    _subscribeToNotifications();
   }
 
   void _subscribeToNotifications() {
@@ -76,7 +75,7 @@ class SubmissionsListScreenState extends BaseScreenState {
       return;
     }
     log.info('subscribing to list notifications');
-    _statusStream?.cancel();
+    // _statusStream?.cancel();
     final submissionsService = ConnectionController.instance!.submissionsService;
     final loadedIds = _response.entries.map((e) => e.submissionId);
     final request = SubmissionListNotificationsRequest(
