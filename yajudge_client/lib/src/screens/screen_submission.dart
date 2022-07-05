@@ -597,10 +597,10 @@ class SubmissionScreenState extends BaseScreenState {
   }
 
   List<Widget> buildLinkItems(BuildContext context) {
-    Padding wrapIntoPadding(Widget w) {
+    Padding wrapIntoPadding(Widget w, [double topPadding = 10]) {
       return Padding(
           child: w,
-          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
+          padding: EdgeInsets.fromLTRB(0, topPadding, 0, 10)
       );
     }
     final theme = Theme.of(context);
@@ -648,8 +648,12 @@ class SubmissionScreenState extends BaseScreenState {
 
     Widget? submissionHistoryItems;
     if (_submissionsHistory.length > 1) {
-      final rowItems = <Widget>[makeText('История решений задачи: ')];
-      submissionHistoryItems = wrapIntoPadding(Row(children: rowItems));
+      final rowItems = <Widget>[
+        Container(
+          child: makeText('История решений задачи: '),
+          padding: EdgeInsets.fromLTRB(0, 4, 0, 0),
+        )
+      ];
       for (final entry in _submissionsHistory) {
         String title = submissionListEntryToString(entry);
         if (rowItems.length > 1) {
@@ -657,15 +661,20 @@ class SubmissionScreenState extends BaseScreenState {
         }
         bool isCurrent = entry.submissionId == _submission!.id;
         if (isCurrent) {
-          rowItems.add(makeText(title));
+          rowItems.add(Container(
+            child: makeText(title),
+            padding: EdgeInsets.fromLTRB(0, 4, 0, 0),
+          ));
         }
         else {
-          rowItems.add(TextButton(
-              onPressed: () => switchSubmission(entry.submissionId),
-              child: makeText(title, null, true)
+          rowItems.add(Container(child: TextButton(
+            onPressed: () => switchSubmission(entry.submissionId),
+            child: makeText(title, null, true)),
+            padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
           ));
         }
       }
+      submissionHistoryItems = wrapIntoPadding(Wrap(children: rowItems), 6);
     }
 
     return submissionHistoryItems==null ? [problemLinkItem] : [
