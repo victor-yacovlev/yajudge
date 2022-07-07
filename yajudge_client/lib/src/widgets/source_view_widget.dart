@@ -12,6 +12,8 @@ const highlightBackground = Color.fromARGB(255, 250, 250, 255);
 const commentBackground = Color.fromARGB(255, 255, 230, 230);
 const commentLeftMargin = 8.0;
 const commentTextColor = Colors.red;
+final deletedDiffBackground = Colors.red.shade50;
+final changedDiffBackground = Colors.amber.shade50;
 const tabExpand = '    ';
 const leadingSpacesMarkColor = Colors.black12;
 
@@ -50,12 +52,19 @@ class SourceViewWidget extends StatefulWidget {
   final bool withLineNumbers;
   final LineCommentController? lineCommentController;
   final String fileName;
+  final double maxWidth;
+  final Map<int,int> emptyLines;
+  final Set<int> changedLines;
+
   SourceViewWidget({
     required this.text,
     required this.fileName,
     this.withLineNumbers = false,
     required this.lineCommentController,
-    Key? key
+    this.maxWidth = 0.0,
+    Key? key,
+    this.emptyLines = const {},
+    this.changedLines = const {},
   }): super(key: key) {
     lines = text.split('\n');
   }
@@ -65,6 +74,14 @@ class SourceViewWidget extends StatefulWidget {
 
   int get linesCount {
     return lines.length;
+  }
+
+  int get emptyLinesCount {
+    int result = 0;
+    for (final value in emptyLines.values) {
+      result += value;
+    }
+    return result;
   }
 
   int get maxLineLength {
@@ -93,14 +110,30 @@ class LineCommentableTextPainter extends CustomPainter {
     final commentHeight = calculateLineHeight(commentStyle);
     final commentInLineOffset = (lineHeight - commentHeight) / 2.0;
     final linePaint = Paint()..color = lineColor;
+    final emptyLines = state.widget.emptyLines;
+    final changedLines = state.widget.changedLines;
     final whiteSpaceMarkPaint = Paint()
       ..color = leadingSpacesMarkColor
       ..strokeWidth = 2.0
       ;
     final hoverPaint = Paint()..color = highlightBackground;
     final commentPaint = Paint()..color = commentBackground;
+    final deletedLinePaint = Paint()..color = deletedDiffBackground;
+    final changedLinePaint = Paint()..color = changedDiffBackground;
     Offset offset = Offset(0, 0);
+    int visualLineNumber = 0;
     for (int i=0; i<lines.length; i++) {
+      int skipLinesCount = emptyLines[i] ?? 0;
+      for (int j=0; j<skipLinesCount; j++) {
+        final lineRect = Rect.fromLTRB(0, offset.dy-1, size.width, offset.dy+lineHeight);
+        canvas.drawRect(lineRect, deletedLinePaint);
+        offset = offset.translate(0, lineHeight);
+        visualLineNumber ++;
+      }
+      if (changedLines.contains(i+1)) {
+        final lineRect = Rect.fromLTRB(0, offset.dy-1, size.width, offset.dy+lineHeight);
+        canvas.drawRect(lineRect, changedLinePaint);
+      }
       LineComment? comment;
       if (comments != null) {
         for (final candidate in comments) {
@@ -114,7 +147,7 @@ class LineCommentableTextPainter extends CustomPainter {
       if (comment != null) {
         canvas.drawRect(lineRect, commentPaint);
       }
-      else if (state._currentHoveredLine == i) {
+      else if (state._currentHoveredLine == visualLineNumber && !changedLines.contains(i+1)) {
         canvas.drawRect(lineRect, hoverPaint);
       }
       final line = lines[i];
@@ -137,6 +170,7 @@ class LineCommentableTextPainter extends CustomPainter {
       }
       offset = offset.translate(0, lineHeight);
       canvas.drawLine(Offset(0, offset.dy), Offset(size.width, offset.dy), linePaint);
+      visualLineNumber ++;
     }
   }
 
@@ -264,16 +298,22 @@ class LineCommentableTextPainter extends CustomPainter {
 class LineNumbersPainter extends CustomPainter {
   final int linesCount;
   final TextStyle textStyle;
+  final Map<int,int> emptyLines;
 
-  LineNumbersPainter(this.linesCount, this.textStyle);
+  LineNumbersPainter(this.linesCount, this.emptyLines, this.textStyle);
 
   @override
   void paint(Canvas canvas, Size size) {
     final lineHeight = LineCommentableTextPainter.calculateLineHeight(textStyle);
     final linePaint = Paint()..color = lineColor;
     Offset offset = Offset(0, 0);
+    int realLineNumber = 1;
     for (int i=0; i<linesCount; i++) {
-      final line = '${i+1}';
+      final line = '$realLineNumber';
+      int skipLines = emptyLines[realLineNumber-1] ?? 0;
+      for (int j=0; j<skipLines; j++) {
+        offset = offset.translate(0, lineHeight);
+      }
       final mainSpan = TextSpan(text: line, style: textStyle);
       final mainPainter = TextPainter(text: mainSpan, textDirection: TextDirection.ltr);
       mainPainter.layout();
@@ -284,6 +324,7 @@ class LineNumbersPainter extends CustomPainter {
       mainPainter.paint(canvas, offset);
       offset = offset.translate(-xOffset, lineHeight);
       canvas.drawLine(Offset(0, offset.dy), Offset(size.width, offset.dy), linePaint);
+      realLineNumber ++;
     }
   }
 
@@ -325,12 +366,19 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
     final controller = widget.lineCommentController;
     final canEditComments = controller==null? false : controller.editable;
     final lines = widget.lines;
+    final emptyLines = widget.emptyLines;
     final comments = controller==null? <LineComment>[] : widget.lineCommentController!.comments;
     final mainStyle = createTextStyle(context);
     final commentStyle = createCommentStyle(context);
 
     final painter = LineCommentableTextPainter(this, mainStyle, commentStyle);
-    Size size = LineCommentableTextPainter.calculateTextSize(lines, comments, mainStyle, commentStyle);
+    final empty = <String>[];
+    for (final length in emptyLines.values) {
+      for (int i=0; i<length; i++) {
+        empty.add('');
+      }
+    }
+    Size size = LineCommentableTextPainter.calculateTextSize(lines + empty, comments, mainStyle, commentStyle);
     final width = mainContentWidth(context) - 20;
     if (width > size.width) {
       size = Size(width, size.height);
@@ -462,8 +510,8 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
   Widget buildLineNumbersMargin(BuildContext context) {
     final textStyle = createTextStyle(context).merge(TextStyle(color: Colors.black38));
     final lineHeight = LineCommentableTextPainter.calculateLineHeight(textStyle);
-    final size = Size(48, lineHeight * widget.linesCount);
-    final painter = LineNumbersPainter(widget.linesCount, textStyle);
+    final size = Size(48, lineHeight * (widget.linesCount + widget.emptyLinesCount));
+    final painter = LineNumbersPainter(widget.linesCount, widget.emptyLines, textStyle);
     final lineNumbersView = CustomPaint(painter: painter, size: size);
 
     final lineNumbersBox = Container(
@@ -521,6 +569,13 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
 
     if (widget.withLineNumbers) {
       rowItems.add(buildLineNumbersMargin(context));
+    }
+    if (widget.maxWidth > 0) {
+      double maxContentWidth = widget.maxWidth;
+      if (widget.withLineNumbers) {
+        maxContentWidth -= 66;
+      }
+      contentWidth = min(contentWidth, maxContentWidth);
     }
 
     final contentView = buildEditorView(context);

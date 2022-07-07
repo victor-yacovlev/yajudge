@@ -180,17 +180,24 @@ class DeadlinesManager {
     if (deadlines.hardDeadline > 0 && lessonSchedule.datetime > 0) {
       hardDeadLine = deadlines.hardDeadline + lessonSchedule.datetime.toInt();
     }
-    await connection.execute('''
-      insert into submission_deadlines(submissions_id,hard,soft,courses_id)
-      values (@sid,@hard,@sift,@cid)
-      ''',
-      substitutionValues: {
-        'sid': submission.id.toInt(),
-        'cid': course.id.toInt(),
-        'hard': DateTime.fromMillisecondsSinceEpoch(hardDeadLine * 1000, isUtc: true),
-        'soft': DateTime.fromMillisecondsSinceEpoch(softDeadLine * 1000, isUtc: true),
-      }
-    );
+    try {
+      await connection.execute('''
+        insert into submission_deadlines(submissions_id,hard,soft,courses_id)
+        values (@sid,@hard,@soft,@cid)
+        ''',
+          substitutionValues: {
+            'sid': submission.id.toInt(),
+            'cid': course.id.toInt(),
+            'hard': DateTime.fromMillisecondsSinceEpoch(
+                hardDeadLine * 1000, isUtc: true),
+            'soft': DateTime.fromMillisecondsSinceEpoch(
+                softDeadLine * 1000, isUtc: true),
+          }
+      );
+    }
+    catch (e) {
+      logger.severe('cant insert into submission_deadlines: $e');
+    }
   }
 
   Future<int> hardDeadline(Submission submission) async {

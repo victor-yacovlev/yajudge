@@ -1,9 +1,13 @@
 // ignore_for_file: unused_local_variable
 
+import 'dart:ffi';
+
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:protobuf/protobuf.dart';
 import 'screens/screen_course_progress.dart';
+import 'screens/screen_diffview.dart';
 import 'screens/screen_enrollments.dart';
 import 'screens/screen_enrollments_group.dart';
 import 'screens/screen_submission.dart';
@@ -196,6 +200,34 @@ class AppState extends State<App> {
       );
     }
 
+    final RegExp diffView = RegExp(r'/diffview/([0-9a-z:]+)\.\.\.([0-9a-z:]+)');
+    if (diffView.hasMatch(fullPath)) {
+      final match = diffView.matchAsPrefix(fullPath)!;
+      final firstMatchEntry = match.group(1)!;
+      final secondMatchEntry = match.group(2)!;
+      final diffViewRequest = DiffViewRequest().deepCopy();
+      SolutionSource textToSource(String src) {
+        final RegExp submissionPattern = RegExp(r'submission:(\d+)');
+        final RegExp externalPattern = RegExp(r'external:(\d+)');
+        if (submissionPattern.hasMatch(src)) {
+          int id = int.parse(submissionPattern.matchAsPrefix(src)!.group(1)!);
+          return SolutionSource(submission: Submission(id: Int64(id)));
+        }
+        if (externalPattern.hasMatch(src)) {
+          int id = int.parse(externalPattern.matchAsPrefix(src)!.group(1)!);
+          return SolutionSource(external: SolutionExternalSource(id: Int64(id)));
+        }
+        return SolutionSource();
+      }
+      final firstSource = textToSource(firstMatchEntry);
+      final secondSource = textToSource(secondMatchEntry);
+      final firstValid = firstSource.hasSubmission() || firstSource.hasExternal();
+      final secondValid = secondSource.hasSubmission() || secondSource.hasExternal();
+      if (firstValid && secondValid) {
+        final diffViewRequest = DiffViewRequest(first: firstSource, second: secondSource);
+        return DiffViewScreen(diffViewRequest, loggedUser: loggedUser);
+      }
+    }
 
     final coursesFilter = CoursesFilter(user: loggedUser);
     final futureCoursesList = ConnectionController.instance!.coursesService
@@ -239,7 +271,7 @@ class AppState extends State<App> {
 
     fullPath = path.normalize(fullPath);
 
-    if (fullPath == 'submissions') {
+    if (fullPath=='submissions' || fullPath=='diffview') {
       // Back button in browser after page refresh => go to initial root
       Navigator.pushReplacementNamed(context, '/');
       return DashboardScreen(user: loggedUser, coursesList: coursesList);
@@ -273,7 +305,7 @@ class AppState extends State<App> {
           return generateWidgetForCourse(
               context,
               loggedUser,
-              courseEntry!,
+              courseEntry,
               content,
               pathTail,
           );

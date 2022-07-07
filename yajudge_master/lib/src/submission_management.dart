@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
+import 'dart:io' as io;
+import 'dart:math';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:mongo_dart/mongo_dart.dart';
@@ -545,15 +545,14 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     return result;
   }
 
-  @override
-  Future<Submission> getSubmissionResult(ServiceCall call, Submission request) async {
+  Future<Submission> getSubmissionInfo(ServiceCall call, Submission request) async {
     final currentUser = await parent.userManagementService.getUserFromContext(call);
-    int submissionId = request.id.toInt();
+    final submissionId = request.id.toInt();
     final query =
     '''
     select users_id, problem_id, datetime, status, style_error_log, compile_error_log, grading_status
     from submissions
-    where id=@id order by id asc
+    where id=@id
       ''';
     final submissionRows = await connection.query(query, substitutionValues: {'id': submissionId});
     if (submissionRows.isEmpty) {
@@ -587,26 +586,6 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         throw GrpcError.permissionDenied('cant access not own submissions');
       }
     }
-
-    final solutionFiles = await getSubmissionFiles(submissionId);
-    List<TestResult> testResults = [];
-    final brokenStatuses = [
-      SolutionStatus.RUNTIME_ERROR,
-      SolutionStatus.TIME_LIMIT,
-      SolutionStatus.VALGRIND_ERRORS,
-      SolutionStatus.WRONG_ANSWER,
-    ];
-    if (brokenStatuses.contains(status)) {
-      final allTestResults = await getSubmissionTestResults(status, request);
-      // find first broken test and send it only to save network traffic
-      for (final test in allTestResults) {
-        if (test.status == status) {
-          testResults.add(test);
-          break;
-        }
-      }
-    }
-
     final submission = Submission(
       id: Int64(submissionId),
       user: User(id: Int64(userId)),
@@ -614,14 +593,43 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       status: status,
       gradingStatus: gradingStatus,
       problemId: problemId,
-      solutionFiles: FileSet(files: solutionFiles),
-      testResults: testResults,
       styleErrorLog: styleErrorLog,
       buildErrorLog: compileErrorLog,
       course: request.course,
     );
 
     return parent.deadlinesManager.updateSubmissionWithDeadlines(submission);
+  }
+
+  @override
+  Future<Submission> getSubmissionResult(ServiceCall call, Submission request) async {
+    final submissionId = request.id.toInt();
+    final submission = await getSubmissionInfo(call, request);
+
+    final solutionFiles = await getSubmissionFiles(submissionId);
+    submission.solutionFiles = FileSet(files: solutionFiles);
+
+    List<TestResult> testResults = [];
+    final brokenStatuses = [
+      SolutionStatus.RUNTIME_ERROR,
+      SolutionStatus.TIME_LIMIT,
+      SolutionStatus.VALGRIND_ERRORS,
+      SolutionStatus.WRONG_ANSWER,
+    ];
+    if (brokenStatuses.contains(submission.status)) {
+      final allTestResults = await getSubmissionTestResults(submission.status, request);
+      // find first broken test and send it only to save network traffic
+      for (final test in allTestResults) {
+        if (test.status == submission.status) {
+          testResults.add(test);
+          break;
+        }
+      }
+    }
+
+    submission.testResults.addAll(testResults);
+
+    return submission;
   }
 
   Future<List<TestResult>> getSubmissionResultsFromSQL(Submission submission) async {
@@ -637,7 +645,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     }
     try {
       final submissionProtobufGzipped = rows.single.single as List<int>;
-      final submissionProtobuf = gzip.decode(submissionProtobufGzipped);
+      final submissionProtobuf = io.gzip.decode(submissionProtobufGzipped);
       submission = Submission.fromBuffer(submissionProtobuf);
     }
     catch (e) {
@@ -825,7 +833,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   
   Future insertSubmissionResultsIntoSQL(Submission submission) async {
     final submissionProtobuf = submission.writeToBuffer();
-    final submissionProtobufGzipped = gzip.encode(submissionProtobuf);
+    final submissionProtobufGzipped = io.gzip.encode(submissionProtobuf);
     await connection.query(
         '''
 insert into submission_results(id,submission_protobuf_gzipped)
@@ -1493,7 +1501,125 @@ values (@id,@data)
 
   }
 
+  @override
+  Future<DiffViewResponse> getSubmissionsToDiff(ServiceCall call, DiffViewRequest request) async {
+    final firstSource = request.first;
+    final secondSource = request.second;
+    request = request.deepCopy();
+    if (firstSource.hasExternal() || secondSource.hasExternal()) {
+      throw UnimplementedError();
+    }
+    final firstSubmission = await getSubmissionInfo(call, firstSource.submission);
+    firstSubmission.user = await parent.userManagementService.getUserById(
+      firstSubmission.user.id
+    );
+    request.first.submission = firstSubmission;
+    final firstFiles = FileSet(
+        files: await getSubmissionFiles(firstSubmission.id.toInt())
+    );
+    final secondSubmission = await getSubmissionInfo(call, secondSource.submission);
+    secondSubmission.user = await parent.userManagementService.getUserById(
+        secondSubmission.user.id
+    );
+    request.second.submission = secondSubmission;
+    final secondFiles = FileSet(
+        files: await getSubmissionFiles(secondSubmission.id.toInt())
+    );
+    final tempDirPath = '${io.Directory.systemTemp.path}/yajudge-master-${io.pid}/diffview';
+    final firstDirPath = '$tempDirPath/submission${firstSubmission.id}';
+    final secondDirPath = '$tempDirPath/submission${secondSubmission.id}';
+    io.Directory(firstDirPath).createSync(recursive: true);
+    io.Directory(secondDirPath).createSync(recursive: true);
+    const diffOptions = <String>[];
+    final result = <DiffData>[];
+    for (final firstFile in firstFiles.files) {
+      final secondFile = secondFiles.get(firstFile.name);
+      if (secondFile.name != firstFile.name) {
+        continue;
+      }
+      final firstFilePath = '$firstDirPath/${firstFile.name}';
+      final secondFilePath = '$secondDirPath/${secondFile.name}';
+      io.File(firstFilePath).writeAsBytesSync(firstFile.data, flush: true);
+      io.File(secondFilePath).writeAsBytesSync(secondFile.data, flush: true);
+      final diffArguments = diffOptions + [firstFilePath, secondFilePath];
+      final diffCommandResult = io.Process.runSync(
+          'diff', diffArguments,
+          stdoutEncoding: Encoding.getByName('utf-8')
+      );
+      final diffOutput = diffCommandResult.stdout as String;
+      final firstText = utf8.decode(firstFile.data, allowMalformed: true);
+      final secondText = utf8.decode(secondFile.data, allowMalformed: true);
+      final diffOperations = _parseDiffOutput(diffOutput);
+      final diffData = DiffData(
+        fileName: firstFile.name,
+        firstText: firstText,
+        secondText: secondText,
+        operations: diffOperations,
+      );
+      result.add(diffData);
+    }
+    io.Directory(tempDirPath).deleteSync(recursive: true);
+    return DiffViewResponse(diffs: result, request: request);
+  }
 
+  List<DiffOperation> _parseDiffOutput(String diffOutput) {
 
+    DiffOperationType parseDiffOperation(String text) {
+      switch (text) {
+        case 'a': return DiffOperationType.LINE_INSERTED;
+        case 'd': return DiffOperationType.LINE_DELETED;
+        case 'c': return DiffOperationType.LINE_DIFFER;
+        default: return DiffOperationType.LINE_EQUAL;
+      }
+    }
+
+    LineRange parseLineRange(String text) {
+      if (text.contains(',')) {
+        final parts = text.split(',');
+        int start = int.parse(parts[0]);
+        int end = int.parse(parts[1]);
+        return LineRange(start: start, end: end);
+      }
+      else {
+        int single = int.parse(text);
+        return LineRange(start: single, end: single);
+      }
+    }
+
+    final diffLines = diffOutput.split('\n');
+    final result = <DiffOperation>[];
+    int currentLineIndex = 0;
+    final rxDiffHeader = RegExp(r'(\d+,?\d*)([acd])(\d+,?\d*)');
+    while (currentLineIndex < diffLines.length) {
+      final line = diffLines[currentLineIndex];
+      if (!rxDiffHeader.hasMatch(line)) {
+        currentLineIndex ++;
+        continue;
+      }
+      final match = rxDiffHeader.matchAsPrefix(line)!;
+      final rangeFirstText = match.group(1)!;
+      final rangeSecondText = match.group(3)!;
+      final opText = match.group(2)!;
+      final rangeFirst = parseLineRange(rangeFirstText);
+      final rangeSecond = parseLineRange(rangeSecondText);
+      final operationType = parseDiffOperation(opText);
+      final operation = DiffOperation(from: rangeFirst, to: rangeSecond, operation: operationType);
+      result.add(operation);
+      switch (operationType) {
+        case DiffOperationType.LINE_INSERTED:
+          currentLineIndex += rangeSecond.length + 1;
+          break;
+        case DiffOperationType.LINE_DELETED:
+          currentLineIndex += rangeFirst.length + 1;
+          break;
+        case DiffOperationType.LINE_DIFFER:
+          currentLineIndex += rangeFirst.length + 1 + rangeSecond.length + 1;
+          break;
+        default:
+          currentLineIndex ++;
+      }
+    }
+    return result;
+  }
 
 }

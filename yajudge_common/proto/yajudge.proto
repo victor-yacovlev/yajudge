@@ -648,6 +648,60 @@ message GraderStatusMessage {
   int32 capacity = 3;
 }
 
+message SolutionExternalSource {
+  int64   id = 1;
+  string  known_url = 2;
+  string  known_author = 3;
+  string  problem_id = 4;
+}
+
+message SolutionSource {
+  oneof what {
+    Submission submission = 1;
+    SolutionExternalSource external = 2;
+  }
+}
+
+message SolutionData {
+  FileSet file_set = 1;
+  SolutionSource source = 2;
+}
+
+message DiffViewRequest {
+  SolutionSource first = 1;
+  SolutionSource second = 2;
+}
+
+enum DiffOperationType {
+  LINE_EQUAL = 0;
+  LINE_DIFFER = 1;
+  LINE_DELETED = 2;
+  LINE_INSERTED = 3;
+}
+
+message LineRange {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message DiffOperation {
+  LineRange from = 1;
+  LineRange to = 2;
+  DiffOperationType operation = 3;
+}
+
+message DiffData {
+  string file_name = 1;
+  string first_text = 2;
+  string second_text = 3;
+  repeated DiffOperation operations = 4;
+}
+
+message DiffViewResponse {
+  repeated DiffData diffs = 1;
+  DiffViewRequest request = 2;
+}
+
 service SubmissionManagement {
   rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit);
   rpc SubmitProblemSolution(Submission) returns (Submission);
@@ -670,6 +724,7 @@ service SubmissionManagement {
   // announce grader alive and receive stream of submissions to be graded
   rpc SetGraderStatus(GraderStatusMessage) returns (Empty);
   rpc ReceiveSubmissionsToGrade(GraderProperties) returns (stream Submission);
+  rpc GetSubmissionsToDiff(DiffViewRequest) returns (DiffViewResponse);
 
   rpc TakeSubmissionToGrade(GraderProperties) returns (Submission);
   // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors

@@ -123,4 +123,13 @@ extension FileSetExtension on FileSet {
     ).deepCopy();
   }
 
+  File get(String fileName) {
+    for (final file in files) {
+      if (file.name == fileName) {
+        return file;
+      }
+    }
+    return File();
+  }
+
 }

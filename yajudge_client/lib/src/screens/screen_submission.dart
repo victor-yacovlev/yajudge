@@ -628,6 +628,13 @@ class SubmissionScreenState extends BaseScreenState {
       )
     ]));
 
+    void showDiff(Int64 submissionId) {
+      final myself = 'submission:${_submission!.id}';
+      final other = 'submission:$submissionId';
+      final link = '/diffview/$myself...$other';
+      Navigator.pushNamed(context, link);
+    }
+
     void switchSubmission(Int64 submissionId) {
       Navigator.pushReplacement(context, PageRouteBuilder(
         transitionDuration: Duration.zero,
@@ -670,6 +677,11 @@ class SubmissionScreenState extends BaseScreenState {
           rowItems.add(Container(child: TextButton(
             onPressed: () => switchSubmission(entry.submissionId),
             child: makeText(title, null, true)),
+            padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
+          ));
+          rowItems.add(Container(child: TextButton(
+              onPressed: () => showDiff(entry.submissionId),
+              child: makeText('[diff]', null, true)),
             padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
           ));
         }
