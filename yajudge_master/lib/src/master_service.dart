@@ -19,7 +19,7 @@ import 'code_review_management.dart';
 const notLoggedMethods = ['StartSession', 'Authorize'];
 const privateMethods = [
   'TakeSubmissionToGrade', 'GetProblemFullContent', 'UpdateGraderOutput',
-  'ReceiveSubmissionsToGrade', 'SetGraderStatus',
+  'ReceiveSubmissionsToProcess', 'SetExternalServiceStatus',
 ];
 const studentsMethods = [
   'GetProfile', 'ChangePassword',
