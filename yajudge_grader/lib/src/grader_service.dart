@@ -265,7 +265,8 @@ class GraderService {
     }
   }
 
-  GraderProperties graderProperties() => GraderProperties(
+  ConnectedServiceProperties graderProperties() => ConnectedServiceProperties(
+    role: ServiceRole.SERVICE_GRADING,
     name: identityProperties.name,
     platform: GradingPlatform(arch: identityProperties.arch),
     performanceRating: _performanceRating,
@@ -273,15 +274,15 @@ class GraderService {
     numberOfWorkers: availableWorkersCount,
   );
 
-  Future<GraderStatus> waitForAnyWorkerIdle() async {
-    final completer = Completer<GraderStatus>();
+  Future<ServiceStatus> waitForAnyWorkerIdle() async {
+    final completer = Completer<ServiceStatus>();
     bool checkForReady() {
       if (shuttingDown) {
-        completer.complete(GraderStatus.ShuttingDown);
+        completer.complete(ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN);
         return true;
       }
       if (_idleWorkersCount > 0) {
-        completer.complete(GraderStatus.Idle);
+        completer.complete(ServiceStatus.SERVICE_STATUS_IDLE);
         return true;
       }
       return false;
@@ -297,7 +298,7 @@ class GraderService {
   }
 
   Future<void> serveSubmissionsStream() async {
-    final masterStream = submissionsService.receiveSubmissionsToGrade(graderProperties());
+    final masterStream = submissionsService.receiveSubmissionsToProcess(graderProperties());
     _statusPushTimer?.cancel();
     _statusPushTimer = Timer.periodic(Duration(seconds: 10), (_) {
       pushGraderStatus();
@@ -380,15 +381,15 @@ class GraderService {
   Future<void> pushGraderStatus() async {
     bool pushOK = false;
     while (!shuttingDown && !pushOK) {
-      GraderStatus status = GraderStatus.Unknown;
+      ServiceStatus status = ServiceStatus.SERVICE_STATUS_UNKNOWN;
       if (shuttingDown) {
-        status = GraderStatus.ShuttingDown;
+        status = ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN;
       }
       else {
-        status = isIdle()? GraderStatus.Idle : GraderStatus.Busy;
+        status = isIdle()? ServiceStatus.SERVICE_STATUS_IDLE : ServiceStatus.SERVICE_STATUS_BUSY;
       }
       try {
-        await submissionsService.setGraderStatus(GraderStatusMessage(
+        await submissionsService.setExternalServiceStatus(ConnectedServiceStatus(
           properties: graderProperties(),
           status: status,
           capacity: _idleWorkersCount,
@@ -452,7 +453,7 @@ class GraderService {
 
     if (!singleThreaded) {
       final currentStatus = await waitForAnyWorkerIdle();
-      if (currentStatus == GraderStatus.ShuttingDown) {
+      if (currentStatus == ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN) {
         return Future.error('server shutting down');
       }
     }
@@ -504,9 +505,9 @@ class GraderService {
     log.info('grader shutting down due to $reason');
     shuttingDown = true;
     try {
-      await submissionsService.setGraderStatus(GraderStatusMessage(
+      await submissionsService.setExternalServiceStatus(ConnectedServiceStatus(
         properties: graderProperties(),
-        status: GraderStatus.ShuttingDown,
+        status: ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN,
       ));
     } catch (_) {
 

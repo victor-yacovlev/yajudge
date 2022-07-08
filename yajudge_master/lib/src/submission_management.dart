@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
-import 'dart:math';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:mongo_dart/mongo_dart.dart';
@@ -9,7 +8,7 @@ import 'package:postgres/postgres.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
-import 'graders_manager.dart';
+import 'external_services_manager.dart';
 import 'master_service.dart';
 
 class SubmissionListNotificationsEntry {
@@ -33,7 +32,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
 
   final Map<String,SubmissionListNotificationsEntry> _submissionListListeners = {};
 
-  final GradersManager _gradersManager = GradersManager();
+  final ExternalServicesManager _gradersManager = ExternalServicesManager();
 
   SubmissionManagementService({
     required this.parent,
@@ -1020,7 +1019,7 @@ values (@id,@data)
   }
 
   @override
-  Future<Submission> takeSubmissionToGrade(ServiceCall call, GraderProperties request) async {
+  Future<Submission> takeSubmissionToGrade(ServiceCall call, ConnectedServiceProperties request) async {
     List<Submission> unfinished = await getUnfinishedSubmissionToGrade(request.name);
     if (unfinished.isNotEmpty) {
       Submission submission = unfinished.first;
@@ -1040,7 +1039,7 @@ values (@id,@data)
     return Submission(id: Int64(0));
   }
 
-  bool graderMatch(GraderProperties grader, GradingOptions options) {
+  bool graderMatch(ConnectedServiceProperties grader, GradingOptions options) {
     return grader.platform.arch == options.platformRequired.arch ||
       options.platformRequired.arch == Arch.ARCH_ANY;
   }
@@ -1396,8 +1395,8 @@ values (@id,@data)
   }
 
   @override
-  Stream<Submission> receiveSubmissionsToGrade(ServiceCall call, GraderProperties request) {
-    final streamController = _gradersManager.registerNewGrader(call, request);
+  Stream<Submission> receiveSubmissionsToProcess(ServiceCall call, ConnectedServiceProperties request) {
+    final streamController = _gradersManager.registerNewService(call, request);
 
     // check for unfinished submission processing by this grader and reassign them again
     unassignGrader(request.name);
@@ -1411,7 +1410,7 @@ values (@id,@data)
   Future<bool> pushSubmissionToGrader(Submission submission) async {
     final problemData = await getProblemDataForSubmission(null, submission);
     final platformRequired = problemData.gradingOptions.platformRequired;
-    final graderConnection = _gradersManager.findGrader(platformRequired);
+    final graderConnection = _gradersManager.findService(ServiceRole.SERVICE_GRADING, platformRequired);
     bool result = false;
     if (graderConnection!=null) {
       if (graderConnection.pushSubmission(submission)) {
@@ -1435,8 +1434,8 @@ values (@id,@data)
   }
 
   @override
-  Future<Empty> setGraderStatus(ServiceCall call, GraderStatusMessage request) async {
-    _gradersManager.setGraderStatus(request.properties.name, request.status, request.capacity);
+  Future<Empty> setExternalServiceStatus(ServiceCall call, ConnectedServiceStatus request) async {
+    _gradersManager.setServiceStatus(request.properties.role, request.properties.name, request.status, request.capacity);
     return Empty();
   }
 
