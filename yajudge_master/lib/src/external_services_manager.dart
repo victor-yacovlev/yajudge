@@ -22,6 +22,8 @@ class ExternalServiceConnection {
       identity += ' (takes only arch-specific jobs)';
     }
     String serviceName = properties.role.name;
+    status = ServiceStatus.SERVICE_STATUS_IDLE;
+    capacity = properties.numberOfWorkers;
     log.info('attached $serviceName $identity');
   }
 
@@ -69,16 +71,16 @@ class ExternalServicesManager {
   }
 
   void checkForInactiveGraders() {
-    List<String> gradersToRemove = [];
-    for (final graderConnection in _connections.values) {
-      final serviceCall = graderConnection.call;
+    List<_ServiceIdentity> gradersToRemove = [];
+    for (final service in _connections.entries) {
+      final serviceCall = service.value.call;
       if (serviceCall.isCanceled) {
-        graderConnection.destroy(null, null);
-        gradersToRemove.add(graderConnection.properties.name);
+        service.value.destroy(null, null);
+        gradersToRemove.add(service.key);
       }
     }
-    for (final name in gradersToRemove) {
-      _connections.remove(name);
+    for (final identity in gradersToRemove) {
+      _connections.remove(identity);
     }
   }
 
