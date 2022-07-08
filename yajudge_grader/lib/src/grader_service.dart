@@ -327,6 +327,7 @@ class GraderService {
         return; // restart connection by supervisor
       }
       else {
+        log.severe('got unhandled error $error');
         // log error and become restarted by supervisor
         rethrow;
       }
