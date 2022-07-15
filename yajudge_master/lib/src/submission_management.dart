@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:typed_data';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import 'package:mongo_dart/mongo_dart.dart';
@@ -632,18 +633,24 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   }
 
   Future<List<TestResult>> getSubmissionResultsFromSQL(Submission submission) async {
-    final rows = await connection.query('''
-      select submission_protobuf_gzipped 
+    final query = '''
+      select submission_protobuf_gzipped_base64 
       from submission_results 
       where id=@id
-      ''',
-      substitutionValues: { 'id': submission.id.toInt() },
-    );
+      ''';
+    final queryValues = { 'id': submission.id.toInt() };
+    final rows = await connection.query(query, substitutionValues: queryValues);
     if (rows.isEmpty) {
       return [];
     }
     try {
-      final submissionProtobufGzipped = rows.single.single as List<int>;
+      final singleRow = rows.single;
+      final singleValue = singleRow.single;
+      final submissionProtobufGzippedBase64 = singleValue as String?;
+      if (submissionProtobufGzippedBase64 == null) {
+        return [];
+      }
+      final submissionProtobufGzipped = base64Decode(submissionProtobufGzippedBase64);
       final submissionProtobuf = io.gzip.decode(submissionProtobufGzipped);
       submission = Submission.fromBuffer(submissionProtobuf);
     }
@@ -833,14 +840,15 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future insertSubmissionResultsIntoSQL(Submission submission) async {
     final submissionProtobuf = submission.writeToBuffer();
     final submissionProtobufGzipped = io.gzip.encode(submissionProtobuf);
+    final submissionProtobufGzippedBase64 = base64Encode(submissionProtobufGzipped);
     await connection.query(
         '''
-insert into submission_results(id,submission_protobuf_gzipped)
-values (@id,@data)          
+insert into submission_results(id,submission_protobuf_gzipped_base64)
+values (@id,@data)
         ''',
         substitutionValues: {
           'id': submission.id.toInt(),
-          'data': submissionProtobufGzipped,
+          'data': submissionProtobufGzippedBase64,
         }
     );
   }

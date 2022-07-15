@@ -18,7 +18,7 @@ create table submission_results
     id                          integer not null
         constraint submission_results_pk
             primary key,
-    submission_protobuf_gzipped bytea   not null
+    submission_protobuf_gzipped_base64 varchar   not null
 );
 
 
