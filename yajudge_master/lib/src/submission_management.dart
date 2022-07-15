@@ -894,23 +894,28 @@ values (@id,@data)
       }
     }
 
-    await connection.query(
-        '''
+    final query = '''
         update 
           submissions set status=@status, grader_name=@grader_name,
           style_error_log=@style_error_log, compile_error_log=@compile_error_log,
           grading_status=@grading_status
         where id=@id
-        ''',
-        substitutionValues: {
-          'status': request.status.value,
-          'grader_name': request.graderName,
-          'id': request.id.toInt(),
-          'style_error_log': request.styleErrorLog,
-          'compile_error_log': request.buildErrorLog,
-          'grading_status': SubmissionGradingStatus.processed.value,
-        }
-    );
+        ''';
+    final queryValues = {
+      'status': request.status.value,
+      'grader_name': request.graderName,
+      'id': request.id.toInt(),
+      'style_error_log': request.styleErrorLog,
+      'compile_error_log': request.buildErrorLog,
+      'grading_status': SubmissionGradingStatus.processed.value,
+    };
+
+    try {
+      await connection.query(query, substitutionValues: queryValues);
+    } catch (e) {
+      log.severe('error updating result from grader: $e');
+      return request;
+    }
 
     // there might be older test results in case of rejudging submission
     // so delete them if exists
@@ -937,6 +942,7 @@ values (@id,@data)
     request.testResults.clear();
     request.testResults.addAll(testResults);
     await _notifySubmissionResultChanged(request);
+    log.fine('successfully updated submission ${request.id} from grader');
     return request;
   }
 
