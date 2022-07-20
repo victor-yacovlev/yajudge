@@ -3,7 +3,7 @@ import 'package:protobuf/protobuf.dart';
 import '../../yajudge_common.dart';
 
 extension SubmissionListEntryExtension on SubmissionListEntry {
-  void updateStatus(SolutionStatus newStatus, SubmissionGradingStatus newGradingStatus) {
+  void updateGradingStatus(SolutionStatus newStatus, SubmissionProcessStatus newGradingStatus) {
     status = newStatus;
     gradingStatus = newGradingStatus;
   }
@@ -28,7 +28,7 @@ extension SubmissionListResponseExtension on SubmissionListResponse {
     bool found = false;
     for (var entry in entries) {
       if (entry.submissionId == newEntry.submissionId) {
-        entry.updateStatus(newEntry.status, newEntry.gradingStatus);
+        entry.updateGradingStatus(newEntry.status, newEntry.gradingStatus);
         found = true;
         break;
       }

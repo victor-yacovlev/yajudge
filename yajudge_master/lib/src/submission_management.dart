@@ -186,7 +186,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     Submission? finalSubmission;
     List<Submission> submissions = [];
     var problemStatus = SolutionStatus.ANY_STATUS_OR_NULL;
-    var gradingStatus = SubmissionGradingStatus.processed;
+    var gradingStatus = SubmissionProcessStatus.PROCESS_DONE;
     final maxProblemScore = (problemMetadata.fullScoreMultiplier * 100).round();
     bool completed = false;
     int scoreGot = 0;
@@ -194,7 +194,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       int id = fields[0];
       final status = SolutionStatus.valueOf(fields[1])!;
       final datetime = fields[2] as DateTime;
-      gradingStatus = SubmissionGradingStatus.valueOf(fields[3])!;
+      gradingStatus = SubmissionProcessStatus.valueOf(fields[3])!;
       if (finalStatuses.contains(status)) {
         problemStatus = status;
         finalSubmission = Submission(
@@ -448,7 +448,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       String lastName = row[5];
       String midName = row[6] is String? row[6] : '';
       String groupName = row[7] is String? row[7] : '';
-      final gradingStatus = SubmissionGradingStatus.valueOf(row[8])!;
+      final gradingStatus = SubmissionProcessStatus.valueOf(row[8])!;
       final sender = User(
         firstName: firstName,
         lastName: lastName,
@@ -564,7 +564,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
     final status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
     String? styleErrorLog = firstSubmissionRow[4];
     String? compileErrorLog = firstSubmissionRow[5];
-    final gradingStatus = SubmissionGradingStatus.valueOf(firstSubmissionRow[6])!;
+    final gradingStatus = SubmissionProcessStatus.valueOf(firstSubmissionRow[6])!;
     styleErrorLog ??= '';
     compileErrorLog ??= '';
 
@@ -742,7 +742,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
         'courses_id': request.course.id.toInt(),
         'problem_id': request.problemId,
         'status': SolutionStatus.ANY_STATUS_OR_NULL.value,
-        'grading_status': SubmissionGradingStatus.queued.value,
+        'grading_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
         'datetime': DateTime.now().toUtc(),
       }
     );
@@ -776,13 +776,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       ''',
       substitutionValues: {
         'id': submission.id.toInt(),
-        'grading_status': SubmissionGradingStatus.assigned.value,
+        'grading_status': SubmissionProcessStatus.PROCESS_ASSIGNED.value,
         'grader_name': graderName,
       }
     );
     final assignedSubmission = submission.deepCopy();
     assignedSubmission.graderName = graderName;
-    assignedSubmission.gradingStatus = SubmissionGradingStatus.assigned;
+    assignedSubmission.gradingStatus = SubmissionProcessStatus.PROCESS_ASSIGNED;
     await _notifySubmissionResultChanged(assignedSubmission);
   }
 
@@ -793,8 +793,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
       where grading_status=@assigned_status and grader_name=@grader_name
       ''',
         substitutionValues: {
-          'assigned_status': SubmissionGradingStatus.assigned.value,
-          'new_status': SubmissionGradingStatus.queued.value,
+          'assigned_status': SubmissionProcessStatus.PROCESS_ASSIGNED.value,
+          'new_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
           'grader_name': graderName,
         }
     );
@@ -862,7 +862,7 @@ values (@id,@data)
   Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
     log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     request = request.deepCopy();
-    request.gradingStatus = SubmissionGradingStatus.processed;
+    request.gradingStatus = SubmissionProcessStatus.PROCESS_DONE;
     final submissionResultsDeleter = storageDb==null?
         deleteSubmissionResultsFromSQL : deleteSubmissionResultsFromMongo;
     final submissionResultsInserter = storageDb==null?
@@ -908,7 +908,7 @@ values (@id,@data)
           'id': request.id.toInt(),
           'style_error_log': request.styleErrorLog,
           'compile_error_log': request.buildErrorLog,
-          'grading_status': SubmissionGradingStatus.processed.value,
+          'grading_status': SubmissionProcessStatus.PROCESS_DONE.value,
         }
     );
 
@@ -962,7 +962,7 @@ values (@id,@data)
       where grading_status=@grading_status and courses_id=courses.id
       order by datetime
       ''',
-      substitutionValues: {'grading_status': SubmissionGradingStatus.queued.value}
+      substitutionValues: {'grading_status': SubmissionProcessStatus.PROCESS_QUEUED.value}
     );
     List<Submission> result = [];
     for (final e in rows) {
@@ -994,7 +994,7 @@ values (@id,@data)
       limit 1
       ''',
         substitutionValues: {
-          'grading_status': SubmissionGradingStatus.assigned.value,
+          'grading_status': SubmissionProcessStatus.PROCESS_ASSIGNED.value,
           'grader_name': graderName,
         }
     );
@@ -1285,7 +1285,7 @@ values (@id,@data)
       await connection.query(
           'update submissions set grading_status=@new_status where id=@id',
           substitutionValues: {
-            'new_status': SubmissionGradingStatus.queued.value,
+            'new_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
             'id': submission.id.toInt(),
           }
       );
@@ -1307,7 +1307,7 @@ values (@id,@data)
       final status = firstRow[6] as int;
       submission.user = User(id: userId, firstName: firstName, lastName: lastName, midName: midName);
       submission.status = SolutionStatus.valueOf(status)!;
-      submission.gradingStatus = SubmissionGradingStatus.queued;
+      submission.gradingStatus = SubmissionProcessStatus.PROCESS_QUEUED;
       submission.styleErrorLog = submission.buildErrorLog = '';
       submission.testResults.clear();
       submission.graderScore = 0.0;
@@ -1348,7 +1348,7 @@ values (@id,@data)
     }
     final response = request.deepCopy();
     response.submission = request.submission.deepCopy();
-    response.submission.gradingStatus = SubmissionGradingStatus.queued;
+    response.submission.gradingStatus = SubmissionProcessStatus.PROCESS_QUEUED;
     return response;
   }
 

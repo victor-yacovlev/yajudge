@@ -650,14 +650,14 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
 
 }
 
-Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, SolutionStatus status, SubmissionGradingStatus gradingStatus) {
+Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, SolutionStatus status, SubmissionProcessStatus gradingStatus) {
   String secondLine = '';
   IconData iconData = Icons.error;
   Color iconColor = Colors.grey;
-  if (gradingStatus == SubmissionGradingStatus.assigned) {
+  if (gradingStatus == SubmissionProcessStatus.PROCESS_ASSIGNED) {
     return Tuple3('В очереди на тестирование', Icons.access_time_rounded, iconColor);
   }
-  if (gradingStatus == SubmissionGradingStatus.queued) {
+  if (gradingStatus == SubmissionProcessStatus.PROCESS_QUEUED) {
     return Tuple3('Тестируется', Icons.access_time_rounded, iconColor);
   }
   switch (status) {
@@ -696,10 +696,6 @@ Tuple3<String,IconData,Color> visualizeSolutionStatus(BuildContext context, Solu
     case SolutionStatus.SUMMON_FOR_DEFENCE:
       iconData = Icons.error_outline;
       secondLine = 'Необходимо защитить решение';
-      break;
-    case SolutionStatus.PLAGIARISM_DETECTED:
-      iconData = Icons.error_outline;
-      secondLine = 'Подозрение на плагиат';
       break;
     case SolutionStatus.DISQUALIFIED:
       iconData = Icons.error;

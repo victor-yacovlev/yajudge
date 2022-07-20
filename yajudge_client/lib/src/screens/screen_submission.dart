@@ -370,7 +370,7 @@ class SubmissionScreenState extends BaseScreenState {
     List<SolutionStatus> statuses = [
       SolutionStatus.OK, SolutionStatus.SUMMON_FOR_DEFENCE,
       SolutionStatus.PENDING_REVIEW, SolutionStatus.CODE_REVIEW_REJECTED,
-      SolutionStatus.PLAGIARISM_DETECTED, SolutionStatus.DISQUALIFIED,
+      SolutionStatus.DISQUALIFIED,
       SolutionStatus.COMPILATION_ERROR, SolutionStatus.WRONG_ANSWER,
       SolutionStatus.TIME_LIMIT, SolutionStatus.VALGRIND_ERRORS,
       SolutionStatus.STYLE_CHECK_ERROR,
@@ -388,7 +388,7 @@ class SubmissionScreenState extends BaseScreenState {
       return SimpleDialog(
         title: Text('Изменить статус', style: theme.textTheme.headline5),
         children: statuses.map((status) {
-          final statusName = statusMessageText(status, SubmissionGradingStatus.processed, '', false);
+          final statusName = statusMessageText(status, SubmissionProcessStatus.PROCESS_DONE, '', false);
           final statusColor = statusMessageColor(context, status);
           return SimpleDialogOption(
             child: makeText(statusName, statusColor),
@@ -456,7 +456,7 @@ class SubmissionScreenState extends BaseScreenState {
     final graderName = _submission!.graderName;
     String statusName = statusMessageText(status, gradingStatus, graderName, false);
     Color? statusColor = statusMessageColor(context, status);
-    if (gradingStatus != SubmissionGradingStatus.processed) {
+    if (gradingStatus != SubmissionProcessStatus.PROCESS_DONE) {
       statusColor = null;
     }
     String dateSent = formatDateTime(_submission!.datetime.toInt());
@@ -513,7 +513,7 @@ class SubmissionScreenState extends BaseScreenState {
       makeText('Статус: '),
       makeText(statusName, statusColor),
     ];
-    if (canChangeStatus && gradingStatus==SubmissionGradingStatus.processed) {
+    if (canChangeStatus && gradingStatus==SubmissionProcessStatus.PROCESS_DONE) {
       statusItems.add(TextButton(onPressed: () {
         showChangeStatusDialog(context, status);
       }, child: makeText('Изменить', null, true)));
@@ -973,7 +973,6 @@ class SubmissionScreenState extends BaseScreenState {
   final statusesToAction = {
     SolutionStatus.PENDING_REVIEW,
     SolutionStatus.CODE_REVIEW_REJECTED,
-    SolutionStatus.PLAGIARISM_DETECTED,
     SolutionStatus.SUMMON_FOR_DEFENCE,
   };
 
@@ -1168,7 +1167,6 @@ const statusesFull = {
   SolutionStatus.ANY_STATUS_OR_NULL: 'Любой статус',
   SolutionStatus.PENDING_REVIEW: 'Ожидает ревью',
   SolutionStatus.OK: 'Решение зачтено',
-  SolutionStatus.PLAGIARISM_DETECTED: 'Подозрение на плагиат',
   SolutionStatus.CODE_REVIEW_REJECTED: 'Отправлено на доработку',
   SolutionStatus.SUMMON_FOR_DEFENCE: 'Требуется защита',
   SolutionStatus.DISQUALIFIED: 'Дисквалификация',
@@ -1192,19 +1190,18 @@ const statusesShort = {
   SolutionStatus.WRONG_ANSWER: 'WA',
   SolutionStatus.VALGRIND_ERRORS: 'VLG',
   SolutionStatus.TIME_LIMIT: 'TL',
-  SolutionStatus.PLAGIARISM_DETECTED: 'CHEAT?',
   SolutionStatus.CODE_REVIEW_REJECTED: 'REJ',
   SolutionStatus.SUMMON_FOR_DEFENCE: 'SM',
   SolutionStatus.CHECK_FAILED: 'CF',
   SolutionStatus.HARD_DEADLINE_PASSED: 'DL',
 };
 
-String statusMessageText(SolutionStatus status, SubmissionGradingStatus gradingStatus, String graderName, bool shortVariant) {
+String statusMessageText(SolutionStatus status, SubmissionProcessStatus gradingStatus, String graderName, bool shortVariant) {
   String message = '';
-  if (gradingStatus == SubmissionGradingStatus.queued) {
+  if (gradingStatus == SubmissionProcessStatus.PROCESS_QUEUED) {
     return shortVariant? '...' : 'В очереди на тестирование';
   }
-  if (gradingStatus == SubmissionGradingStatus.assigned) {
+  if (gradingStatus == SubmissionProcessStatus.PROCESS_ASSIGNED) {
     message = 'Тестируется';
     if (graderName.isNotEmpty) {
       message += ' ($graderName)';
@@ -1235,7 +1232,6 @@ Color statusMessageColor(BuildContext buildContext, SolutionStatus status) {
     SolutionStatus.OK,
   };
   const needActionStatuses = {
-    SolutionStatus.PLAGIARISM_DETECTED,
     SolutionStatus.PENDING_REVIEW,
     SolutionStatus.SUMMON_FOR_DEFENCE,
   };

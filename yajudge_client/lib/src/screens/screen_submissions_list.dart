@@ -425,7 +425,7 @@ class SubmissionsListScreenState extends BaseScreenState {
       final gradingStatus = entry.gradingStatus;
       String status = statusMessageText(solutionStatus, gradingStatus, '', narrow);
       Color statusTextColor = statusMessageColor(context, solutionStatus);
-      if (const {SubmissionGradingStatus.assigned, SubmissionGradingStatus.queued}.contains(gradingStatus)) {
+      if (const {SubmissionProcessStatus.PROCESS_ASSIGNED, SubmissionProcessStatus.PROCESS_QUEUED}.contains(gradingStatus)) {
         statusTextColor = statusMessageColor(context, SolutionStatus.ANY_STATUS_OR_NULL);
       }
       TableCell makeClickableCellFromText(String text, [Color? color]) {

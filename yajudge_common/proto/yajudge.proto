@@ -211,7 +211,6 @@ enum SolutionStatus {
   SUMMON_FOR_DEFENCE  = 6;
   PENDING_REVIEW      = 7;
   CODE_REVIEW_REJECTED= 8;
-  PLAGIARISM_DETECTED = 11;
   DISQUALIFIED        = 12;
   CHECK_FAILED        = 13;
   RUNTIME_ERROR       = 14;
@@ -223,10 +222,10 @@ enum SolutionStatus {
   HARD_DEADLINE_PASSED= 300;
 }
 
-enum SubmissionGradingStatus {
-  queued = 0;
-  assigned = 1;
-  processed = 2;
+enum SubmissionProcessStatus {
+  PROCESS_QUEUED = 0;
+  PROCESS_ASSIGNED = 1;
+  PROCESS_DONE = 2;
 }
 
 message ProblemStatus {
@@ -241,7 +240,7 @@ message ProblemStatus {
   SolutionStatus      final_solution_status = 11;
   SubmissionsCountLimit submission_count_limit = 12;
   repeated Submission submissions = 13;
-  SubmissionGradingStatus final_grading_status = 20;
+  SubmissionProcessStatus final_grading_status = 20;
 
 }
 
@@ -310,7 +309,11 @@ message Submission {
   string              problem_id    = 12;
   repeated TestResult test_results  = 13;
 
-  SubmissionGradingStatus grading_status = 100;
+  // Cheat detection
+  double              maximum_similarity_found = 20;
+
+  SubmissionProcessStatus grading_status = 100;
+  SubmissionProcessStatus cheat_check_status = 101;
 
   // not to be stored directly in database
   int64               soft_deadline = 300;
@@ -632,7 +635,7 @@ message SubmissionListEntry {
   int64             datetime = 4;
   string            problem_id = 5;
   bool              hard_deadline_passed = 6;
-  SubmissionGradingStatus grading_status = 10;
+  SubmissionProcessStatus grading_status = 10;
 }
 
 message SubmissionListResponse {
