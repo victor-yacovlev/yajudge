@@ -117,7 +117,7 @@ class UserEditScreenState extends BaseScreenState {
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  static final Map<Role, String> roleNames = {
+  static const roleNames = <Role, String>{
     Role.ROLE_ANY: '[ не назначена ]',
     Role.ROLE_ADMINISTRATOR: 'Администратор',
     Role.ROLE_LECTURER: 'Лектор',
@@ -125,7 +125,7 @@ class UserEditScreenState extends BaseScreenState {
     Role.ROLE_TEACHER_ASSISTANT: 'Учебный ассистент',
     Role.ROLE_STUDENT: 'Студент',
   };
-  final TextEditingController _roleController = TextEditingController();
+  final _roleController = TextEditingController();
 
   Widget _buildFieldItem(
       BuildContext context, String label, Widget child,
@@ -168,6 +168,7 @@ class UserEditScreenState extends BaseScreenState {
         if (newValue != null) {
           controller.text = newValue;
         }
+        _checkIfCanSubmit();
       } : null,
     );
     return _buildFieldItem(context, label, dropdown, actionWidgets: actionWidgets);
@@ -412,7 +413,7 @@ class UserEditScreenState extends BaseScreenState {
     user.email = _emailController.text.trim();
     user.defaultRole = _roleByName(_roleController.text.trim());
     user.disabled = false;
-    UserManagementClient service = ConnectionController.instance!.usersService;
+    final service = ConnectionController.instance!.usersService;
     service.createOrUpdateUser(user).then((changedUser) {
       setState(() {
         _user = changedUser;
@@ -466,7 +467,9 @@ class UserEditScreenState extends BaseScreenState {
       ;
       canSubmit = passwordSet && changed;
     }
-    _canSubmit = canSubmit;
+    setState(() {
+      _canSubmit = canSubmit;
+    });
   }
 
   @override
