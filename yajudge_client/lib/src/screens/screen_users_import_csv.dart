@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:protobuf/protobuf.dart';
 import '../controllers/connection_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'screen_base.dart';
@@ -98,13 +99,13 @@ class UsersImportCSVScreenState extends BaseScreenState {
     );
   }
 
-  Map<String, bool> Delimeters = {
+  Map<String, bool> separators = {
     'Запятая': true, 'Точка с запятой': true, 'Пробел': false, 'Табуляция': true
   };
 
-  List<String> Fields = ['Фамилия', 'Имя', 'Отчество', 'Группа', 'Email'];
+  List<String> fields = ['Фамилия', 'Имя', 'Отчество', 'Группа', 'Email'];
 
-  Map<String, bool> Options = {
+  Map<String, bool> options = {
     'Пропустить 1 строку': true, 'Литералы в кавычках': false,
   };
 
@@ -129,13 +130,13 @@ class UsersImportCSVScreenState extends BaseScreenState {
   }
 
   Widget _createParametersCheck(BuildContext context) {
-    Container delimetersWidget = Container(
-      child: createParametersBoolGroup(context, 'Разделители', Delimeters)
+    Container separatorsWidget = Container(
+      child: createParametersBoolGroup(context, 'Разделители', separators)
     );
     Container optionsWidget = Container(
-        child: createParametersBoolGroup(context, 'Опции', Options)
+        child: createParametersBoolGroup(context, 'Опции', options)
     );
-    Widget allOptions = Column(children: [SizedBox(height: 20), delimetersWidget, optionsWidget],);
+    Widget allOptions = Column(children: [SizedBox(height: 20), separatorsWidget, optionsWidget],);
     return Container(
       child: SingleChildScrollView(
         child: allOptions,
@@ -192,20 +193,21 @@ class UsersImportCSVScreenState extends BaseScreenState {
     return Column(children: _buildCentralWidgetComponents(context));
   }
 
+  @override
   Widget buildCentralWidget(BuildContext context) {
     return Column(children: _buildCentralWidgetComponents(context));
   }
 
 
-  Map<int,int> _selectedColumnFields = Map();
-  TextEditingController _groupForAll = TextEditingController();
+  final Map<int,int> _selectedColumnFields = {};
+  final TextEditingController _groupForAll = TextEditingController();
 
   Widget _buildReviewTableComponents(BuildContext context, int columnsCount) {
     List<Widget> items = List.empty(growable: true);
-    Map<int, Widget> children = Map();
+    Map<int, Widget> children = {};
     children[0] = Text('[ничего]');
-    for (int i=0; i<Fields.length; i++) {
-      children[i+1] = Text(Fields[i]);
+    for (int i=0; i<fields.length; i++) {
+      children[i+1] = Text(fields[i]);
     }
     for (int i=0; i<columnsCount; i++) {
       Widget chooser = Container(
@@ -232,20 +234,13 @@ class UsersImportCSVScreenState extends BaseScreenState {
       );
       Widget colName = Container(
         width: 100,
-        child: Text('Столбец '+(i+1).toString()+':')
+        child: Text('Столбец ${i+1}:')
       );
       items.add(Row(children: [
         colName, chooser, Spacer()
       ],));
     }
-    bool noGroupChoosen = true;
-    for (int choosen in _selectedColumnFields.values) {
-      if ((choosen - 1) == Fields.indexOf('Группа')) {
-        noGroupChoosen = false;
-        break;
-      }
-    }
-    if (noGroupChoosen) {
+    if (noGroupChosen) {
       items.add(TextField(
         controller: _groupForAll,
         decoration: InputDecoration(
@@ -257,6 +252,17 @@ class UsersImportCSVScreenState extends BaseScreenState {
     return Container(child: Column(children: items));
   }
 
+  bool get noGroupChosen {
+    bool result = true;
+    for (final chosen in _selectedColumnFields.values) {
+      if ((chosen - 1) == fields.indexOf('Группа')) {
+        result = false;
+        break;
+      }
+    }
+    return result;
+  }
+
   Table? _buildPreviewTableContents(BuildContext context) {
     if (_csvPreview == null || _csvPreview!.isEmpty) {
       return null;
@@ -266,7 +272,7 @@ class UsersImportCSVScreenState extends BaseScreenState {
     List<TableCell> headerCells = List.empty(growable: true);
     for (int i=0; i<columnsCount; i++) {
       headerCells.add(TableCell(
-        child: Text('Столбец '+(i+1).toString(), textAlign: TextAlign.center),
+        child: Text('Столбец ${i+1}', textAlign: TextAlign.center),
       ));
     }
     TableRow headerRow = TableRow(
@@ -300,17 +306,17 @@ class UsersImportCSVScreenState extends BaseScreenState {
       return;
     }
     CsvParser parser = CsvParser(
-        comaAsDelimiter: Delimeters['Запятая']!,
-        semicolonAsDelimiter: Delimeters['Точка с запятой']!,
-        spacesAsDelimiter: Delimeters['Пробел']!,
-        tabAsDelimiter: Delimeters['Табуляция']!,
-        escapedStrings: Options['Литералы в кавычках']!,
-        skipFirstRow: Options['Пропустить 1 строку']!,
+        comaAsDelimiter: separators['Запятая']!,
+        semicolonAsDelimiter: separators['Точка с запятой']!,
+        spacesAsDelimiter: separators['Пробел']!,
+        tabAsDelimiter: separators['Табуляция']!,
+        escapedStrings: options['Литералы в кавычках']!,
+        skipFirstRow: options['Пропустить 1 строку']!,
     );
     List<List<String>> csvTable = parser.parseTable(sourceCSV);
     setState(() {
       _csvPreview = csvTable;
-      if (_csvPreview!.length > 0) {
+      if (_csvPreview!.isNotEmpty) {
         _selectedColumnFields.clear();
         int colsCount = _csvPreview![0].length;
         for (int i=0; i<colsCount; i++) {
@@ -321,29 +327,34 @@ class UsersImportCSVScreenState extends BaseScreenState {
   }
 
   void _createUsersFromCsvData() {
-    int lastNameIndex = 1 + Fields.indexOf('Фамилия');
-    int firstNameIndex = 1 + Fields.indexOf('Имя');
-    int midNameIndex = 1 + Fields.indexOf('Отчество');
-    int groupNameIndex = 1 + Fields.indexOf('Группа');
-    int emailIndex = 1 + Fields.indexOf('Email');
+    int lastNameIndex = 1 + fields.indexOf('Фамилия');
+    int firstNameIndex = 1 + fields.indexOf('Имя');
+    int midNameIndex = 1 + fields.indexOf('Отчество');
+    int groupNameIndex = 1 + fields.indexOf('Группа');
+    int emailIndex = 1 + fields.indexOf('Email');
     int firstNameCol = -1;
     int lastNameCol = -1;
     int midNameCol = -1;
     int groupNameCol = -1;
     int emailCol = -1;
     for (MapEntry<int,int> x in _selectedColumnFields.entries) {
-      if (x.value == firstNameIndex)
+      if (x.value == firstNameIndex) {
         firstNameCol = x.key;
-      if (x.value == lastNameIndex)
+      }
+      if (x.value == lastNameIndex) {
         lastNameCol = x.key;
-      if (x.value == midNameIndex)
+      }
+      if (x.value == midNameIndex) {
         midNameCol = x.key;
-      if (x.value == groupNameIndex)
+      }
+      if (x.value == groupNameIndex) {
         groupNameCol = x.key;
-      if (x.value == emailIndex)
+      }
+      if (x.value == emailIndex) {
         emailCol = x.key;
+      }
     }
-    List<User> users = List.empty(growable: true);
+    List<User> users = [];
     for (int i=0; i<_csvPreview!.length; i++) {
       List<String> row = _csvPreview![i];
       final user = User(
@@ -353,14 +364,14 @@ class UsersImportCSVScreenState extends BaseScreenState {
         midName: midNameCol==-1? '' : row[midNameCol],
         email: emailCol==-1? '' : row[emailCol],
         groupName: groupNameCol==-1? '' : row[groupNameCol]
-      );
+      ).deepCopy();
       users.add(user);
     }
     _users = users;
   }
   void _checkData() {
-    int firstNameIndex = 1 + Fields.indexOf('Фамилия');
-    int lastNameIndex = 1 + Fields.indexOf('Имя');
+    int firstNameIndex = 1 + fields.indexOf('Фамилия');
+    int lastNameIndex = 1 + fields.indexOf('Имя');
     bool hasFirstName = _selectedColumnFields.values.contains(firstNameIndex);
     bool hasLastname = _selectedColumnFields.values.contains(lastNameIndex);
     if (hasFirstName && hasLastname) {
@@ -374,6 +385,12 @@ class UsersImportCSVScreenState extends BaseScreenState {
       _submitInProgress = true;
     });
     UserManagementClient service = ConnectionController.instance!.usersService;
+    if (noGroupChosen && _groupForAll.text.trim().isNotEmpty) {
+      final groupName = _groupForAll.text.trim();
+      for (final user in _users!) {
+        user.groupName = groupName;
+      }
+    }
     service.batchCreateStudents(UsersList(users: _users)).then((value) {
       setState(() {
         _errorMessage = null;

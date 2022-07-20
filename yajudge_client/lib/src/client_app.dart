@@ -99,7 +99,7 @@ class AppState extends State<App> {
       return UsersScreen(user: loggedUser);
     }
     if (fullPath == '/users/import_csv') {
-      UsersImportCSVScreen(loggedInUser: loggedUser);
+      return UsersImportCSVScreen(loggedInUser: loggedUser);
     }
     final RegExp usersMatch = RegExp(r'/users/(\d+|new|myself)');
     if (usersMatch.hasMatch(fullPath)) {

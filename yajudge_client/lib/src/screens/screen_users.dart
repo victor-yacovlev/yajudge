@@ -35,6 +35,9 @@ class UsersScreenState extends BaseScreenState {
 
   void setUsersFilter(UsersFilter? filter) {
     if (filter == null) {
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _filter = null;
         _usersToShow = null;
@@ -45,6 +48,9 @@ class UsersScreenState extends BaseScreenState {
     }
     UserManagementClient service = ConnectionController.instance!.usersService;
     service.getUsers(filter).then((UsersList usersList) {
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _usersToShow = List.from(usersList.users);
         _usersSelected = List.filled(_usersToShow!.length, false);
@@ -52,6 +58,9 @@ class UsersScreenState extends BaseScreenState {
         _loadError = null;
       });
     }).onError((error, stackTrace) {
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _usersToShow = null;
         _usersSelected = null;
