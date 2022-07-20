@@ -1,15 +1,16 @@
-create table if not exists courses
+create table courses
 (
     id                                           serial
         constraint courses_pk
             primary key,
-    name                                         varchar(50)  not null,
-    course_data                                  varchar(100) not null,
-    url_prefix                                   varchar(50)  not null,
+    name                                         varchar(50)           not null,
+    course_data                                  varchar(100)          not null,
+    url_prefix                                   varchar(50)           not null,
     must_solve_all_required_problems_to_complete boolean default false,
     disable_review                               boolean default false,
     disable_defence                              boolean default true,
-    need_update_deadlines                        boolean default false not null
+    need_update_deadlines                        boolean default false not null,
+    description                                  varchar
 );
 
 

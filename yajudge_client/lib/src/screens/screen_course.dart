@@ -89,7 +89,7 @@ class CourseScreenState extends BaseScreenState {
     int firstLevelNumber = 1;
     firstLevelNodes.add(Node(
       key: '#',
-      label: 'О курсе',
+      label: 'Общая информация',
       icon: Icons.info_outlined,
     ));
     for (Section section in screen.courseData.sections) {
@@ -366,44 +366,102 @@ class CourseScreenState extends BaseScreenState {
 
   List<Widget> _createCommonCourseInformation(BuildContext context) {
     List<Widget> result = [];
-    final title = Text('О курсе', textAlign: TextAlign.start,
-      style: Theme.of(context).textTheme.headline4!.merge(TextStyle(color: Theme.of(context).textTheme.bodyText1!.color)),
-    );
-    result.add(Padding(child: title, padding: EdgeInsets.fromLTRB(0, 0, 0, 20)));
 
-    addText(String text) {
+    final h1Style = Theme.of(context).textTheme.headline4!
+        .merge(TextStyle(color: Theme.of(context).textTheme.bodyText1!.color));
+    final h2Style = Theme.of(context).textTheme.headline6!;
+    final pStyle = Theme.of(context).textTheme.bodyText1!
+        .merge(TextStyle(fontSize: 16));
+
+    addText(String text, TextStyle style) {
+      double paddingTop = 0;
+      double paddingBottom = 0;
+      if (style == pStyle) {
+        paddingBottom = paddingTop = 10;
+      }
+      else if (style == h1Style) {
+        paddingBottom = 20;
+      }
+      else if (style == h2Style) {
+        paddingTop = 30;
+        paddingBottom = 20;
+      }
       result.add(
         Padding(
-          child: Text(text,
-            style: Theme.of(context).textTheme.bodyText1!.merge(
-              TextStyle(
-                fontSize: 16,
-              )
-            ),
-          ),
-          padding: EdgeInsets.fromLTRB(0, 10, 0, 10)
+          child: Text(text, style: style),
+          padding: EdgeInsets.fromLTRB(0, paddingTop, 0, paddingBottom)
         )
       );
     }
 
-    final descriptionLines = screen.courseData.description.split('\n');
-    for (final line in descriptionLines) {
-      addText(line);
-    }
-    
-    if (_status != null && _status!.problemsTotal > 0) {
-      addText('Всего в курсе ${_status!.problemsTotal} задач, ${_status!.problemsRequired} из которых являются обязательными.');
-      addText('Каждая задача оценивается в баллах, в зависимости от сложности. Максимальный балл за курс равен ${_status!.scoreMax.toInt()}.');
-
-      final titleStatus = Text('Cтатус прохождения', style: Theme.of(context).textTheme.headline6,);
-      result.add(Padding(child: titleStatus, padding: EdgeInsets.fromLTRB(0, 30, 0, 20)));
-      addText('Решено ${_status!.problemsSolved} задач, из них ${_status!.problemsRequiredSolved} обязательных.');
-      addText('Текущий балл ${_status!.scoreGot.toInt()} (${(100*_status!.scoreGot/_status!.scoreMax).round()}%)');
-      addText('Осталось решить ${_status!.problemsTotal-_status!.problemsSolved} задач, из них ${_status!.problemsRequired-_status!.problemsRequiredSolved} обязательных.');
+    final descriptionLines = courseDescription.split('\n');
+    for (String line in descriptionLines) {
+      line = line.trim();
+      if (line.isEmpty) {
+        continue;
+      }
+      int headLevel = 0;
+      while (line.startsWith('#')) {
+        headLevel ++;
+        line = line.substring(1);
+      }
+      line = line.trimLeft();
+      TextStyle style = pStyle;
+      if (headLevel == 1) {
+        style = h1Style;
+      }
+      else if (headLevel == 2) {
+        style = h2Style;
+      }
+      addText(line, style);
     }
 
     return result;
   }
+
+  String get courseDescription {
+    String template;
+    final course = (widget as CourseScreen).course;
+    if (course.hasDescription() && course.description.isNotEmpty) {
+      template = course.description.trim();
+    }
+    else {
+      template = defaultCourseDescription.trim();
+    }
+    final sv = <String,String>{};
+    if (_status == null) {
+      return '';
+    }
+    sv['problemsRequiredLeft'] = (_status!.problemsRequired-_status!.problemsRequiredSolved).toString();
+    sv['problemsRequiredSolved'] = _status!.problemsRequiredSolved.toString();
+    sv['problemsTotal'] = _status!.problemsTotal.toString();
+    sv['scoreMax'] = _status!.scoreMax.toInt().toString();
+    sv['scoreGot'] = _status!.scoreGot.toInt().toString();
+    sv['scorePercentage'] = (100*_status!.scoreGot/_status!.scoreMax).round().toString();
+    sv['problemsRequired'] = _status!.problemsRequired.toString();
+    sv['problemsSolved'] = _status!.problemsSolved.toString();
+    sv['problemsLeft'] = (_status!.problemsTotal-_status!.problemsSolved).toString();
+
+    String text = template;
+    for (final substitution in sv.entries) {
+      final key = substitution.key;
+      final value = substitution.value;
+      text = text.replaceAll('%$key', value);
+    }
+
+    return text;
+  }
+
+  static const String defaultCourseDescription = '''
+  # О курсе
+  Всего в курсе %problemsTotal задач, %problemsRequired из которых являются обязательными.
+  Каждая задача оценивается в баллах, в зависимости от сложности.
+  Максимальный балл за курс равен %scoreMax.
+  ## Статус прохождения
+  Решено %problemsSolved задач, из них %problemsRequiredSolved обязательных. 
+  Текущий балл %scoreGot (%scorePercentage%).
+  Осталось решить %problemsLeft задач, из них %problemsRequiredLeft обязательных.
+  ''';
 
   List<Widget> _createCommonLessonInformation(BuildContext context, Lesson lesson) {
     List<Widget> result = List.empty(growable: true);

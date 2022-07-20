@@ -383,6 +383,7 @@ message Course {
   string            url_prefix    = 5;
   bool              disable_review = 7;
   bool              disable_defence = 8;
+  string            description = 9;
 }
 
 message Enrollment {
