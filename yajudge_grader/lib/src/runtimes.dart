@@ -229,6 +229,7 @@ abstract class AbstractRuntime {
     Timer? timer;
 
     void handleTimeout() {
+      log.info('submission ${submission.id} killed by timeout on test $testBaseName');
       timeoutExceed = true;
       runner.killProcess(solutionProcess);
     }
@@ -253,6 +254,7 @@ abstract class AbstractRuntime {
 
     int signalKilled = 0;
     if (exitStatus >= 128 && !timeoutExceed) {
+      log.info('submission ${submission.id} finished with non-zero exit status $exitStatus test $testBaseName');
       signalKilled = exitStatus - 128;
     }
 
@@ -463,11 +465,20 @@ class ValgrindRuntime extends AbstractRuntime {
     final logFileName = '/runs/$runtimeName/$testBaseName.valgrind';
     final logOption = '--log-file=$logFileName';
     valgrindOptions.add(logOption);
+    final valgrindAjustedLimits = gradingLimits.deepCopy();
+    int memoryLimit = gradingLimits.memoryMaxLimitMb > 0 ? gradingLimits.memoryMaxLimitMb.toInt() + 16 : 0;
+    int stackLimit = gradingLimits.stackSizeLimitMb > 0 ? gradingLimits.stackSizeLimitMb.toInt() + 2 : 0;
+    double cpuLimit = gradingLimits.cpuTimeLimitSec.toInt() * 2.0;
+    double timeLimit = gradingLimits.realTimeLimitSec.toInt() * 2.0;
+    valgrindAjustedLimits.memoryMaxLimitMb = Int64(memoryLimit);
+    valgrindAjustedLimits.stackSizeLimitMb = Int64(stackLimit);
+    valgrindAjustedLimits.cpuTimeLimitSec = Int64(cpuLimit.round());
+    valgrindAjustedLimits.realTimeLimitSec = Int64(timeLimit.round());
     return runner.start(
       submission,
       [valgrindExecutable] + valgrindOptions + [artifact.fileNames.single] + arguments,
       workingDirectory: workDir,
-      limits: gradingLimits,
+      limits: valgrindAjustedLimits,
       coprocessFileName: coprocessFileName,
       targetName: targetName,
     );

@@ -102,7 +102,9 @@ class CourseManagementService extends CourseManagementServiceBase {
         CourseData courseData = loader.courseData();
         ProblemData problemData = loader.problemData(problemId).deepCopy();
         problemData.gradingOptions.limits = courseData.defaultLimits.mergedWith(problemData.gradingOptions.limits);
-        log.fine('sent problem data on $courseId/$problemId [last modified $lastModified] to grader');
+        if (call != null) {
+          log.fine('sent problem data on $courseId/$problemId [last modified $lastModified] to grader');
+        }
         return ProblemContentResponse(
           problemId: problemId,
           courseDataId: courseId,

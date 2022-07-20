@@ -632,18 +632,24 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   }
 
   Future<List<TestResult>> getSubmissionResultsFromSQL(Submission submission) async {
-    final rows = await connection.query('''
-      select submission_protobuf_gzipped 
+    final query = '''
+      select submission_protobuf_gzipped_base64 
       from submission_results 
       where id=@id
-      ''',
-      substitutionValues: { 'id': submission.id.toInt() },
-    );
+      ''';
+    final queryValues = { 'id': submission.id.toInt() };
+    final rows = await connection.query(query, substitutionValues: queryValues);
     if (rows.isEmpty) {
       return [];
     }
     try {
-      final submissionProtobufGzipped = rows.single.single as List<int>;
+      final singleRow = rows.single;
+      final singleValue = singleRow.single;
+      final submissionProtobufGzippedBase64 = singleValue as String?;
+      if (submissionProtobufGzippedBase64 == null) {
+        return [];
+      }
+      final submissionProtobufGzipped = base64Decode(submissionProtobufGzippedBase64);
       final submissionProtobuf = io.gzip.decode(submissionProtobufGzipped);
       submission = Submission.fromBuffer(submissionProtobuf);
     }
@@ -833,14 +839,15 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
   Future insertSubmissionResultsIntoSQL(Submission submission) async {
     final submissionProtobuf = submission.writeToBuffer();
     final submissionProtobufGzipped = io.gzip.encode(submissionProtobuf);
+    final submissionProtobufGzippedBase64 = base64Encode(submissionProtobufGzipped);
     await connection.query(
         '''
-insert into submission_results(id,submission_protobuf_gzipped)
-values (@id,@data)          
+insert into submission_results(id,submission_protobuf_gzipped_base64)
+values (@id,@data)
         ''',
         substitutionValues: {
           'id': submission.id.toInt(),
-          'data': submissionProtobufGzipped,
+          'data': submissionProtobufGzippedBase64,
         }
     );
   }
@@ -894,23 +901,28 @@ values (@id,@data)
       }
     }
 
-    await connection.query(
-        '''
+    final query = '''
         update 
           submissions set status=@status, grader_name=@grader_name,
           style_error_log=@style_error_log, compile_error_log=@compile_error_log,
           grading_status=@grading_status
         where id=@id
-        ''',
-        substitutionValues: {
-          'status': request.status.value,
-          'grader_name': request.graderName,
-          'id': request.id.toInt(),
-          'style_error_log': request.styleErrorLog,
-          'compile_error_log': request.buildErrorLog,
-          'grading_status': SubmissionProcessStatus.PROCESS_DONE.value,
-        }
-    );
+        ''';
+    final queryValues = {
+      'status': request.status.value,
+      'grader_name': request.graderName,
+      'id': request.id.toInt(),
+      'style_error_log': request.styleErrorLog,
+      'compile_error_log': request.buildErrorLog,
+      'grading_status': SubmissionProcessStatus.PROCESS_DONE.value,
+    };
+
+    try {
+      await connection.query(query, substitutionValues: queryValues);
+    } catch (e) {
+      log.severe('error updating result from grader: $e');
+      return request;
+    }
 
     // there might be older test results in case of rejudging submission
     // so delete them if exists
@@ -937,6 +949,7 @@ values (@id,@data)
     request.testResults.clear();
     request.testResults.addAll(testResults);
     await _notifySubmissionResultChanged(request);
+    log.fine('successfully updated submission ${request.id} from grader');
     return request;
   }
 

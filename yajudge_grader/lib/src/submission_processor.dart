@@ -150,6 +150,9 @@ class SubmissionProcessor {
     else {
       submission.status = SolutionStatus.OK;
     }
+    if (!{SolutionStatus.COMPILATION_ERROR, SolutionStatus.CHECK_FAILED}.contains(submission.status)) {
+      submission.clearBuildErrorLog();
+    }
     return submission..testResults.addAll(testResults);
   }
 

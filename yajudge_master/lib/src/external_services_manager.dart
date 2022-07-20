@@ -50,17 +50,9 @@ class ExternalServiceConnection {
 
 }
 
-class _ServiceIdentity {
-  final String instanceName;
-  final ServiceRole serviceRole;
-
-  _ServiceIdentity(this.instanceName, this.serviceRole);
-
-}
-
 class ExternalServicesManager {
   final Logger log = Logger('ExternalServicesManager');
-  final Map<_ServiceIdentity,ExternalServiceConnection> _connections = {};
+  final Map<String,ExternalServiceConnection> _connections = {};
 
   bool get hasGraders => _connections.isNotEmpty;
 
@@ -71,7 +63,7 @@ class ExternalServicesManager {
   }
 
   void checkForInactiveGraders() {
-    List<_ServiceIdentity> gradersToRemove = [];
+    List<String> gradersToRemove = [];
     for (final service in _connections.entries) {
       final serviceCall = service.value.call;
       if (serviceCall.isCanceled) {
@@ -86,7 +78,7 @@ class ExternalServicesManager {
 
   StreamController<Submission> registerNewService(ServiceCall call, ConnectedServiceProperties announce) {
     // Check if here was not removed connection to the same service
-    final identity = _ServiceIdentity(announce.name, announce.role);
+    final identity = '${announce.name}|${announce.role}';
     if (_connections.containsKey(identity)) {
       _connections[identity]!.destroy(null, null);
     }
@@ -97,7 +89,7 @@ class ExternalServicesManager {
   }
 
   void setServiceStatus(ServiceRole role, String name, ServiceStatus status, int capacity) {
-    final identity = _ServiceIdentity(name, role);
+    final identity = '$name|$role';
     if (!_connections.containsKey(identity)) {
       return;
     }
@@ -110,7 +102,7 @@ class ExternalServicesManager {
   }
 
   void deregisterService(ServiceRole role, String name, [Object? error, StackTrace? stackTrace]) {
-    final identity = _ServiceIdentity(name, role);
+    final identity = '$name|$role';
     if (!_connections.containsKey(identity)) {
       return;
     }
