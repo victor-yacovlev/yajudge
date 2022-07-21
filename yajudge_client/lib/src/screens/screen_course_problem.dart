@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart' as grpc;
@@ -376,8 +377,30 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     PlatformsUtils.getInstance().pickLocalFileOpen(suffices).then((LocalFile? value) {
       if (value != null) {
         value.readContents().then((Uint8List bytes) {
+          // check if file is text and size less than 100Kb
+          bool fileOk = bytes.length <= 100*1024;
+          try {
+            utf8.decode(bytes, allowMalformed: false);
+          }
+          catch (e) {
+            fileOk = false;
+          }
           setState(() {
-            file.data = bytes.toList();
+            if (fileOk) {
+              file.data = bytes.toList();
+              errorMessage = null;
+            }
+            else {
+              file.data.clear();
+              final alertDialog = AlertDialog(
+                title: Text('Ошибка загрузки файла'),
+                content: Text('Файл должен быть текстовым и не более 100Кб'),
+                actions: [
+                  TextButton(onPressed: Navigator.of(context).pop, child: Text('OK'))
+                ],
+              );
+              showDialog(context: context, builder: (_) {return alertDialog;});
+            }
           });
         });
       }
