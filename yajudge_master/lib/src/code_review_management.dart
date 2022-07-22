@@ -88,7 +88,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
     final submission = await parent.submissionManagementService.getSubmissionResult(call, request);
     final problemId = submission.problemId;
     final maxDateTime = DateTime.fromMillisecondsSinceEpoch(
-        submission.datetime.toInt() * 1000, isUtc: true
+        submission.datetime.toInt() * 1000, isUtc: false
     );
     final userId = submission.user.id;
     final courseId = submission.course.id;
