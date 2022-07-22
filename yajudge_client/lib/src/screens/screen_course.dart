@@ -568,6 +568,9 @@ class CourseScreenState extends BaseScreenState {
             context, problemStatus.finalSolutionStatus, problemStatus.finalGradingStatus,
         );
         String secondLine = statusView.item1;
+        if (problemStatus.finalSolutionStatus==SolutionStatus.PENDING_REVIEW && problemIsRequired) {
+          secondLine += ', пока можете решать следующие задачи';
+        }
         iconData = statusView.item2;
         iconColor = statusView.item3;
         if (secondLineText.isNotEmpty) {

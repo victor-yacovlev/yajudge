@@ -102,7 +102,15 @@ class SubmissionManagementService extends SubmissionManagementServiceBase {
           courseScoreGot += problemStatus.scoreGot;
           courseScoreMax += problemStatus.scoreMax;
 
-          if (problemMetadata.blocksNextProblems && !problemStatus.completed) {
+          const allowGoNextStatuses = [
+            SolutionStatus.PENDING_REVIEW, SolutionStatus.SUMMON_FOR_DEFENCE,
+            SolutionStatus.DISQUALIFIED, SolutionStatus.CODE_REVIEW_REJECTED,
+          ];
+          
+          bool allowGoToNextProblem = problemStatus.completed || 
+            allowGoNextStatuses.contains(problemStatus.finalSolutionStatus);
+          
+          if (problemMetadata.blocksNextProblems && !allowGoToNextProblem) {
             lessonCompleted = false;
             sectionCompleted = false;
           }
