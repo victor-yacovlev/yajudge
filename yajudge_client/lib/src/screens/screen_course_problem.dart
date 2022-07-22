@@ -388,7 +388,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
           setState(() {
             if (fileOk) {
               file.data = bytes.toList();
-              errorMessage = null;
+              errorMessage = '';
             }
             else {
               file.data.clear();
