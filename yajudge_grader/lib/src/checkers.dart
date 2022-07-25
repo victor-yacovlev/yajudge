@@ -7,7 +7,7 @@ import 'assets_loader.dart';
 abstract class AbstractChecker {
   bool get useFiles;
   String matchData(List<String> args, List<int> stdin, List<int> stdout, List<int> reference, String workDir, String root, String options) => throw UnimplementedError();
-  String matchFiles(List<String> args, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) => throw UnimplementedError();
+  String matchFiles(String argsName, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) => throw UnimplementedError();
 }
 
 class PythonChecker extends AbstractChecker {
@@ -17,7 +17,7 @@ class PythonChecker extends AbstractChecker {
   PythonChecker({required this.locationProperties, required this.checkerPy});
 
   @override
-  String matchFiles(List<String> args, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) {
+  String matchFiles(String argsName, String stdinName, String stdoutName, String referenceName, String workDir, String root, String options) {
     final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
@@ -30,7 +30,7 @@ class PythonChecker extends AbstractChecker {
 
     final arguments = [
       wrapperFile.path, checkerPy,
-      workDir, args.join(' '), stdinName, stdoutName, referenceName
+      workDir, argsName, stdinName, stdoutName, referenceName
     ];
 
     Map<String,String> environment = Map.from(io.Platform.environment);

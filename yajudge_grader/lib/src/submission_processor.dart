@@ -394,7 +394,7 @@ class SubmissionProcessor {
         bool checkAnswer = runTestResult.status==SolutionStatus.OK;
         bool failed = !checkAnswer;
         if (checkAnswer) {
-          final checkedTestResult = await processCheckAnswer(submission, testBaseName, runTestResult);
+          final checkedTestResult = await processCheckAnswer(submission, runtime, testBaseName, runTestResult);
           failed = checkedTestResult.status!=SolutionStatus.OK;
           testResults.add(checkedTestResult);
         }
@@ -409,7 +409,7 @@ class SubmissionProcessor {
     return testResults;
   }
 
-  Future<TestResult> processCheckAnswer(Submission submission, String testBaseName, TestResult testResult) async {
+  Future<TestResult> processCheckAnswer(Submission submission, AbstractRuntime runtime, String testBaseName, TestResult testResult) async {
     final testsPath = '${runner.submissionProblemDirectory(submission)}/tests';
     final runsDir = io.Directory(
       '${runner.submissionPrivateDirectory(submission)}/runs/${testResult.target}/'
@@ -444,6 +444,7 @@ class SubmissionProcessor {
     List<int> stdinData = [];
     final problemStdinFile = io.File('$testsPath/$testBaseName.dat');
     final targetStdinFile = io.File('${runsDir.path}/$testBaseName.dat');
+    final testRunArguments = runtime.testRunArguments(testBaseName);
     String stdinFilePath = '';
     String wd;
     if (io.Directory('${runsDir.path}/$testBaseName.dir').existsSync()) {
@@ -510,7 +511,7 @@ class SubmissionProcessor {
       stdout = stdoutFile.existsSync()? stdoutFile.readAsBytesSync() : [];
       resultCheckerMessage = runChecker(
         submission,
-        [], // TODO ???
+        testRunArguments.item2, testRunArguments.item1,
         stdinData, stdinFilePath,
         stdout, stdoutFilePath,
         referenceStdout, referencePath,
@@ -600,7 +601,7 @@ class SubmissionProcessor {
 
   String runChecker(
       Submission submission,
-      List<String> args,
+      List<String> args, String argsName,
       List<int> stdin, String stdinName,
       List<int> stdout, String stdoutName,
       List<int> reference, String referenceName,
@@ -639,7 +640,7 @@ class SubmissionProcessor {
     }
     String root = runner.submissionFileSystemRootPrefix(submission);
     if (checker.useFiles) {
-      return checker.matchFiles(args, stdinName, stdoutName, referenceName, wd, root, checkerOpts);
+      return checker.matchFiles(argsName, stdinName, stdoutName, referenceName, wd, root, checkerOpts);
     } else {
       return checker.matchData(args, stdin, stdout, reference, wd, root, checkerOpts);
     }
