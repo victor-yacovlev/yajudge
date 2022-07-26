@@ -13,6 +13,7 @@ import '../widgets/unified_widgets.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'package:windows1251/windows1251.dart';
 
 class CourseProblemScreen extends BaseScreen {
   final String courseUrlPrefix;
@@ -368,6 +369,38 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     return contents;
   }
 
+  Tuple2<String?,String?> decodeFileTextFromBytes(Uint8List bytes) {
+    bool utf8Ok = true;
+    String? result;
+    try {
+      result = utf8.decode(bytes, allowMalformed: false);
+    }
+    catch (e) {
+      utf8Ok = false;
+    }
+    bool w1251ok = true;
+    if (!utf8Ok && bytes.contains(13)) {
+      // 13 == '\r', so if here are symbols '\r', the text
+      // might be created in some Windows text editor
+      final decoder = Windows1251Decoder(allowInvalid: false);
+      try {
+        result = decoder.convert(bytes);
+      }
+      catch (e) {
+        w1251ok = false;
+      }
+    }
+    if (utf8Ok) {
+      return Tuple2(result, null);
+    }
+    else if (!utf8Ok && w1251ok) {
+      return Tuple2(null, 'Файл должен быть в кодировке UTF-8, а не Windows-1251');
+    }
+    else {
+      return Tuple2(null, 'Файл должен быть текстовым, а не бинарным');
+    }
+  }
+
   void _pickFileData(File file) {
     List<String> suffices = List.empty(growable: true);
     int dotPos = file.name.lastIndexOf('.');
@@ -378,23 +411,26 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       if (value != null) {
         value.readContents().then((Uint8List bytes) {
           // check if file is text and size less than 100Kb
+          String fileErrorMessage = '';
+          String? fileText;
           bool fileOk = bytes.length <= 100*1024;
-          try {
-            utf8.decode(bytes, allowMalformed: false);
+          if (!fileOk) {
+            fileErrorMessage = 'Размер файла не должен превышать 100Кб';
           }
-          catch (e) {
+          final fileTextAndError = decodeFileTextFromBytes(bytes);
+          if (fileTextAndError.item1 == null) {
             fileOk = false;
+            fileErrorMessage = fileTextAndError.item2!;
           }
           setState(() {
             if (fileOk) {
-              file.data = bytes.toList();
-              errorMessage = '';
+              file.data = utf8.encode(fileTextAndError.item1!);
             }
             else {
               file.data.clear();
               final alertDialog = AlertDialog(
                 title: Text('Ошибка загрузки файла'),
-                content: Text('Файл должен быть текстовым и не более 100Кб'),
+                content: Text(fileErrorMessage),
                 actions: [
                   TextButton(onPressed: Navigator.of(context).pop, child: Text('OK'))
                 ],

@@ -21,6 +21,7 @@ dependencies:
   url_launcher: ^6.0.9
   logging: ^1.0.2
   tuple: ^2.0.0
+  windows1251: ^0.0.3
   flutter:
     sdk: flutter
 
