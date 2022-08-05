@@ -81,12 +81,12 @@ class UsersScreenState extends BaseScreenState {
   @override
   void initState() {
     super.initState();
-    setUsersFilter(UsersFilter());
+    setUsersFilter(UsersFilter(partialStringMatch: true));
     _searchField = TextEditingController();
   }
 
   void processSearch(String? search) {
-    UsersFilter filter = UsersFilter()..role = Role.ROLE_ANY..user = User();
+    UsersFilter filter = UsersFilter(partialStringMatch: true)..role = Role.ROLE_ANY..user = User();
     search ??= _searchField.text;
     if (_rxNumbers.hasMatch(search)) {
       filter.user.groupName = search.trim();
