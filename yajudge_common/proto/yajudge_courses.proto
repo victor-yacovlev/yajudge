@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service CourseManagement {
+  rpc CreateOrUpdateCourse(Course) returns (Course) {}
+  rpc CloneCourse(Course) returns (Course) {}
+  rpc DeleteCourse(Course) returns (Nothing) {}
+  rpc GetCourses(CoursesFilter) returns (CoursesList) {}
+  rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
+  rpc GetLessonSchedules(LessonScheduleRequest) returns (LessonScheduleSet);
+  rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
+
+  rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse) {}
+}

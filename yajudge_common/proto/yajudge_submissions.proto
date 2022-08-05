@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service SubmissionManagement {
+  rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit);
+  rpc SubmitProblemSolution(Submission) returns (Submission);
+  rpc GetSubmissions(SubmissionFilter) returns (SubmissionList);
+  rpc GetSubmissionResult(Submission) returns (Submission);
+
+  rpc GetSubmissionList(SubmissionListQuery) returns (SubmissionListResponse);
+  rpc SubscribeToSubmissionListNotifications(SubmissionListNotificationsRequest) returns (stream SubmissionListEntry);
+
+  rpc Rejudge(RejudgeRequest) returns (RejudgeRequest);
+
+  rpc SubscribeToSubmissionResultNotifications(Submission) returns (stream Submission);
+
+  rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus);
+  rpc SubscribeToCourseStatusNotifications(CheckCourseStatusRequest) returns (stream CourseStatus);
+
+  rpc CheckProblemStatus(ProblemStatusRequest) returns (ProblemStatus);
+  rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus);
+
+  // announce grader alive and receive stream of submissions to be graded
+  rpc SetExternalServiceStatus(ConnectedServiceStatus) returns (Empty);
+  rpc ReceiveSubmissionsToProcess(ConnectedServiceProperties) returns (stream Submission);
+
+  rpc GetSubmissionsToDiff(DiffViewRequest) returns (DiffViewResponse);
+
+  rpc TakeSubmissionToGrade(ConnectedServiceProperties) returns (Submission);
+  // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
+  rpc UpdateGraderOutput(Submission) returns (Submission);
+  // manual submission status update
+  rpc UpdateSubmissionStatus(Submission) returns (Submission);
+}
+

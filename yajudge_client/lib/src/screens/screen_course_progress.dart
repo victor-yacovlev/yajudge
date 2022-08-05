@@ -1,16 +1,9 @@
-import 'dart:math' as math;
-
-import 'package:fixnum/fixnum.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/src/widgets/framework.dart';
 import 'package:tuple/tuple.dart';
-import 'package:yajudge_common/src/generated/yajudge.pb.dart';
 import 'package:yajudge_common/yajudge_common.dart';
-import 'package:intl/intl.dart';
 import '../controllers/connection_controller.dart';
 import '../controllers/courses_controller.dart';
 import 'screen_base.dart';
-import 'screen_submission.dart';
 
 class CourseProgressScreen extends BaseScreen {
 

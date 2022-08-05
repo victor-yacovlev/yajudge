@@ -1,6 +1,6 @@
-syntax = "proto3";
+syntax = 'proto3';
 
-package service;
+package yajudge;
 
 enum Role {
   ROLE_ANY                = 0;
@@ -398,21 +398,6 @@ message UserRole {
   Role        role        = 2;
 }
 
-service UserManagement {
-  rpc StartSession(Session) returns (Session) {}
-  rpc Authorize(User) returns (Session) {}
-  rpc GetProfile(Session) returns (User) {}
-  rpc GetUsers(UsersFilter) returns (UsersList) {}
-  rpc SetUserDefaultRole(UserRole) returns (UserRole) {}
-  rpc CreateOrUpdateUser(User) returns (User) {}
-  rpc BatchCreateStudents(UsersList) returns (UsersList) {}  // returns same users with ID's set
-  rpc BatchDeleteUsers(UsersList) returns (Nothing) {}
-  rpc DeleteUser(User) returns (Nothing) {}
-  rpc ResetUserPassword(User) returns (User) {}
-  rpc ChangePassword(User) returns (User) {}
-}
-
-
 message CoursesFilter {
   User          user                  = 1;  // courses available to specified user, no filter in case of User.id==0
   Course        course                = 2;  // filter by name, no filter in case of Course.id==0
@@ -494,18 +479,6 @@ message LessonScheduleRequest {
   User        user = 2;
 }
 
-service CourseManagement {
-  rpc CreateOrUpdateCourse(Course) returns (Course) {}
-  rpc CloneCourse(Course) returns (Course) {}
-  rpc DeleteCourse(Course) returns (Nothing) {}
-  rpc GetCourses(CoursesFilter) returns (CoursesList) {}
-  rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
-  rpc GetLessonSchedules(LessonScheduleRequest) returns (LessonScheduleSet);
-  rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
-
-  rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse) {}
-}
-
 message EnrollUserRequest {
   Course        course  = 1;
   User          user    = 2;
@@ -537,17 +510,8 @@ message AllGroupsEnrollmentsResponse {
   repeated GroupEnrollmentsResponse groups = 2;
 }
 
-
 message UserEnrollmentsResponse {
   repeated Enrollment enrollments = 1;
-}
-
-service EnrollmentsManager {
-  rpc EnrollUser(EnrollUserRequest) returns (EnrollUserRequest);
-  rpc EnrollGroup(EnrollGroupRequest) returns (EnrollGroupRequest);
-  rpc GetAllGroupsEnrollments(Course) returns (AllGroupsEnrollmentsResponse);
-  rpc GetGroupEnrollments(GroupEnrollmentsRequest) returns (GroupEnrollmentsResponse);
-  rpc GetUserEnrollments(User) returns (UserEnrollmentsResponse);
 }
 
 enum ServiceRole {
@@ -714,38 +678,6 @@ message DiffViewResponse {
   DiffViewRequest request = 2;
 }
 
-service SubmissionManagement {
-  rpc CheckSubmissionsCountLimit(CheckSubmissionsLimitRequest) returns (SubmissionsCountLimit);
-  rpc SubmitProblemSolution(Submission) returns (Submission);
-  rpc GetSubmissions(SubmissionFilter) returns (SubmissionList);
-  rpc GetSubmissionResult(Submission) returns (Submission);
-
-  rpc GetSubmissionList(SubmissionListQuery) returns (SubmissionListResponse);
-  rpc SubscribeToSubmissionListNotifications(SubmissionListNotificationsRequest) returns (stream SubmissionListEntry);
-
-  rpc Rejudge(RejudgeRequest) returns (RejudgeRequest);
-
-  rpc SubscribeToSubmissionResultNotifications(Submission) returns (stream Submission);
-
-  rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus);
-  rpc SubscribeToCourseStatusNotifications(CheckCourseStatusRequest) returns (stream CourseStatus);
-
-  rpc CheckProblemStatus(ProblemStatusRequest) returns (ProblemStatus);
-  rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus);
-
-  // announce grader alive and receive stream of submissions to be graded
-  rpc SetExternalServiceStatus(ConnectedServiceStatus) returns (Empty);
-  rpc ReceiveSubmissionsToProcess(ConnectedServiceProperties) returns (stream Submission);
-
-  rpc GetSubmissionsToDiff(DiffViewRequest) returns (DiffViewResponse);
-
-  rpc TakeSubmissionToGrade(ConnectedServiceProperties) returns (Submission);
-  // argument filled by id, status, grader_score, grader_name, grader_output, grader_errors
-  rpc UpdateGraderOutput(Submission) returns (Submission);
-  // manual submission status update
-  rpc UpdateSubmissionStatus(Submission) returns (Submission);
-}
-
 message LineComment {
   int32 line_number = 1;  // starting from 0
   string context = 2;     // short line text to be shown in history
@@ -766,12 +698,3 @@ message CodeReview {
 message ReviewHistory {
   repeated CodeReview   reviews = 1;
 }
-
-service CodeReviewManagement {
-  // add or modify review comments
-  rpc ApplyCodeReview(CodeReview) returns (CodeReview);
-
-  // get code reviews for requested submission and all submissions before for the same problem
-  rpc GetReviewHistory(Submission) returns (ReviewHistory);
-}
-

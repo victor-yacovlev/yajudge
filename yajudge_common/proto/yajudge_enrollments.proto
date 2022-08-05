@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service EnrollmentsManager {
+  rpc EnrollUser(EnrollUserRequest) returns (EnrollUserRequest);
+  rpc EnrollGroup(EnrollGroupRequest) returns (EnrollGroupRequest);
+  rpc GetAllGroupsEnrollments(Course) returns (AllGroupsEnrollmentsResponse);
+  rpc GetGroupEnrollments(GroupEnrollmentsRequest) returns (GroupEnrollmentsResponse);
+  rpc GetUserEnrollments(User) returns (UserEnrollmentsResponse);
+}
+
+

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:grpc/grpc.dart';
 import 'package:yaml/yaml.dart';
 
-import '../generated/yajudge.pb.dart';
+import '../generated/yajudge_common.pb.dart';
 
 class GraderIdentityProperties {
   final String name;

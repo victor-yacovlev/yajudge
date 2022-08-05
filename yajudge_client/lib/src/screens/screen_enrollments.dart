@@ -1,7 +1,5 @@
+import 'package:yajudge_common/yajudge_common.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/src/widgets/framework.dart';
-import 'package:yajudge_common/src/generated/yajudge.pb.dart';
-
 import '../controllers/connection_controller.dart';
 import '../widgets/unified_widgets.dart';
 import 'screen_base.dart';

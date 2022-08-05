@@ -1,5 +1,9 @@
-export 'src/generated/yajudge.pb.dart';
-export 'src/generated/yajudge.pbgrpc.dart';
+export 'src/generated/yajudge_common.pb.dart';
+export 'src/generated/yajudge_users.pbgrpc.dart';
+export 'src/generated/yajudge_courses.pbgrpc.dart';
+export 'src/generated/yajudge_submissions.pbgrpc.dart';
+export 'src/generated/yajudge_enrollments.pbgrpc.dart';
+export 'src/generated/yajudge_code_reviews.pbgrpc.dart';
 export 'src/conf/database_conf.dart';
 export 'src/conf/grader_identity_conf.dart';
 export 'src/conf/grader_locations_conf.dart';

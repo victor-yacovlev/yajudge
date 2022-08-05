@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service CodeReviewManagement {
+  // add or modify review comments
+  rpc ApplyCodeReview(CodeReview) returns (CodeReview);
+
+  // get code reviews for requested submission and all submissions before for the same problem
+  rpc GetReviewHistory(Submission) returns (ReviewHistory);
+}
