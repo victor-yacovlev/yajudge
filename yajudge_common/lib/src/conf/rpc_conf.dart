@@ -1,27 +1,95 @@
-import 'package:yaml/yaml.dart';
+import 'dart:io' as io;
 
+import 'package:yaml/yaml.dart';
 import 'config_file.dart';
 
-class RpcProperties {
-  late final String publicToken;
-  late final String privateToken;
+class EndpointParseException extends Error {
+  final String reason;
+  final String source;
+  EndpointParseException(this.reason, this.source);
+  @override
+  String toString() => 'while parsing $source: $reason';
+}
+
+class Endpoint {
+  late final String service;
   late final String host;
   late final int port;
+  late final String unixPath;
   late final bool useSsl;
+  late final bool isUnix;
 
-  RpcProperties({
-    required this.publicToken,
-    required this.privateToken,
-    required this.host,
-    required this.port,
-    required this.useSsl,
-  });
+  Endpoint(this.service);
 
-  factory RpcProperties.fromYamlConfig(YamlMap conf) {
-    String publicToken = '';
-    if (conf['public_token'] is String) {
-      publicToken = conf['public_token'];
+  @override
+  String toString() => isUnix? unixPath : '$host:$port';
+
+  bool connectionEquals(Endpoint other) {
+    final typeMatch = isUnix==other.isUnix;
+    final hostMatch = host==other.host;
+    final sslMatch = useSsl==other.useSsl;
+    final pathMatch = unixPath==other.unixPath;
+    final portMatch = port==other.port;
+    return typeMatch && hostMatch && sslMatch && pathMatch && portMatch;
+  }
+
+  factory Endpoint.fromUri(String service, String uriString) {
+    final uri = Uri.parse(uriString);
+    switch (uri.scheme) {
+      case 'grpc':
+      case 'http':
+      case 'grpcs':
+      case 'https':
+        String hostName = uri.host;
+        bool useSsl = ['grpcs', 'https'].contains(uri.scheme);
+        int port = uri.port;
+        if (port == 0 && (uri.scheme == 'grpc' || uri.scheme == 'grpcs')) {
+          throw EndpointParseException('port is required for grpc(s):// scheme', uriString);
+        }
+        else if (port == 0 && uri.scheme == 'http') {
+          port = 80;
+        }
+        else if (port == 0 && uri.scheme == 'https') {
+          port = 443;
+        }
+        return Endpoint(service)
+          ..host=hostName
+          ..port=port
+          ..unixPath=''
+          ..useSsl=useSsl
+          ..isUnix=false
+        ;
+      case 'grpc+unix':
+      case 'grpcs+unix':
+      case 'unix':
+        bool useSsl = ['grpcs+unix'].contains(uri.scheme);
+        String unixPath = uri.path;
+        if (unixPath.isEmpty) {
+          throw EndpointParseException('unix file name is empty', uriString);
+        }
+        return Endpoint(service)
+          ..host=''
+          ..port=0
+          ..unixPath=unixPath
+          ..useSsl=useSsl
+          ..isUnix=true
+        ;
+      default:
+        throw EndpointParseException('unknown endpoint uri scheme', uriString);
     }
+  }
+
+}
+
+class RpcProperties {
+  final String privateToken;
+  final Map<String,Endpoint> endpoints = {};
+
+  RpcProperties(this.privateToken);
+
+  factory RpcProperties.fromYamlConfig(YamlMap conf, {
+    String parentConfigFileName = '', String instanceName = '',
+  }) {
     String privateToken = '';
     if (conf['private_token'] is String) {
       privateToken = conf['private_token'];
@@ -29,17 +97,26 @@ class RpcProperties {
     if (conf['private_token_file'] is String) {
       privateToken = readPrivateTokenFromFile(conf['private_token_file']);
     }
-    bool useSsl = false;
-    if (conf['use_ssl'] is bool) {
-      useSsl = conf['use_ssl'];
+    dynamic endpointsValue = conf['endpoints'];
+    RpcProperties result = RpcProperties(privateToken);
+    YamlMap endpoints;
+    if (endpointsValue is String) {
+      final parentConfigFile = io.File(parentConfigFileName);
+      final parentConfigDirectory = parentConfigFile.parent;
+      final targetFileTemplate = '${parentConfigDirectory.path}/$endpointsValue';
+      final targetFileName = expandPathEnvVariables(targetFileTemplate, instanceName);
+      endpoints = parseYamlConfig(targetFileName);
     }
-    return RpcProperties(
-      publicToken: publicToken,
-      privateToken: privateToken,
-      host: conf['host'],
-      port: conf['port'],
-      useSsl: useSsl,
-    );
+    else {
+      endpoints = endpointsValue as YamlMap;
+    }
+    for (final entry in endpoints.entries) {
+      String serviceName = entry.key as String;
+      String uriString = entry.value as String;
+      Endpoint endpoint = Endpoint.fromUri(serviceName, uriString);
+      result.endpoints[serviceName] = endpoint;
+    }
+    return result;
   }
 }
 

@@ -5,9 +5,7 @@ service:
   systemd_slice: 'yajudge-grader'  # has effect only while starting via 'yajudge-grader start' command
 
 rpc:
-  host: localhost
-  port: 9095
-
+  endpoints: '@CONFIGURATION_DIRECTORY/endpoints-@CONFIG_NAME.yaml'
   # private token must be stored in separate file not readable by random user
   private_token_file: '@CONFIGURATION_DIRECTORY/private-token.txt'  # /etc/yajudge/private-token.txt
 

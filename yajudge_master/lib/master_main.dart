@@ -16,6 +16,7 @@ Future<void> main(List<String> arguments) async {
   print('Program executable is ${io.Platform.script.path}');
 
   ArgResults parsedArguments = parseArguments(arguments);
+  String instanceName = parsedArguments['name'] ?? 'default';
 
 
   String configFileName = getConfigFileName(parsedArguments);
@@ -71,7 +72,10 @@ Future<void> main(List<String> arguments) async {
 
   RpcProperties rpcProperties;
   try {
-    rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
+    rpcProperties = RpcProperties.fromYamlConfig(config['rpc'],
+      parentConfigFileName: configFileName,
+      instanceName: instanceName,
+    );
   }
   catch (e) {
     final message = 'Cant get RPC properties from config: $e';
@@ -95,7 +99,10 @@ Future<void> main(List<String> arguments) async {
 
   DatabaseProperties databaseProperties;
   try {
-    databaseProperties = DatabaseProperties.fromYamlConfig(config['database']);
+    databaseProperties = DatabaseProperties.fromYamlConfig(config['database'],
+      parentConfigFileName: configFileName,
+      instanceName: instanceName,
+    );
   }
   catch (e) {
     final message = 'Cant get database properties from config: $e';
@@ -160,7 +167,7 @@ Future<void> main(List<String> arguments) async {
 
   futureConnectionOpen.then((_) async {
     Logger.root.fine('opened connection to database');
-    Logger.root.info('starting master service on ${rpcProperties.host}:${rpcProperties.port}');
+    Logger.root.info('starting master service');
     try {
       final masterService = MasterService(
         connection: postgreSQLConnection,
@@ -283,6 +290,7 @@ ArgResults parseArguments(List<String> arguments) {
   mainParser.addOption('config', abbr: 'C', help: 'config file name');
   mainParser.addOption('log', abbr: 'L', help: 'log file name');
   mainParser.addOption('pid', abbr: 'P', help: 'pid file name');
+  mainParser.addOption('name', abbr: 'N', help: 'instance name');
 
   final daemonParser = ArgParser();
   mainParser.addCommand('daemon', daemonParser);

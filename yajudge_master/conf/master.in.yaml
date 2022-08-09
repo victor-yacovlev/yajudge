@@ -3,28 +3,10 @@ service:
   log_file: '@LOGS_DIRECTORY/master-@CONFIG_NAME.log'     # /var/log/yajudge/master.log or /opt/yajudge/log/master.log
   pid_file: '@RUNTIME_DIRECTORY/master-@CONFIG_NAME.pid'  # /run/yajudge/master.pid or /opt/yajudge/pid/master.pid
 
-database:
-  host: localhost
-  port: 5432
-  user: yajudge
-  name: yajudge
-  # database password must be stored in separate file not readable by most users
-  password_file: '@CONFIGURATION_DIRECTORY/database-password.txt'
-
-#big_data_storage:
-#  # Dedicated MongoDB to store submission results, will fall back into database table if disabled.
-#  # Remove or comment this section to disable dedicated storage
-#  # Uncomment this section to enable
-#  host: localhost
-#  port: 27017
-#  name: yajudge
-#  user: yajudge
-#  password_file: '@CONFIGURATION_DIRECTORY/big-data-storage-password.txt'
+database: '@CONFIGURATION_DIRECTORY/database-@CONFIG_NAME.yaml'
 
 rpc:
-  host: any
-  port: 9095
-
+  endpoints: '@CONFIGURATION_DIRECTORY/endpoints-@CONFIG_NAME.yaml'
   # private token must be stored in separate file not readable by most users
   private_token_file: '@CONFIGURATION_DIRECTORY/private-token.txt'  # /etc/yajudge/private-token.txt
 

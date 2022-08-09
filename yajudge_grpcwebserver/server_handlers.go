@@ -15,15 +15,23 @@ import (
 	"strings"
 )
 
+type GrpcEndpoint struct {
+	grpcServer    *grpc.Server
+	grpcWebServer *grpcweb.WrappedGrpcServer
+	grpcClient    *grpc.ClientConn
+	target        string
+}
+
 type Site struct {
 	name              string
 	config            *SiteConfig
 	staticHandler     *StaticHandler
 	httpsRedirectBase string
 	proxyPassURL      *url.URL
-	grpcServer        *grpc.Server
-	grpcWebServer     *grpcweb.WrappedGrpcServer
-	grpcClient        *grpc.ClientConn
+	//grpcServer        *grpc.Server
+	//grpcWebServer     *grpcweb.WrappedGrpcServer
+	//grpcClient        *grpc.ClientConn
+	endpoints map[string]*GrpcEndpoint
 }
 
 type ServerHandler struct {
@@ -85,15 +93,32 @@ func NewHostInstance(name string, config *SiteConfig, httpsPort int) (*Site, err
 		httpsRedirectBase: httpsRedirectHost,
 		proxyPassURL:      proxyPassURL,
 	}
-	if config.GrpcBackendHost != "" && config.GrpcBackendPort > 0 {
-		result.CreateGrpcChannels()
-	}
+
+	result.CreateGrpcChannels()
+
 	return result, nil
+}
+
+func (host *Site) FindEndpoint(req *http.Request) (result *GrpcEndpoint) {
+	path := req.RequestURI
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
+	pathParts := strings.Split(path, "/")
+	if len(pathParts) < 1 {
+		return nil
+	}
+	key := pathParts[0]
+	if value, ok := host.endpoints[key]; ok {
+		return value
+	}
+	return nil
 }
 
 func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 	isGrpcWeb := strings.HasPrefix(req.Header.Get("Content-Type"), "application/grpc-web")
 	isGrpc := !isGrpcWeb && strings.HasPrefix(req.Header.Get("Content-Type"), "application/grpc")
+	endpoint := host.FindEndpoint(req)
 	if req.TLS == nil && host.httpsRedirectBase != "" && !isGrpc && !isGrpcWeb {
 		log.Debugf("%s requested %s via http, redirecting to https", req.RemoteAddr, req.URL.Path)
 		// force using https instead of http in case if http supported by host instance
@@ -104,36 +129,34 @@ func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 		http.Redirect(wr, req, redirectString, 302)
 		return
 	}
-	if req.Method == "POST" && isGrpcWeb {
+	if req.Method == "POST" && isGrpcWeb && endpoint != nil {
 		// use gRPC-Listen to gGRP package to proxy
-		if host.grpcWebServer == nil {
-			errorMessage := fmt.Sprintf("no connection to %s:%d", host.config.GrpcBackendHost, host.config.GrpcBackendPort)
+		if endpoint.grpcWebServer == nil {
+			errorMessage := fmt.Sprintf("no connection to %s", endpoint.target)
 			http.Error(wr, errorMessage, 503)
 			return
 		}
-		log.Printf("%s requested %v using gRPC-Web protocol, proxied to %s:%d",
+		log.Printf("%s requested %v using gRPC-Web protocol, proxied to %s",
 			req.RemoteAddr,
 			req.URL,
-			host.config.GrpcBackendHost,
-			host.config.GrpcBackendPort,
+			endpoint.target,
 		)
-		host.grpcWebServer.ServeHTTP(wr, req)
+		endpoint.grpcWebServer.ServeHTTP(wr, req)
 		return
 	}
-	if req.Method == "POST" && isGrpc {
+	if req.Method == "POST" && isGrpc && endpoint != nil {
 		// just proxy to gRPC server
-		if host.grpcServer == nil {
-			errorMessage := fmt.Sprintf("no connection to %s:%d", host.config.GrpcBackendHost, host.config.GrpcBackendPort)
+		if endpoint.grpcServer == nil {
+			errorMessage := fmt.Sprintf("no connection to %s", endpoint.target)
 			http.Error(wr, errorMessage, 503)
 			return
 		}
-		log.Printf("%s requested %v using gRPC protocol, proxied to %s:%d",
+		log.Printf("%s requested %v using gRPC protocol, proxied to %s",
 			req.RemoteAddr,
 			req.URL,
-			host.config.GrpcBackendHost,
-			host.config.GrpcBackendPort,
+			endpoint.target,
 		)
-		host.grpcServer.ServeHTTP(wr, req)
+		endpoint.grpcServer.ServeHTTP(wr, req)
 		return
 	}
 	if host.proxyPassURL != nil {
@@ -186,33 +209,72 @@ func (host *Site) Serve(wr http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (host *Site) CreateGrpcChannels() {
-	grpcRedirector := func(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
-		md, _ := metadata.FromIncomingContext(ctx)
-		proxyMd := md.Copy()
-		proxyMd.Delete("User-Agent")
-		proxyMd.Delete("Connection")
-		proxyCtx, _ := context.WithCancel(ctx)
-		proxyCtx = metadata.NewOutgoingContext(proxyCtx, proxyMd)
-		var err error
-		if host.grpcClient == nil {
-			grpcTarget := host.config.GrpcBackendHost + ":" + strconv.Itoa(host.config.GrpcBackendPort)
-			host.grpcClient, err = grpc.Dial(
-				grpcTarget,
-				grpc.WithInsecure(),
-				grpc.WithCodec(proxy.Codec()),
-			)
-			if err != nil {
-				log.Printf("connected to gRPC server %s", grpcTarget)
+func CreateEndpointConnection(endpoint *EndpointConfig) (conn *grpc.ClientConn, target string, err error) {
+	useSSL := false
+	endpointURL := endpoint.ServiceURL
+	scheme := endpointURL.Scheme
+	if scheme == "http" || scheme == "https" || scheme == "grpc" || scheme == "grpcs" {
+		port, err := strconv.Atoi(endpointURL.Port())
+		if err != nil {
+			return nil, "", fmt.Errorf("wrong port number %v in endpoint url %v", err, endpointURL)
+		}
+		if port == 0 {
+			if endpointURL.Scheme == "http" {
+				port = 80
+			} else if endpointURL.Scheme == "https" {
+				port = 443
 			} else {
-				log.Warningf("cant connect to gRPC server %s: %v", grpcTarget, err)
+				return nil, "", fmt.Errorf("not port number specified for grpc scheme in endpoint url %v", endpointURL)
 			}
 		}
-		return proxyCtx, host.grpcClient, err
+		useSSL = endpointURL.Scheme == "https" || endpointURL.Scheme == "grpcs"
+		target = endpointURL.Hostname() + ":" + strconv.Itoa(port)
+	} else if scheme == "unix" || scheme == "grpc+unix" {
+		target = "unix:///" + endpointURL.Path
+	} else {
+		return nil, "", fmt.Errorf("unknown endpoint url scheme %v", endpointURL)
 	}
-	host.grpcServer = grpc.NewServer(
-		grpc.CustomCodec(proxy.Codec()),
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(grpcRedirector)),
-	)
-	host.grpcWebServer = grpcweb.WrapServer(host.grpcServer)
+
+	if useSSL {
+		conn, err = grpc.Dial(target, grpc.WithCodec(proxy.Codec()))
+	} else {
+		conn, err = grpc.Dial(target, grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	}
+	return conn, target, err
+}
+
+func (host *Site) CreateGrpcChannels() {
+	host.endpoints = make(map[string]*GrpcEndpoint)
+	for _, entry := range host.config.Endpoints {
+		serviceName := entry.ServiceName
+		var endpointEntry *GrpcEndpoint
+		var hasEndpoint bool
+		if endpointEntry, hasEndpoint = host.endpoints[serviceName]; !hasEndpoint {
+			endpointEntry = &GrpcEndpoint{}
+			host.endpoints[serviceName] = endpointEntry
+		}
+		grpcRedirector := func(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
+			md, _ := metadata.FromIncomingContext(ctx)
+			proxyMd := md.Copy()
+			proxyMd.Delete("User-Agent")
+			proxyMd.Delete("Connection")
+			proxyCtx, _ := context.WithCancel(ctx)
+			proxyCtx = metadata.NewOutgoingContext(proxyCtx, proxyMd)
+			var err error
+			if endpointEntry.grpcClient == nil {
+				endpointEntry.grpcClient, endpointEntry.target, err = CreateEndpointConnection(entry)
+				if err == nil {
+					log.Printf("connected to gRPC server %v", entry.ServiceURL)
+				} else {
+					log.Warningf("cant connect to gRPC server %v: %v", entry.ServiceURL, err)
+				}
+			}
+			return proxyCtx, endpointEntry.grpcClient, err
+		}
+		endpointEntry.grpcServer = grpc.NewServer(
+			grpc.CustomCodec(proxy.Codec()),
+			grpc.UnknownServiceHandler(proxy.TransparentHandler(grpcRedirector)),
+		)
+		endpointEntry.grpcWebServer = grpcweb.WrapServer(endpointEntry.grpcServer)
+	}
 }

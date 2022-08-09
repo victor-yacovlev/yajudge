@@ -65,7 +65,6 @@ class GraderService {
   final bool processLocalInboxOnly;
   int _idleWorkersCount = 0;
 
-  late final ClientChannel masterServer;
   late final CourseManagementClient coursesService;
   late final SubmissionManagementClient submissionsService;
 
@@ -93,16 +92,21 @@ class GraderService {
     required this.defaultSecurityContext,
     this.processLocalInboxOnly = false,
   }) {
-    masterServer = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
-        host: rpcProperties.host,
-        port: rpcProperties.port,
-        transportSecure: rpcProperties.useSsl,
-    );
+    final coursesEndpoint = rpcProperties.endpoints['yajudge.CourseManagement']!;
+    final submissionsEndpoint = rpcProperties.endpoints['yajudge.SubmissionManagement']!;
     final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
-    coursesService =
-        CourseManagementClient(masterServer, interceptors: [interceptor]);
-    submissionsService =
-        SubmissionManagementClient(masterServer, interceptors: [interceptor]);
+    if (coursesEndpoint.connectionEquals(submissionsEndpoint)) {
+      // connect once and use endpoint for both services
+      final clientChannel = connectToEndpoint(coursesEndpoint);
+      coursesService = CourseManagementClient(clientChannel, interceptors: [interceptor]);
+      submissionsService = SubmissionManagementClient(clientChannel, interceptors: [interceptor]);
+    }
+    else {
+      final coursesChannel = connectToEndpoint(coursesEndpoint);
+      coursesService = CourseManagementClient(coursesChannel, interceptors: [interceptor]);
+      final submissionsChannel = connectToEndpoint(submissionsEndpoint);
+      submissionsService = SubmissionManagementClient(submissionsChannel, interceptors: [interceptor]);
+    }
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
     log.info('estimating performance rating, this will take some time...');
@@ -118,6 +122,30 @@ class GraderService {
 
   static int estimateWorkersCount() {
     return io.Platform.numberOfProcessors;
+  }
+
+  static ClientChannel connectToEndpoint(Endpoint endpoint) {
+    if (endpoint.isUnix) {
+      String path = endpoint.unixPath;
+      final unixAddress = io.InternetAddress(path, type: io.InternetAddressType.unix);
+      return ClientChannel(unixAddress,
+        port: 0,
+        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+      );
+    }
+    else {
+      String host = endpoint.host;
+      if (host.isEmpty) {
+        host = 'localhost';
+      }
+      int port = endpoint.port;
+      bool useSsl = endpoint.useSsl;
+      return GrpcOrGrpcWebClientChannel.toSingleEndpoint(
+        host: host,
+        port: port,
+        transportSecure: useSsl,
+      );
+    }
   }
 
   static double estimatePerformanceRating() {

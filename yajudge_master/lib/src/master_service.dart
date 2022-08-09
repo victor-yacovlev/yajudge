@@ -50,7 +50,8 @@ class MasterService {
   late final DeadlinesManager deadlinesManager;
   final lastSessionClientSeen = <String,DateTime>{};
 
-  late final Server grpcServer;
+  final grpcServices = <String,Service>{};
+  final grpcServers = <Server>[];
   final DemoModeProperties? demoModeProperties;
 
   MasterService({
@@ -87,14 +88,11 @@ class MasterService {
       parent: this,
       connection: connection,
     );
-    grpcServer = Server(
-        [
-          userManagementService, courseManagementService,
-          submissionManagementService, enrollmentManagementService,
-          codeReviewManagementService,
-        ],
-        [checkAuth]
-    );
+    grpcServices[userManagementService.$name] = userManagementService;
+    grpcServices[courseManagementService.$name] = courseManagementService;
+    grpcServices[submissionManagementService.$name] = submissionManagementService;
+    grpcServices[enrollmentManagementService.$name] = enrollmentManagementService;
+    grpcServices[codeReviewManagementService.$name] = codeReviewManagementService;
     deadlinesManager = DeadlinesManager(this, connection);
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
@@ -142,19 +140,48 @@ class MasterService {
     return null;
   }
 
-  Future<void> serve() {
-    log.info('listening master on ${rpcProperties.host}:${rpcProperties.port}');
-    dynamic address;
-    if (rpcProperties.host=='*' || rpcProperties.host=='any') {
-      address = InternetAddress.anyIPv4;
-    } else {
-      address = rpcProperties.host;
+  Future<void> serve() async {
+    final interceptors = [checkAuth];
+    final servers = <Endpoint,List<Service>>{};
+    for (final endpointEntry in rpcProperties.endpoints.entries) {
+      Endpoint endpoint = endpointEntry.value;
+      final serviceName = endpointEntry.key;
+      List<Service> serverServices = [];
+      for (final existingEntry in servers.entries) {
+        final existingEndpoint = existingEntry.key;
+        if (existingEndpoint.connectionEquals(endpoint)) {
+          serverServices = existingEntry.value;
+          endpoint = existingEndpoint;
+          break;
+        }
+      }
+      if (grpcServices.containsKey(serviceName)) {
+        serverServices.add(grpcServices[serviceName]!);
+      }
+      servers[endpoint] = serverServices;
     }
-    return grpcServer.serve(
-      address: address,
-      port: rpcProperties.port,
-      shared: true,
-    );
+    for (final serverEntry in servers.entries) {
+      final endpoint = serverEntry.key;
+      final services = serverEntry.value;
+      final serviceNames = services.map((e) => e.$name);
+      log.info('listening services $serviceNames on $endpoint');
+      final grpcServer = Server(services, interceptors);
+      dynamic address;
+      if (!endpoint.isUnix) {
+        if (endpoint.host.isEmpty) {
+          address = InternetAddress.anyIPv4;
+        }
+        else {
+          address = endpoint.host;
+        }
+        grpcServer.serve(address: address, port: endpoint.port, shared: true);
+      }
+      else {
+        address = InternetAddress(endpoint.unixPath, type: io.InternetAddressType.unix);
+        grpcServer.serve(address: address, shared: true);
+      }
+      grpcServers.add(grpcServer);
+    }
   }
 
   void handleServingError(Object? error, StackTrace stackTrace) {
@@ -177,7 +204,9 @@ class MasterService {
 
   void shutdown(String reason, [bool error = false]) async {
     log.info('shutting down due to $reason');
-    grpcServer.shutdown();
+    for (final grpcServer in grpcServers) {
+      grpcServer.shutdown();
+    }
     io.sleep(Duration(seconds: 2));
     log.info('shutdown');
     io.exit(error? 1 : 0);

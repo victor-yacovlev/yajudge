@@ -54,6 +54,13 @@ fi
 
 echo "Will use $PID_DIR as directory for PID files"
 
+if [ -z "$SOCKETS_DIR" ]
+then
+    SOCKETS_DIR="$YAJUDGE_DIR/sock"
+fi
+
+echo "Will use $SOCKETS_DIR as directory for UNIX sockets related to services"
+
 if [ -z "$WORK_DIR" ]
 then
     WORK_DIR="$YAJUDGE_DIR/work"
@@ -129,7 +136,7 @@ mkdir -p $CONF_DIR/sites-available
 mkdir -p $CONF_DIR/sites-enabled
 mkdir -p $NGINX_CONF_DIR/sites-available
 
-dirs=("$LOG_DIR" "$PID_DIR" "$CACHE_DIR" "$COURSES_DIR" "$PROBLEMS_DIR" "$WORK_DIR" "$SYSTEM_DIR")
+dirs=("$LOG_DIR" "$PID_DIR" "$CACHE_DIR" "$COURSES_DIR" "$PROBLEMS_DIR" "$WORK_DIR" "$SYSTEM_DIR" "$SOCKETS_DIR")
 for d in ${dirs[*]}
 do
     mkdir -p $d
@@ -146,6 +153,7 @@ function screen_slash() {
 }
 
 repl="       s/@LOGS_DIRECTORY/$(screen_slash $LOG_DIR)/g"
+repl="$repl; s/@SOCKETS_DIR/$(screen_slash $SOCKETS_DIR)/g"
 repl="$repl; s/@RUNTIME_DIRECTORY/$(screen_slash $PID_DIR)/g"
 repl="$repl; s/@CONFIGURATION_DIRECTORY/$(screen_slash $CONF_DIR)/g"
 repl="$repl; s/@STATE_DIRECTORY/$(screen_slash $YAJUDGE_DIR)/g"
@@ -171,6 +179,26 @@ else
 fi
 
 echo "Master configuration will be created in $MASTER_CONF"
+
+if [ -f $CONF_DIR/database-$CONFIG_NAME.yaml ]
+then
+    DB_CONF=$CONF_DIR/database-$CONFIG_NAME.new.yaml
+    echo "Found existing database configuration"
+else
+    DB_CONF=$CONF_DIR/database-$CONFIG_NAME.yaml
+fi
+
+echo "Database configuration will be created in $DB_CONF"
+
+if [ -f $CONF_DIR/endpoints-$CONFIG_NAME.yaml ]
+then
+    ENDPOINTS_CONF=$CONF_DIR/endpoints-$CONFIG_NAME.new.yaml
+    echo "Found existing service endpoints configuration"
+else
+    ENDPOINTS_CONF=$CONF_DIR/endpoints-$CONFIG_NAME.yaml
+fi
+
+echo "Service endpoints configuration will be created in $ENDPOINTS_CONF"
 
 if [ -f $CONF_DIR/grader-$CONFIG_NAME.yaml ]
 then
@@ -245,6 +273,10 @@ sed -E "$repl" conf/grader.in.yaml > $GRADER_CONF
 echo "Created file $GRADER_CONF"
 sed -E "$repl" conf/master.in.yaml > $MASTER_CONF
 echo "Created file $MASTER_CONF"
+sed -E "$repl" conf/database.in.yaml > $DB_CONF
+echo "Created file $DB_CONF"
+sed -E "$repl" conf/endpoints.in.yaml > $ENDPOINTS_CONF
+echo "Created file $ENDPOINTS_CONF"
 sed -E "$repl" conf/grpcwebserver.in.yaml > $WEB_SERVER_CONF
 echo "Created file $WEB_SERVER_CONF"
 sed -E "$repl" conf/site@.in.yaml > $WEB_SITE_CONF

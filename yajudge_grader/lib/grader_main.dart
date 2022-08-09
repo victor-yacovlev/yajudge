@@ -28,8 +28,8 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
     print('Config file not exists');
     io.exit(1);
   }
+
   final config = parseYamlConfig(configFileName);
-  final rpcProperties = RpcProperties.fromYamlConfig(config['rpc']);
 
   var identityProperties = GraderIdentityProperties.fromYamlConfig(config['identity']);
   String graderInstanceName = 'default';
@@ -44,6 +44,12 @@ Future<GraderService> initializeGrader(ArgResults parsedArguments, bool useLogFi
   identityProperties = GraderIdentityProperties(graderFullName);
 
   print('Using $graderFullName as full grader name');
+
+  final rpcProperties = RpcProperties.fromYamlConfig(config['rpc'],
+    parentConfigFileName: configFileName,
+    instanceName: graderInstanceName,
+  );
+
 
   var locationProperties = GraderLocationProperties.fromYamlConfig(config['locations'], graderInstanceName);
   final serviceProperties = ServiceProperties.fromYamlConfig(config['service'], graderInstanceName);

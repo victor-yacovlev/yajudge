@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:yaml/yaml.dart';
 
 import 'config_file.dart';
@@ -19,7 +21,20 @@ class DatabaseProperties {
     required this.dbName,
   });
 
-  factory DatabaseProperties.fromYamlConfig(YamlMap conf) {
+  factory DatabaseProperties.fromYamlConfig(dynamic confArgument, {
+    String parentConfigFileName = '', String instanceName = '',
+  }) {
+    YamlMap conf;
+    if (confArgument is String) {
+      final parentConfigFile = File(parentConfigFileName);
+      final parentConfigDirectory = parentConfigFile.parent;
+      final targetFileTemplate = '${parentConfigDirectory.path}/$confArgument';
+      final targetFileName = expandPathEnvVariables(targetFileTemplate, instanceName);
+      conf = parseYamlConfig(targetFileName);
+    }
+    else {
+      conf = confArgument as YamlMap;
+    }
     String engine = conf.containsKey('engine')? conf['engine'] : 'postgres';
     int port = 0;
     if (conf.containsKey('port')) {

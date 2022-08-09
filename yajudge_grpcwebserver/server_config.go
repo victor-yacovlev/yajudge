@@ -4,15 +4,21 @@ import (
 	"fmt"
 	"github.com/ghodss/yaml"
 	"io/ioutil"
+	"net/url"
 	"os"
+	"path"
 	"strings"
 )
+
+type EndpointConfig struct {
+	ServiceName string
+	ServiceURL  *url.URL
+}
 
 type SiteConfig struct {
 	HostName                   string `yaml:"host_name" json:"host_name"`
 	ProxyPass                  string `yaml:"proxy_pass" json:"proxy_pass"`
-	GrpcBackendHost            string `yaml:"grpc_backend_host" json:"grpc_backend_host"`
-	GrpcBackendPort            int    `yaml:"grpc_backend_port" json:"grpc_backend_port"`
+	Endpoints                  []*EndpointConfig
 	SslCertificate             string `yaml:"ssl_certificate" json:"ssl_certificate"`
 	SslCertificateKey          string `yaml:"ssl_certificate_key" json:"ssl_certificate_key"`
 	WebAppStaticRoot           string `yaml:"web_app_static_root" json:"web_app_static_root"`
@@ -20,6 +26,7 @@ type SiteConfig struct {
 	WebAppDisableSPANavigation bool   `yaml:"web_app_disable_spa_navigation" json:"web_app_disable_spa_navigation"`
 	WebAppStaticMaxAge         int    `yaml:"web_app_static_max_age" json:"web_app_static_max_age"`
 	StaticReloadInterval       int    `yaml:"static_reload_interval" json:"static_reload_interval"`
+	EndpointsFileName          string `yaml:"grpc_endpoints" json:"grpc_endpoints"`
 }
 
 type ServiceConfig struct {
@@ -112,5 +119,33 @@ func ParseSiteConfig(fileName string) (*SiteConfig, error) {
 	if config.StaticReloadInterval == 0 {
 		config.StaticReloadInterval = 600
 	}
+	endpointLocalFileName := config.EndpointsFileName
+	_ = endpointLocalFileName
+	confDir, _ := path.Split(fileName)
+	endpointFileName := path.Join(confDir, endpointLocalFileName)
+	endpointConfData, err := ioutil.ReadFile(endpointFileName)
+	if err != nil {
+		return nil, err
+	}
+	var endpoints map[string]string
+	err = yaml.Unmarshal(endpointConfData, &endpoints)
+	if err != nil {
+		return nil, err
+	}
+	config.Endpoints = make([]*EndpointConfig, 0)
+	for endpointName, endpointLink := range endpoints {
+		endpointUrl, err := url.Parse(endpointLink)
+		if err != nil {
+			return nil, err
+		}
+		config.Endpoints = append(config.Endpoints, &EndpointConfig{
+			ServiceName: endpointName,
+			ServiceURL:  endpointUrl,
+		})
+	}
 	return &config, nil
+}
+
+func ParseEndpointsConfig(fileName string) {
+
 }
