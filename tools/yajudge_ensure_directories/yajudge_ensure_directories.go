@@ -11,12 +11,13 @@ import (
 )
 
 func main() {
-	skipUidCheck := flag.Bool("--force", false, "skip UID check")
-	yajudgeUserName := flag.String("-U", "yajudge", "user name to run service")
-	yajudgeGroupName := flag.String("-G", "yajudge", "group name to run service")
-	yajudgeSliceName := flag.String("-S", "yajudge", "systemd slice name to place service")
+	skipUidCheck := flag.Bool("force", false, "skip UID check")
+	yajudgeUserName := flag.String("U", "yajudge", "user name to run service")
+	yajudgeGroupName := flag.String("G", "yajudge", "group name to run service")
+	yajudgeSliceName := flag.String("S", "yajudge", "systemd slice name to place service")
+	flag.Parse()
 	if os.Geteuid() != 0 && !*skipUidCheck {
-		print("Requires root privileges to ensure correct privileges")
+		log.Fatalf("Requires root privileges to ensure correct file permissions")
 		os.Exit(1)
 	}
 	yajudgeRoot, err := resolveYajudgeRootDir()
