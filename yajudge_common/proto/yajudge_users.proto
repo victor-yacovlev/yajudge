@@ -3,16 +3,15 @@ syntax = "proto3";
 package yajudge;
 import public "yajudge_common.proto";
 
+
 service UserManagement {
-  rpc StartSession(Session) returns (Session) {}
-  rpc Authorize(User) returns (Session) {}
-  rpc GetProfile(Session) returns (User) {}
-  rpc GetUsers(UsersFilter) returns (UsersList) {}
-  rpc SetUserDefaultRole(UserRole) returns (UserRole) {}
-  rpc CreateOrUpdateUser(User) returns (User) {}
-  rpc BatchCreateStudents(UsersList) returns (UsersList) {}  // returns same users with ID's set
-  rpc BatchDeleteUsers(UsersList) returns (Nothing) {}
-  rpc DeleteUser(User) returns (Nothing) {}
-  rpc ResetUserPassword(User) returns (User) {}
-  rpc ChangePassword(User) returns (User) {}
+  rpc GetProfileById(User) returns (User);
+  rpc GetUsers(UsersFilter) returns (UsersList);
+  rpc SetUserDefaultRole(UserRole) returns (UserRole);
+  rpc CreateOrUpdateUser(User) returns (User);
+  rpc BatchCreateStudents(UsersList) returns (UsersList);  // returns same users with ID's set
+  rpc BatchDeleteUsers(UsersList) returns (Nothing);
+  rpc DeleteUser(User) returns (Nothing);
+  rpc ResetUserPassword(User) returns (User);
+  rpc ChangePassword(User) returns (User);
 }

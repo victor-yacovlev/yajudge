@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+
+service SessionManagement {
+  rpc StartSession(Session) returns (Session);
+  rpc Authorize(User) returns (Session);
+  rpc /* private */ GetUserIdAndRole(Session) returns (User);
+}

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service CourseContentProvider {
+  rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse);
+  rpc /* private */ GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse);
+
+}

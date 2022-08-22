@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
-import 'controllers/courses_controller.dart';
+import 'controllers/course_content_controller.dart';
 import 'controllers/connection_controller.dart';
 import 'client_app.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +50,7 @@ void main(List<String>? arguments) async {
     });
   }
   else {
+    ConnectionController.initialize(Uri());
     Logger.root.info('no API URI set, so starting with empty session');
     App app = App(initialSession: Session());
     runApp(app);

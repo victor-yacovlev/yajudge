@@ -1,0 +1,3 @@
+listen:
+  http_port: 1080
+  bind_address: localhost

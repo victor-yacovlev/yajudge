@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,9 @@ func main() {
 	logFileName := flag.String("L", "", "log file name")
 	pidFileName := flag.String("P", "", "PID file name")
 	flag.Parse()
+	if configFileName == nil || *configFileName == "" {
+		*configFileName = guessConfigFileName()
+	}
 	if configFileName == nil || *configFileName == "" {
 		log.Fatalf("Requires config file passed by -C option")
 	}
@@ -36,6 +40,7 @@ func main() {
 	}
 	initializeLogger(config.Service.LogFile)
 	createPIDFile(config.Service.PidFile)
+	log.Infof("starting webserver on pid = %v", os.Getpid())
 	httpListener, httpsListener, err := createListeners(config.Sites, config.Listen)
 	if err != nil {
 		log.Fatalf("cant create network listeners: %v", err)
@@ -68,7 +73,49 @@ func main() {
 	}
 	go handleSignal(os.Interrupt)
 	<-signalsChan
+	log.Infof("shutdown webserver")
 	removePIDFile(config.Service.PidFile)
+}
+
+func guessConfigFileName() string {
+	if confDir, err := resolveDefaultConfDir(); err != nil {
+		return ""
+	} else {
+		return path.Join(confDir, "webserver.yaml")
+	}
+}
+
+func resolveYajudgeRootDir() (string, error) {
+	serverExecutable, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("cant resolve yajudge directory: %v", err)
+	}
+	if stat, _ := os.Lstat(serverExecutable); stat.Mode()&os.ModeSymlink != 0 {
+		serverExecutable, _ = os.Readlink(serverExecutable)
+	}
+	executableDir := path.Dir(serverExecutable)
+	if !path.IsAbs(executableDir) {
+		cwd, _ := os.Getwd()
+		executableDir = path.Clean(path.Join(cwd, executableDir))
+	}
+	parentDir := path.Clean(path.Join(executableDir, ".."))
+	return parentDir, nil
+}
+
+func resolveDefaultConfDir() (string, error) {
+	yajudgeDir, err := resolveYajudgeRootDir()
+	if err != nil {
+		return "", err
+	}
+	yajudgeConfDir := path.Join(yajudgeDir, "conf")
+	yajudgeConfDevelDir := path.Join(yajudgeDir, "conf-devel")
+	if stat, err := os.Stat(yajudgeConfDevelDir); err == nil && stat.IsDir() {
+		return yajudgeConfDevelDir, nil
+	}
+	if stat, err := os.Stat(yajudgeConfDir); err == nil && stat.IsDir() {
+		return yajudgeConfDir, nil
+	}
+	return "", fmt.Errorf("no 'conf' or 'conf-devel' in %s", yajudgeDir)
 }
 
 func initializeLogger(logFileName string) {
@@ -76,10 +123,10 @@ func initializeLogger(logFileName string) {
 		parts := strings.Split(logFileName, "/")
 		dirParts := parts[0 : len(parts)-1]
 		dirPath := strings.Join(dirParts, "/")
-		if err := os.MkdirAll(dirPath, 0770); err != nil {
+		if err := os.MkdirAll(dirPath, 0o770); err != nil {
 			log.Fatalf("cant create directory for log file %s: %v", logFileName, err)
 		}
-		file, err := os.OpenFile(logFileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0660)
+		file, err := os.OpenFile(logFileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o660)
 		if err != nil {
 			log.Fatalf("cant create or open log file %s: %v", logFileName, err)
 		}
@@ -92,11 +139,11 @@ func createPIDFile(pidFileName string) {
 		parts := strings.Split(pidFileName, "/")
 		dirParts := parts[0 : len(parts)-1]
 		dirPath := strings.Join(dirParts, "/")
-		if err := os.MkdirAll(dirPath, 0770); err != nil {
+		if err := os.MkdirAll(dirPath, 0o770); err != nil {
 			log.Warningf("cant create directory for PID file %s: %v", pidFileName, err)
 			return
 		}
-		file, err := os.OpenFile(pidFileName, os.O_WRONLY|os.O_CREATE, 0660)
+		file, err := os.OpenFile(pidFileName, os.O_WRONLY|os.O_CREATE, 0o660)
 		if err != nil {
 			log.Warningf("cant create or open log file %s: %v", pidFileName, err)
 			return

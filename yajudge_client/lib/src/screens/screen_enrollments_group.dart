@@ -19,7 +19,7 @@ class EnrollmentsGroupScreen extends BaseScreen {
 
 class EnrollmentsGroupScreenState extends BaseScreenState {
 
-  GroupEnrollmentsResponse? _data;
+  GroupEnrollments? _data;
 
   EnrollmentsGroupScreenState({required String title}) : super(title: title);
 
@@ -32,12 +32,12 @@ class EnrollmentsGroupScreenState extends BaseScreenState {
       course: Course(urlPrefix: urlPrefix),
       groupPattern: groupName,
     );
-    final service = ConnectionController.instance!.enrollmentsService;
+    final service = ConnectionController.instance!.coursesService;
     final futureResult = service.getGroupEnrollments(request);
 
   }
 
-  void setResponseFromServer(GroupEnrollmentsResponse data) {
+  void setResponseFromServer(GroupEnrollments data) {
     setState(() {
       _data = data;
     });

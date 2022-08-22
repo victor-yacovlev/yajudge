@@ -1,0 +1,56 @@
+syntax = "proto3";
+package yajudge_server;
+
+option go_package = "./;main";
+
+enum ServiceStatus {
+  STOPPED = 0;
+  RUNNING = 1;
+  FAILED = 2;
+  DISABLED = 3;
+  DEAD = 4;
+  RESPAWNING = 5;
+  SHUTDOWN = 6;
+}
+
+message ServiceStatusResponse {
+  string  service_name = 1;
+  ServiceStatus status = 2;
+  int32 pid = 3;
+  int64 uptime = 4;
+  string fail_reason = 5;
+  int32 crashes_since_start = 6;
+}
+
+message StatusResponse {
+  string instance_name = 1;
+  repeated ServiceStatusResponse service_statuses = 2;
+}
+
+message SupervisorStatusResponse {
+  int32 supervisor_pid = 1;
+  repeated string instance_names = 2;
+}
+
+message StartRequest {
+  string instance_name = 1;
+  repeated string service_names = 2;
+}
+
+message StopRequest {
+  string instance_name = 1;
+  repeated string service_names = 2;
+}
+
+message StatusRequest {
+  string instance_name = 1;
+}
+
+message Empty {}
+
+service Supervisor {
+  rpc GetSupervisorStatus(Empty) returns (SupervisorStatusResponse);
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+  rpc Start(StartRequest) returns (StatusResponse);
+  rpc Stop(StopRequest) returns (StatusResponse);
+}

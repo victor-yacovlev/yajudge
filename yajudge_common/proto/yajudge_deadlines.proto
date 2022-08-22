@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service DeadlinesManagement {
+  rpc GetLessonSchedules(LessonScheduleRequest) returns (LessonScheduleSet);
+  rpc GetSubmissionDeadlines(Submission /* id only */) returns (Submission /* deadline fields only */);
+  rpc /* private */ InsertNewSubmission(Submission) returns (Submission);
+}

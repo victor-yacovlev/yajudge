@@ -1,0 +1,6 @@
+host: localhost
+port: 5432
+user: yajudge
+name: yajudge_@CONFIG_NAME
+# database password must be stored in separate file not readable by most users
+password_file: '@YAJUDGE_HOME/conf/database-password.txt'

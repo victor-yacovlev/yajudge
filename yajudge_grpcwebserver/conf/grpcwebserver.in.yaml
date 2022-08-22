@@ -1,5 +1,0 @@
-listen:
-  http_port: 8080
-  bind_address: localhost
-
-sites_conf_directory: '@CONFIGURATION_DIRECTORY/sites-enabled'

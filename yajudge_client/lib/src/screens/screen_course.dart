@@ -183,7 +183,7 @@ class CourseScreenState extends BaseScreenState {
       user: screen.loggedUser,
       course: screen.course,
     );
-    final service = ConnectionController.instance!.submissionsService;
+    final service = ConnectionController.instance!.progressService;
     final futureCourseStatus = service.checkCourseStatus(request);
     futureCourseStatus.then((CourseStatus status) {
       if (mounted) {
@@ -220,7 +220,7 @@ class CourseScreenState extends BaseScreenState {
       user: screen.loggedUser,
       course: screen.course,
     );
-    final service = ConnectionController.instance!.submissionsService;
+    final service = ConnectionController.instance!.progressService;
     _statusStream = service.subscribeToCourseStatusNotifications(request);
     _statusStream!.listen(
       (CourseStatus event) {

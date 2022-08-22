@@ -63,14 +63,14 @@ class LoginScreenState extends State<LoginScreen> {
   }
 
   void processLogin() {
-    if (_serverUri.host.isEmpty) {
+    if (_serverUri.host.isEmpty && _serverUri.scheme.isEmpty && _serverUri.path.isEmpty) {
       logger.info('Server URI not set, using default base: ${Uri.base}');
       _serverUri = Uri.base;
     }
     PlatformsUtils.getInstance().saveSettingsValue('api_url', _serverUri.toString());
     ConnectionController.initialize(_serverUri);
     logger.info("Will use $_serverUri for API access");
-    ConnectionController.instance!.usersService.authorize(_candidate).then((Session session) {
+    ConnectionController.instance!.sessionsService.authorize(_candidate).then((Session session) {
       logger.info('logger user ${session.user}');
       ConnectionController.instance!.setSession(session);
       setState(() {
@@ -188,7 +188,7 @@ class LoginScreenState extends State<LoginScreen> {
     bool showServerField = true;
     if (kIsWeb) {
       if (initialServerValue.isEmpty) {
-        initialServerValue = Uri.base.scheme + '://' + Uri.base.host;
+        initialServerValue = '${Uri.base.scheme}://${Uri.base.host}';
         if (Uri.base.host == 'localhost') {
           initialServerValue += ":9095";
         }

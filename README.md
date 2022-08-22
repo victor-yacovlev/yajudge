@@ -36,7 +36,7 @@ run `make native-client` in `yajudge_client` subdirectory.
 
 See README.md in subdirectories for details):
 
- - [yajudge_master](./yajudge_master) - server-side backend to manage
+ - [yajudge_master](./yajudge_master_services) - server-side backend to manage
 courses, problems and students
  - [yajudge_client](./yajudge_client) - frontend app for Web and Desktops
  - [yajudge_grader](./yajudge_grader) - submissions grader to be run on

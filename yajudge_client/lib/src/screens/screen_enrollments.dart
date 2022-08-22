@@ -15,20 +15,20 @@ class EnrollmentsScreen extends BaseScreen {
 
 class EnrollmentsScreenState extends BaseScreenState {
 
-  AllGroupsEnrollmentsResponse? _allGroups;
+  AllGroupsEnrollments? _allGroups;
 
   EnrollmentsScreenState({required String title}) : super(title: title);
 
   @override
   void initState() {
     super.initState();
-    final service = ConnectionController.instance!.enrollmentsService;
+    final service = ConnectionController.instance!.coursesService;
     final urlPrefix = (widget as EnrollmentsScreen).courseUrlPrefix;
     final futureResult = service.getAllGroupsEnrollments(Course(urlPrefix: urlPrefix));
     futureResult.then(setResponseFromServer);
   }
 
-  void setResponseFromServer(AllGroupsEnrollmentsResponse response) {
+  void setResponseFromServer(AllGroupsEnrollments response) {
     setState(() {
       _allGroups = response;
       title = 'Группы курса ${response.course.name}';
@@ -54,7 +54,7 @@ class EnrollmentsScreenState extends BaseScreenState {
     );
   }
 
-  Widget buildGroupWidget(BuildContext context, GroupEnrollmentsResponse group) {
+  Widget buildGroupWidget(BuildContext context, GroupEnrollments group) {
     final courseUrlPrefix = (widget as EnrollmentsScreen).courseUrlPrefix;
     final groupName = group.groupPattern;
     final action = () {

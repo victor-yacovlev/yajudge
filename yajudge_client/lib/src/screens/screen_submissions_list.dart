@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:grpc/grpc.dart' as grpc;
 import 'package:protobuf/protobuf.dart';
 import '../controllers/connection_controller.dart';
-import '../controllers/courses_controller.dart';
+import '../controllers/course_content_controller.dart';
 import 'screen_base.dart';
 import 'screen_submission.dart';
 
@@ -108,7 +108,7 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _loadCourse() {
     if (_course.id == 0) {
-      CoursesController.instance!
+      CourseContentController.instance!
           .loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
           .then((Tuple2<Course,Role> value) {
             void afterLoadCourse() {
@@ -130,7 +130,7 @@ class SubmissionsListScreenState extends BaseScreenState {
 
   void _loadCourseData() {
     if (_courseData.id.isEmpty) {
-      CoursesController.instance!
+      CourseContentController.instance!
           .loadCourseData(_course.dataId)
           .then((CourseData value) {
             if (mounted) {

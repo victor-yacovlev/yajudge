@@ -11,7 +11,7 @@ import 'grader_extra_configs.dart';
 class ProblemLoader {
   final Submission submission;
   final GraderLocationProperties locationProperties;
-  final CourseManagementClient coursesService;
+  final CourseContentProviderClient contentService;
   final DefaultBuildProperties buildProperties;
   final SecurityContext defaultSecurityContext;
   final AbstractRunner runner;
@@ -19,7 +19,7 @@ class ProblemLoader {
 
   ProblemLoader({
     required this.submission,
-    required this.coursesService,
+    required this.contentService,
     required this.locationProperties,
     required this.buildProperties,
     required this.defaultSecurityContext,
@@ -42,7 +42,14 @@ class ProblemLoader {
       problemId: problemId,
       cachedTimestamp: Int64(timeStamp),
     );
-    final response = await coursesService.getProblemFullContent(request);
+    ProblemContentResponse response;
+    try {
+      response = await contentService.getProblemFullContent(request);
+    }
+    catch (e) {
+      log.severe('cant get course $courseId content for problem $problemId: $e');
+      return;
+    }
     if (response.status == ContentStatus.HAS_DATA) {
       problemDir.createSync(recursive: true);
       io.Directory buildDir = io.Directory('${problemDir.path}/build');

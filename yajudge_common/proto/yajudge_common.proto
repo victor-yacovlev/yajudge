@@ -13,15 +13,15 @@ enum Role {
 }
 
 message User {
-  int64           id = 1;
+  int64  id = 1;
   string first_name = 2;
   string last_name = 3;
   string mid_name = 4;
   string email = 5;
-  string          password = 6;
+  string password = 6;
   string group_name = 7;
-  Role            default_role= 8;
-  bool            disabled = 9;
+  Role   default_role= 8;
+  bool   disabled = 9;
   string login = 10;   // alternate way to log in instead of id and email
 }
 
@@ -30,6 +30,7 @@ message Session {
   User        user        = 2;
   int64       start       = 3;    // timestamp
   string      initial_route=4;    // initial route on user login
+  string      user_encrypted_data = 100; // to use instead of cookie by microservices
 }
 
 message Nothing {
@@ -65,7 +66,6 @@ message TextReading {
   string      title       = 3;
   string      content_type= 4;  // text/markdown by default
   string      data        = 5;  // encoded in base64 if content-type not starts with 'text/'
-  int64       time_to_read= 6;  // average time to read in seconds
   FileSet     resources   = 7;
 }
 
@@ -83,16 +83,16 @@ message GradingPlatform {
 }
 
 message GradingLimits {
-  int64           stack_size_limit_mb = 1;
-  int64           memory_max_limit_mb = 2;
-  int64           cpu_time_limit_sec  = 3;
-  int64           real_time_limit_sec = 4;
-  int64           proc_count_limit    = 5;
-  int64           fd_count_limit      = 6;
-  int64           stdout_size_limit_mb= 7;
-  int64           stderr_size_limit_mb= 8;
+  int32           stack_size_limit_mb = 1;
+  int32           memory_max_limit_mb = 2;
+  int32           cpu_time_limit_sec  = 3;
+  int32           real_time_limit_sec = 4;
+  int32           proc_count_limit    = 5;
+  int32           fd_count_limit      = 6;
+  int32           stdout_size_limit_mb= 7;
+  int32           stderr_size_limit_mb= 8;
   bool            allow_network       = 9;
-  int64           new_proc_delay_msec = 11;
+  int32           new_proc_delay_msec = 11;
 }
 
 message SecurityContext {
@@ -377,7 +377,7 @@ message CourseData {
 }
 
 message Course {
-  int64             id            = 1;
+  int32             id            = 1;
   string            name          = 2;
   string            data_id       = 3;
   string            url_prefix    = 5;
@@ -496,8 +496,8 @@ message GroupEnrollmentsRequest {
   string        group_pattern = 2;
 }
 
-message GroupEnrollmentsResponse {
-  int64         id = 1;
+message GroupEnrollments {
+  int32         id = 1;
   string        group_pattern = 2;
   repeated User group_students = 3;
   repeated User foreign_students = 4;
@@ -505,12 +505,12 @@ message GroupEnrollmentsResponse {
   repeated User assistants = 6;
 }
 
-message AllGroupsEnrollmentsResponse {
+message AllGroupsEnrollments {
   Course course = 1;
-  repeated GroupEnrollmentsResponse groups = 2;
+  repeated GroupEnrollments groups = 2;
 }
 
-message UserEnrollmentsResponse {
+message UserEnrollments {
   repeated Enrollment enrollments = 1;
 }
 
@@ -536,11 +536,6 @@ message SubmissionsCountLimit {
   int64   server_time     = 3;
 }
 
-message CheckSubmissionsLimitRequest {
-  User    user            = 1;  // just user id
-  Course  course          = 2;  // just course id
-  string  problem_id      = 3;
-}
 
 message SubmissionList {
   repeated Submission   submissions = 1;
@@ -579,7 +574,7 @@ message LocalGraderSubmission {
 
 message SubmissionListQuery {
   int64             submission_id = 1;  // ignore rest fields if > 0
-  int64             course_id = 2;
+  int32             course_id = 2;
   string            name_query = 3;
   string            problem_id_filter = 4;
   SolutionStatus    status_filter = 5;
@@ -697,4 +692,8 @@ message CodeReview {
 
 message ReviewHistory {
   repeated CodeReview   reviews = 1;
+}
+
+message CourseEntryPoint {
+  string url_prefix = 1;
 }

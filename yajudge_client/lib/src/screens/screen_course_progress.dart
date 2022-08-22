@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import '../controllers/connection_controller.dart';
-import '../controllers/courses_controller.dart';
+import '../controllers/course_content_controller.dart';
 import 'screen_base.dart';
 
 class CourseProgressScreen extends BaseScreen {
@@ -57,7 +57,7 @@ class CourseProgressScreenState extends BaseScreenState {
 
   void _loadCourse() {
     if (query.course.id == 0 || query.course.dataId.isEmpty) {
-      CoursesController.instance!
+      CourseContentController.instance!
           .loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
           .then((Tuple2<Course,Role> value) {
             final newFilter = query.copyWith((s) {
@@ -76,7 +76,7 @@ class CourseProgressScreenState extends BaseScreenState {
   }
   
   void _loadCourseProgress() {
-    final service = ConnectionController.instance!.coursesService;
+    final service = ConnectionController.instance!.progressService;
     final futureProgress = service.getProgress(query);
     futureProgress.then(_setCourseProgress).onError((error, _) {
       setState(() {
@@ -122,7 +122,7 @@ class CourseProgressScreenState extends BaseScreenState {
   }
 
   void _sendProgressQuery(CourseProgressRequest query) {
-    final service = ConnectionController.instance!.coursesService;
+    final service = ConnectionController.instance!.progressService;
     final futureResponse = service.getProgress(query);
     futureResponse.then(_setSubmissionsList);
   }

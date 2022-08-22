@@ -1,0 +1,14 @@
+autostart_grpcwebserver: true
+
+chain_start_intervals: # all values in milliseconds
+  microservice: 200
+  grader: 2000
+  grpcwebserver: 500
+
+restart_policy:
+  max_tries: 10
+  restart_interval_ms: 250
+  reset_after_sec: 60
+
+shutdown_timeout_sec: 5
+

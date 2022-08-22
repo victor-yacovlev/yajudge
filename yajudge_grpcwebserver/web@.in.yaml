@@ -1,0 +1,13 @@
+# Fully-qualified host name
+host_name: '@HOST_NAME'
+
+# Must match corresponding master server configuration for this site
+grpc_endpoints: 'endpoints.yaml'
+
+# Common Web-application configuration
+web_app_static_root: '../../web'
+web_app_index_file: '/index.html'
+
+# Static files cache properties
+web_app_static_max_age: 24  # force update SPA every 24 hours
+static_reload_interval: 10  # check for static file changes every 10 seconds

@@ -1,0 +1,8 @@
+yajudge.CourseManagement: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/courses.sock'
+yajudge.SubmissionManagement: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/submissions.sock'
+yajudge.UserManagement: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/users.sock'
+yajudge.CodeReviewManagement: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/review.sock'
+yajudge.ProgressCalculator: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/progress.sock'
+yajudge.DeadlinesManagement: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/deadlines.sock'
+yajudge.CourseContentProvider: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/content.sock'
+yajudge.SessionManagement: 'unix://@YAJUDGE_HOME/sock/@CONFIG_NAME/sessions.sock'

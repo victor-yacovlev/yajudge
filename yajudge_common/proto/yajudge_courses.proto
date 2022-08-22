@@ -4,13 +4,13 @@ package yajudge;
 import public "yajudge_common.proto";
 
 service CourseManagement {
-  rpc CreateOrUpdateCourse(Course) returns (Course) {}
-  rpc CloneCourse(Course) returns (Course) {}
-  rpc DeleteCourse(Course) returns (Nothing) {}
-  rpc GetCourses(CoursesFilter) returns (CoursesList) {}
-  rpc GetCoursePublicContent(CourseContentRequest) returns (CourseContentResponse) {}
-  rpc GetLessonSchedules(LessonScheduleRequest) returns (LessonScheduleSet);
-  rpc GetProblemFullContent(ProblemContentRequest) returns (ProblemContentResponse) {}
+  rpc EnrollUser(EnrollUserRequest) returns (EnrollUserRequest);
+  rpc EnrollGroup(EnrollGroupRequest) returns (EnrollGroupRequest);
+  rpc GetAllGroupsEnrollments(Course) returns (AllGroupsEnrollments);
+  rpc GetGroupEnrollments(GroupEnrollmentsRequest) returns (GroupEnrollments);
+  rpc GetUserEnrollments(User) returns (UserEnrollments);
+  rpc GetCourse(Course /* id or url_prefix */) returns (Course /* all fields filled */);
 
-  rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse) {}
+  rpc GetCourses(CoursesFilter) returns (CoursesList);
+
 }

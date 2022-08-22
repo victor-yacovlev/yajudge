@@ -1,4 +1,3 @@
-import 'package:fixnum/fixnum.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:yaml/yaml.dart';
 
@@ -53,15 +52,15 @@ extension GradingLimitsExtension on GradingLimits {
       allowNetwork = conf['allow_network'].toString().toLowerCase()=='true';
     }
     return GradingLimits(
-      stackSizeLimitMb: Int64(stackSize),
-      memoryMaxLimitMb: Int64(memoryMax),
-      cpuTimeLimitSec: Int64(cpuTime),
-      realTimeLimitSec: Int64(realTime),
-      procCountLimit: Int64(procs),
-      newProcDelayMsec: Int64(procStartDelay),
-      fdCountLimit: Int64(files),
-      stdoutSizeLimitMb: Int64(stdoutMax),
-      stderrSizeLimitMb: Int64(stderrMax),
+      stackSizeLimitMb: stackSize,
+      memoryMaxLimitMb: memoryMax,
+      cpuTimeLimitSec: cpuTime,
+      realTimeLimitSec: realTime,
+      procCountLimit: procs,
+      newProcDelayMsec: procStartDelay,
+      fdCountLimit: files,
+      stdoutSizeLimitMb: stdoutMax,
+      stderrSizeLimitMb: stderrMax,
       allowNetwork: allowNetwork,
     );
   }

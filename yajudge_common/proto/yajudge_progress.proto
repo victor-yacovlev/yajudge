@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yajudge;
+import public "yajudge_common.proto";
+
+service ProgressCalculator {
+
+  rpc GetSubmissionCountLimit(Submission) returns (SubmissionsCountLimit);
+
+  rpc GetProgress(CourseProgressRequest) returns (CourseProgressResponse);
+
+  rpc CheckCourseStatus(CheckCourseStatusRequest) returns (CourseStatus);
+  rpc SubscribeToCourseStatusNotifications(CheckCourseStatusRequest) returns (stream CourseStatus);
+
+  rpc CheckProblemStatus(ProblemStatusRequest) returns (ProblemStatus);
+  rpc SubscribeToProblemStatusNotifications(ProblemStatusRequest) returns (stream ProblemStatus);
+
+  rpc /* private */ NotifyProblemStatusChanged(Submission) returns (Empty);
+
+}

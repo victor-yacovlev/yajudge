@@ -400,11 +400,13 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
         setState((){
           final y = event.localPosition.dy;
           _currentHoveredLine = y ~/ lineHeight;
+          widget.lineCommentController?.notify();
         });
       },
       onExit: (event) {
         setState((){
           _currentHoveredLine = -1;
+          widget.lineCommentController?.notify();
         });
       },
     );
@@ -440,10 +442,11 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
   }
 
   void _handleLineClicked() {
+    final controller = widget.lineCommentController;
     if (_currentHoveredLine == -1 || _currentHoveredLine >= widget.linesCount) {
+      controller?.notify();
       return;
     }
-    final controller = widget.lineCommentController;
     controller?.notify();
     int editLine = _currentHoveredLine;
     if (_currentCommentEditingLine!=-1 && _currentCommentEditingLine!=editLine) {
@@ -466,6 +469,7 @@ class SourceViewWidgetState extends State<SourceViewWidget> {
   }
 
   void _saveComment() {
+    widget.lineCommentController?.notify();
     log.info('save comment');
     if (_commentEditor == null) {
       log.info('comment editor is null');

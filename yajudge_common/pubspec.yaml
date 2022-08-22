@@ -12,6 +12,11 @@ dependencies:
   fixnum: ^1.0.1
   archive: ^3.3.0
   bson: ^1.0.4
+  tuple: ^2.0.0
+  xml: ^6.0.1
+  posix: ^3.1.0
+  encrypt: ^5.0.1
+  crypto: ^3.0.2
 
 
 dev_dependencies:

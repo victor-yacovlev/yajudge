@@ -33,8 +33,17 @@ class Endpoint {
     return typeMatch && hostMatch && sslMatch && pathMatch && portMatch;
   }
 
-  factory Endpoint.fromUri(String service, String uriString) {
-    final uri = Uri.parse(uriString);
+  dynamic toUnixInternetAddress() {
+    if (isUnix) {
+      return io.InternetAddress(unixPath, type: io.InternetAddressType.unix);
+    }
+  }
+
+  factory Endpoint.fromUri(String service, dynamic uri) {
+    if (uri is String) {
+      uri = Uri.parse(uri);
+    }
+    assert (uri is Uri);
     switch (uri.scheme) {
       case 'grpc':
       case 'http':
@@ -44,7 +53,7 @@ class Endpoint {
         bool useSsl = ['grpcs', 'https'].contains(uri.scheme);
         int port = uri.port;
         if (port == 0 && (uri.scheme == 'grpc' || uri.scheme == 'grpcs')) {
-          throw EndpointParseException('port is required for grpc(s):// scheme', uriString);
+          throw EndpointParseException('port is required for grpc(s):// scheme', uri);
         }
         else if (port == 0 && uri.scheme == 'http') {
           port = 80;
@@ -65,7 +74,7 @@ class Endpoint {
         bool useSsl = ['grpcs+unix'].contains(uri.scheme);
         String unixPath = uri.path;
         if (unixPath.isEmpty) {
-          throw EndpointParseException('unix file name is empty', uriString);
+          throw EndpointParseException('unix file name is empty', uri);
         }
         return Endpoint(service)
           ..host=''
@@ -75,7 +84,7 @@ class Endpoint {
           ..isUnix=true
         ;
       default:
-        throw EndpointParseException('unknown endpoint uri scheme', uriString);
+        throw EndpointParseException('unknown endpoint uri scheme', uri);
     }
   }
 
@@ -110,13 +119,45 @@ class RpcProperties {
     else {
       endpoints = endpointsValue as YamlMap;
     }
-    for (final entry in endpoints.entries) {
+    result._parseEndpoints(endpoints);
+    return result;
+  }
+
+  factory RpcProperties.fromEndpointsYamlAndPrivateToken(
+      YamlMap endpointsConf, [String privateToken = '']) {
+    return RpcProperties(privateToken).._parseEndpoints(endpointsConf);
+  }
+
+  factory RpcProperties.fromSingleEndpoint(Uri endpoint, [String privateToken = '']) {
+    const services = [
+      'yajudge.CourseManagement',
+      'yajudge.SubmissionManagement',
+      'yajudge.UserManagement',
+      'yajudge.CodeReviewManagement',
+      'yajudge.ProgressCalculator',
+      'yajudge.DeadlinesManagement',
+      'yajudge.CourseContentProvider',
+      'yajudge.SessionManagement',
+    ];
+    RpcProperties result = RpcProperties(privateToken);
+    for (final service in services) {
+      result.endpoints[service] = Endpoint.fromUri(service, endpoint);
+    }
+    return result;
+  }
+
+  factory RpcProperties.fromEndpointsFile(Uri endpointFile, [String privateToken = '']) {
+    YamlMap endpointsConf = parseYamlConfig(endpointFile.path);
+    return RpcProperties.fromEndpointsYamlAndPrivateToken(endpointsConf, privateToken);
+  }
+
+  void _parseEndpoints(YamlMap conf) {
+    for (final entry in conf.entries) {
       String serviceName = entry.key as String;
       String uriString = entry.value as String;
       Endpoint endpoint = Endpoint.fromUri(serviceName, uriString);
-      result.endpoints[serviceName] = endpoint;
+      endpoints[serviceName] = endpoint;
     }
-    return result;
   }
 }
 

@@ -4,7 +4,7 @@ import 'config_file.dart';
 
 class ServiceProperties {
   final String logFilePath;
-  final String pidFilePath;
+  final String? pidFilePath;
   final String systemdSlice;
   final String runAsUser;
   final String runAsGroup;

@@ -1,0 +1,3 @@
+locations:
+  courses_root: '@YAJUDGE_HOME/courses'
+  problems_root: '@YAJUDGE_HOME/problems'

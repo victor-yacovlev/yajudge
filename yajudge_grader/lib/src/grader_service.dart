@@ -12,7 +12,6 @@ import 'chrooted_runner.dart';
 import 'grading_worker.dart';
 import 'problem_loader.dart';
 import 'simple_runner.dart';
-import 'package:path/path.dart' as path;
 
 import 'abstract_runner.dart';
 import 'submission_processor.dart';
@@ -21,6 +20,7 @@ const reconnectTimeout = Duration(seconds: 5);
 
 class TokenAuthGrpcInterceptor implements ClientInterceptor {
   final String _token;
+  final Logger log = Logger('GraderExternalApiClient');
 
   TokenAuthGrpcInterceptor(this._token) : super();
 
@@ -38,7 +38,10 @@ class TokenAuthGrpcInterceptor implements ClientInterceptor {
   ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
       CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
     final newOptions = getNewOptions(options);
-    return invoker(method, request, newOptions);
+    return invoker(method, request, newOptions)..onError((error, stackTrace) {
+      log.severe('error accessing method ${method.path}: $error, stacktrace: $stackTrace');
+      return Future.error(error!);
+    });
   }
 
   CallOptions getNewOptions(CallOptions options) {
@@ -61,11 +64,9 @@ class GraderService {
   final ServiceProperties serviceProperties;
   final DefaultBuildProperties defaultBuildProperties;
   final DefaultRuntimeProperties defaultRuntimeProperties;
-  final bool usePidFile;
-  final bool processLocalInboxOnly;
   int _idleWorkersCount = 0;
 
-  late final CourseManagementClient coursesService;
+  late final CourseContentProviderClient contentService;
   late final SubmissionManagementClient submissionsService;
 
   late final double _performanceRating;
@@ -84,26 +85,24 @@ class GraderService {
     required this.identityProperties,
     required this.jobsConfig,
     required this.serviceProperties,
-    required this.usePidFile,
     required this.defaultLimits,
     required this.defaultBuildProperties,
     required this.defaultRuntimeProperties,
     this.overrideLimits,
     required this.defaultSecurityContext,
-    this.processLocalInboxOnly = false,
   }) {
-    final coursesEndpoint = rpcProperties.endpoints['yajudge.CourseManagement']!;
+    final coursesEndpoint = rpcProperties.endpoints['yajudge.CourseContentProvider']!;
     final submissionsEndpoint = rpcProperties.endpoints['yajudge.SubmissionManagement']!;
     final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
     if (coursesEndpoint.connectionEquals(submissionsEndpoint)) {
       // connect once and use endpoint for both services
       final clientChannel = connectToEndpoint(coursesEndpoint);
-      coursesService = CourseManagementClient(clientChannel, interceptors: [interceptor]);
+      contentService = CourseContentProviderClient(clientChannel, interceptors: [interceptor]);
       submissionsService = SubmissionManagementClient(clientChannel, interceptors: [interceptor]);
     }
     else {
       final coursesChannel = connectToEndpoint(coursesEndpoint);
-      coursesService = CourseManagementClient(coursesChannel, interceptors: [interceptor]);
+      contentService = CourseContentProviderClient(coursesChannel, interceptors: [interceptor]);
       final submissionsChannel = connectToEndpoint(submissionsEndpoint);
       submissionsService = SubmissionManagementClient(submissionsChannel, interceptors: [interceptor]);
     }
@@ -263,33 +262,10 @@ class GraderService {
 
   void checkForShutdown() {
     if (shuttingDown) {
-      if (usePidFile && serviceProperties.pidFilePath!='disabled') {
-        io.File(serviceProperties.pidFilePath).deleteSync();
+      if (serviceProperties.pidFilePath != null) {
+        io.File(serviceProperties.pidFilePath!).deleteSync();
       }
       io.exit(shutdownExitCode);
-    }
-  }
-
-  void processLocalInboxSubmission() {
-    final localInboxDir = io.Directory('${locationProperties.workDir}/inbox');
-    final localDoneDir = io.Directory('${locationProperties.workDir}/done');
-    // Check submissions from local file system
-    if (localInboxDir.existsSync()) {
-      for (final entry in localInboxDir.listSync()) {
-        String name = path.basename(entry.path);
-        final inboxFile = io.File('${localInboxDir.path}/$name');
-        if (!localDoneDir.existsSync()) {
-          localDoneDir.createSync(recursive: true);
-        }
-        final doneFile = io.File('${localDoneDir.path}/$name');
-        final inboxData = inboxFile.readAsBytesSync();
-        final localSubmission = LocalGraderSubmission.fromBuffer(inboxData);
-        final futureResult = processSubmission(localSubmission.submission);
-        futureResult.then((result) {
-          doneFile.writeAsBytesSync(result.writeToBuffer());
-          inboxFile.deleteSync();
-        });
-      }
     }
   }
 
@@ -332,17 +308,31 @@ class GraderService {
       pushGraderStatus();
     });
 
+    final submissionsInProgress = <int>{};
 
     try {
       await pushGraderStatus();
       await for (Submission submission in masterStream) {
+        int submissionId = submission.id.toInt();
+        if (submissionsInProgress.contains(submissionId)) {
+          continue;  // prevent periodical push of the same submission
+        }
         waitForAnyWorkerIdle();
         if (shuttingDown) {
           return;
         }
+        submissionsInProgress.add(submissionId);
         log.info('processing submission ${submission.id} from master');
         processSubmission(submission).then((result) async {
-          await submissionsService.updateGraderOutput(result);
+          try {
+            await submissionsService.updateGraderOutput(result);
+          }
+          catch (e) {
+            log.severe('cant send back grader output on submission ${result.id} '
+                'with status ${result.status.name} (${result.status.value}): $e'
+            );
+          }
+          submissionsInProgress.remove(submissionId);
           await pushGraderStatus();
           log.info('done processing submission ${submission.id} from master');
         });
@@ -369,42 +359,6 @@ class GraderService {
         && error.message!=null && error.message!.toLowerCase().startsWith('http/2 error');
     bool httpDeadlineError = error is GrpcError && error.code==StatusCode.deadlineExceeded;
     return serviceUnavailableError || connectionLostError || httpDeadlineError;
-  }
-
-  Future<void> processLocalInboxSubmissions() async {
-    while (!shuttingDown) {
-      bool processed = false;
-      final localInboxDir = io.Directory('${locationProperties.workDir}/inbox');
-      final localDoneDir = io.Directory('${locationProperties.workDir}/done');
-
-      if (localInboxDir.existsSync()) {
-        for (final entry in localInboxDir.listSync()) {
-          if (!isIdle()) {
-            break;
-          }
-          String name = path.basename(entry.path);
-          final inboxFile = io.File('${localInboxDir.path}/$name');
-          if (!localDoneDir.existsSync()) {
-            localDoneDir.createSync(recursive: true);
-          }
-          final doneFile = io.File('${localDoneDir.path}/$name');
-          await pushGraderStatus();
-          log.info('processing local inbox submission $name');
-          final inboxData = inboxFile.readAsBytesSync();
-          final localSubmission = LocalGraderSubmission.fromBuffer(inboxData);
-          final submission = await processSubmission(localSubmission.submission);
-          doneFile.writeAsBytesSync(submission.writeToBuffer());
-          inboxFile.deleteSync();
-          await pushGraderStatus();
-          log.info('done processing local inbox submission $name');
-          processed = true;
-        }
-      }
-      // wait and retry if there is no submissions
-      if (!processed && !shuttingDown) {
-        io.sleep(Duration(seconds: 2));
-      }
-    }
   }
 
   Future<void> pushGraderStatus() async {
@@ -469,7 +423,7 @@ class GraderService {
 
     final problemLoader = ProblemLoader(
       submission: submission,
-      coursesService: coursesService,
+      contentService: contentService,
       runner: createRunner(submission, locationProperties),
       locationProperties: locationProperties,
       defaultSecurityContext: defaultSecurityContext,

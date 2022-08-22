@@ -1,13 +1,13 @@
 import 'package:grpc/grpc.dart';
-import 'package:grpc/grpc_connection_interface.dart';
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import '../utils/utils.dart';
-import 'courses_controller.dart';
+import 'course_content_controller.dart';
 
 class AuthGrpcInterceptor implements ClientInterceptor {
   String sessionCookie = '';
+  String sessionUserEncrypted = '';
 
   @override
   ResponseStream<R> interceptStreaming<Q, R>(
@@ -15,15 +15,22 @@ class AuthGrpcInterceptor implements ClientInterceptor {
       Stream<Q> requests,
       CallOptions options,
       ClientStreamingInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
+    CallOptions newOptions = options.mergedWith(CallOptions(metadata: _createMetadata()));
     return invoker(method, requests, newOptions);
   }
 
   @override
   ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
       CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(CallOptions(metadata: {'session': sessionCookie}));
+    CallOptions newOptions = options.mergedWith(CallOptions(metadata: _createMetadata()));
     return invoker(method, request, newOptions);
+  }
+
+  Map<String,String> _createMetadata() {
+    final metadata = <String,String>{};
+    metadata['session'] = sessionCookie;
+    metadata['session_user'] = sessionUserEncrypted;
+    return metadata;
   }
 }
 
@@ -31,64 +38,73 @@ class ConnectionController {
 
   static ConnectionController? instance;
   final log = Logger('ConnectionController');
-
-  ClientChannelBase? _clientChannel;
+  late final RpcProperties rpcProperties;
   final _authGrpcInterceptor = AuthGrpcInterceptor();
   late UserManagementClient usersService;
+  late SessionManagementClient sessionsService;
   late CourseManagementClient coursesService;
+  late CourseContentProviderClient contentService;
+  late DeadlinesManagementClient deadlinesService;
   late SubmissionManagementClient submissionsService;
-  late EnrollmentsManagerClient enrollmentsService;
   late CodeReviewManagementClient codeReviewService;
+  late ProgressCalculatorClient progressService;
   late final Uri _connectionUri;
+  final Map<String,dynamic> _clientChannels = {};
 
   Session _session = Session();
 
   ConnectionController(this._connectionUri) {
-
-    if (_clientChannel != null) {
-      _clientChannel!.shutdown();
+    final scheme = _connectionUri.scheme;
+    if (['http', 'https'].contains(scheme)) {
+      rpcProperties = RpcProperties.fromSingleEndpoint(_connectionUri);
     }
-    final host = _connectionUri.host;
-    final secure = ['grpcs', 'https'].contains(_connectionUri.scheme);
-    int port = _connectionUri.port;
-    if (port == 0) {
-      port = secure ? 443 : 80;
+    else if ('endpoints' == scheme) {
+      rpcProperties = RpcProperties.fromEndpointsFile(_connectionUri);
     }
-
-    _clientChannel = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
-        host: host,
-        port: port,
-        transportSecure: secure,
-    );
-
-    if (host == 'localhost') {
-      Logger.root.level = Level.ALL;
-      Logger.root.info('log level changed to ${Logger.root.level.name}');
+    else if (_connectionUri.scheme.isEmpty && _connectionUri.path.isEmpty) {
+      return;
     }
-    log.fine('created client channel to host $host');
+    else {
+      throw ArgumentError('must be http://, https:// or endpoints:// scheme');
+    }
 
     usersService = UserManagementClient(
-      _clientChannel!,
+      _createClientChannel('yajudge.UserManagement'),
+      interceptors: [_authGrpcInterceptor],
+    );
+
+    sessionsService = SessionManagementClient(
+      _createClientChannel('yajudge.SessionManagement'),
+      interceptors: [_authGrpcInterceptor],
+    );
+
+    progressService = ProgressCalculatorClient(
+      _createClientChannel('yajudge.ProgressCalculator'),
+      interceptors: [_authGrpcInterceptor],
+    );
+
+    contentService = CourseContentProviderClient(
+      _createClientChannel('yajudge.CourseContentProvider'),
       interceptors: [_authGrpcInterceptor],
     );
 
     coursesService = CourseManagementClient(
-      _clientChannel!,
+      _createClientChannel('yajudge.CourseManagement'),
+      interceptors: [_authGrpcInterceptor],
+    );
+
+    deadlinesService = DeadlinesManagementClient(
+      _createClientChannel('yajudge.DeadlinesManagement'),
       interceptors: [_authGrpcInterceptor],
     );
 
     submissionsService = SubmissionManagementClient(
-      _clientChannel!,
-      interceptors: [_authGrpcInterceptor],
-    );
-
-    enrollmentsService = EnrollmentsManagerClient(
-      _clientChannel!,
+      _createClientChannel('yajudge.SubmissionManagement'),
       interceptors: [_authGrpcInterceptor],
     );
 
     codeReviewService = CodeReviewManagementClient(
-      _clientChannel!,
+      _createClientChannel('yajudge.CodeReviewManagement'),
       interceptors: [_authGrpcInterceptor],
     );
 
@@ -98,12 +114,74 @@ class ConnectionController {
     log.fine('set initial sessionId = $sessionId');
   }
 
+  dynamic _createClientChannel(String service) {
+    try {
+      return _createClientChannelUnsecure(service);
+    }
+    catch (e) {
+      log.info('error creating client channel for service $service: $e');
+      return null;
+    }
+  }
+
+  dynamic _createClientChannelUnsecure(String service) {
+    final scheme = _connectionUri.scheme;
+    if (scheme != 'endpoints' && _clientChannels.isNotEmpty) {
+      // reuse existing single point client channel
+      final value = _clientChannels.values.first;
+      _clientChannels[service] = value;
+      log.fine('use existing client channel for service $service');
+      return value;
+    }
+    if (scheme == 'http' || scheme == 'https') {
+      // create single endpoint channel
+      final host = _connectionUri.host;
+      final secure = _connectionUri.scheme == 'https';
+      int port = _connectionUri.port;
+      if (port == 0) {
+        port = secure ? 443 : 80;
+      }
+      final value = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
+        host: host,
+        port: port,
+        transportSecure: secure,
+      );
+      _clientChannels[service] = value;
+      log.fine('created client channel $_connectionUri for service $service');
+      return value;
+    }
+    if (scheme == 'endpoints') {
+      // use separate client channels
+      final endpoint = rpcProperties.endpoints[service]!;
+      if (endpoint.isUnix) {
+        final address = endpoint.toUnixInternetAddress();
+        final value = ClientChannel(
+          address,
+          port: 0,
+          options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        );
+        _clientChannels[service] = value;
+        log.fine('created client channel ${endpoint.unixPath} for service $service');
+        return value;
+      }
+      else {
+        final value = GrpcOrGrpcWebClientChannel.toSingleEndpoint(
+            host: endpoint.host, port: endpoint.port, transportSecure: endpoint.useSsl
+        );
+        _clientChannels[service] = value;
+        log.fine('created client channel ${endpoint.host}:${endpoint.port} for service $service');
+        return value;
+      }
+    }
+    throw ArgumentError('unknown uri scheme');
+  }
+
   Uri get connectionUri => _connectionUri;
 
   static void initialize(Uri connectionUri) {
     if (instance==null || instance!._connectionUri != connectionUri) {
       instance = ConnectionController(connectionUri);
-      CoursesController.initialize();
+      CourseContentController.initialize();
     }
   }
 
@@ -112,8 +190,9 @@ class ConnectionController {
       return _session;
     }
     try {
-      _session = await usersService.startSession(Session(cookie: sessionCookie));
+      _session = await sessionsService.startSession(Session(cookie: sessionCookie));
       sessionCookie = _session.cookie;
+      sessionUserEncrypted = _session.userEncryptedData;
       return _session;
     }
     catch (e) {
@@ -123,6 +202,7 @@ class ConnectionController {
 
   void setSession(Session session) {
     _session = session;
+    sessionUserEncrypted = session.userEncryptedData;
     sessionCookie = session.cookie;
   }
 
@@ -134,13 +214,21 @@ class ConnectionController {
     else {
       log.fine('got session key from application settings: $settingsValue');
     }
-    return settingsValue!=null? settingsValue : '';
+    return settingsValue ?? '';
   }
 
   set sessionCookie(String newValue) {
     PlatformsUtils.getInstance().saveSettingsValue('session', newValue);
     _authGrpcInterceptor.sessionCookie = newValue;
     log.fine('saved session key to application settings: $newValue');
+  }
+
+  set sessionUserEncrypted(String b64Data) {
+    _authGrpcInterceptor.sessionUserEncrypted = b64Data;
+  }
+
+  String get sessionUserEncrypted {
+    return _authGrpcInterceptor.sessionUserEncrypted;
   }
 
 }

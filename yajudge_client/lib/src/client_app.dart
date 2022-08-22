@@ -12,7 +12,7 @@ import 'screens/screen_submission.dart';
 import 'screens/screen_course_problem.dart';
 import 'screens/screen_error.dart';
 import 'controllers/connection_controller.dart';
-import 'controllers/courses_controller.dart';
+import 'controllers/course_content_controller.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:path/path.dart' as path;
 
@@ -290,7 +290,7 @@ class AppState extends State<App> {
     }
     final courseTitle = courseEntry.course.name;
     String pathTail = pathParts.join('/');
-    final futureData = CoursesController.instance!.loadCourseData(courseEntry.course.dataId);
+    final futureData = CourseContentController.instance!.loadCourseData(courseEntry.course.dataId);
 
     return FutureBuilder(
       future: futureData,

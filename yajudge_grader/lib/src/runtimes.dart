@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:fixnum/fixnum.dart';
 import 'package:logging/logging.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:tuple/tuple.dart';
@@ -165,16 +164,16 @@ abstract class AbstractRuntime {
     final extraMemoryLimit = runtimeProperties.properties['extra_memory_limit'];
     final cpuTimeScale = runtimeProperties.properties['cpu_time_scale'];
     if (extraMemoryLimit!=null && gradingLimits.memoryMaxLimitMb!=0) {
-      int oldLimit = gradingLimits.memoryMaxLimitMb.toInt();
+      int oldLimit = gradingLimits.memoryMaxLimitMb;
       int extra = int.parse(extraMemoryLimit);
       int newLimit = oldLimit + extra;
-      gradingLimits.memoryMaxLimitMb = Int64(newLimit);
+      gradingLimits.memoryMaxLimitMb = newLimit;
     }
     if (cpuTimeScale!=null) {
-      int oldLimit = gradingLimits.cpuTimeLimitSec.toInt();
+      int oldLimit = gradingLimits.cpuTimeLimitSec;
       double scale = double.parse(cpuTimeScale);
       int newLimit = (oldLimit * scale).floor();
-      gradingLimits.cpuTimeLimitSec = Int64(newLimit);
+      gradingLimits.cpuTimeLimitSec = newLimit;
     }
     if (coprocessFileName.isNotEmpty && !coprocessFileName.startsWith('/')) {
       this.coprocessFileName = '/build/$coprocessFileName';
@@ -470,14 +469,14 @@ class ValgrindRuntime extends AbstractRuntime {
     final logOption = '--log-file=$logFileName';
     valgrindOptions.add(logOption);
     final valgrindAjustedLimits = gradingLimits.deepCopy();
-    int memoryLimit = gradingLimits.memoryMaxLimitMb > 0 ? gradingLimits.memoryMaxLimitMb.toInt() + 16 : 0;
-    int stackLimit = gradingLimits.stackSizeLimitMb > 0 ? gradingLimits.stackSizeLimitMb.toInt() + 2 : 0;
-    double cpuLimit = gradingLimits.cpuTimeLimitSec.toInt() * 2.0;
-    double timeLimit = gradingLimits.realTimeLimitSec.toInt() * 2.0;
-    valgrindAjustedLimits.memoryMaxLimitMb = Int64(memoryLimit);
-    valgrindAjustedLimits.stackSizeLimitMb = Int64(stackLimit);
-    valgrindAjustedLimits.cpuTimeLimitSec = Int64(cpuLimit.round());
-    valgrindAjustedLimits.realTimeLimitSec = Int64(timeLimit.round());
+    int memoryLimit = gradingLimits.memoryMaxLimitMb > 0 ? gradingLimits.memoryMaxLimitMb + 16 : 0;
+    int stackLimit = gradingLimits.stackSizeLimitMb > 0 ? gradingLimits.stackSizeLimitMb + 2 : 0;
+    double cpuLimit = gradingLimits.cpuTimeLimitSec * 2.0;
+    double timeLimit = gradingLimits.realTimeLimitSec * 2.0;
+    valgrindAjustedLimits.memoryMaxLimitMb = memoryLimit;
+    valgrindAjustedLimits.stackSizeLimitMb = stackLimit;
+    valgrindAjustedLimits.cpuTimeLimitSec = cpuLimit.round();
+    valgrindAjustedLimits.realTimeLimitSec = timeLimit.round();
     return runner.start(
       submission,
       [valgrindExecutable] + valgrindOptions + [artifact.fileNames.single] + arguments,
@@ -567,10 +566,10 @@ class JavaRuntime extends AbstractRuntime {
       entryPoint = ['-jar', fileName];
     }
     final jreLimits = gradingLimits.deepCopy();
-    jreLimits.stackSizeLimitMb = Int64(0);
-    jreLimits.memoryMaxLimitMb = Int64(0);
-    jreLimits.procCountLimit = Int64(0);
-    jreLimits.fdCountLimit = Int64(0);
+    jreLimits.stackSizeLimitMb = 0;
+    jreLimits.memoryMaxLimitMb = 0;
+    jreLimits.procCountLimit = 0;
+    jreLimits.fdCountLimit = 0;
     return runner.start(
       submission,
       [javaExecutable] + javaOptions + entryPoint + arguments,

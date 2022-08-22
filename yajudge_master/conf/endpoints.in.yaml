@@ -1,5 +1,0 @@
-yajudge.CourseManagement: 'unix://@SOCKETS_DIR/master-@CONFIG_NAME.sock'
-yajudge.SubmissionManagement: 'unix://@SOCKETS_DIR/master-@CONFIG_NAME.sock'
-yajudge.UserManagement: 'unix://@SOCKETS_DIR/master-@CONFIG_NAME.sock'
-yajudge.EnrollmentsManager: 'unix://@SOCKETS_DIR/master-@CONFIG_NAME.sock'
-yajudge.CodeReviewManagement: 'unix://@SOCKETS_DIR/master-@CONFIG_NAME.sock'

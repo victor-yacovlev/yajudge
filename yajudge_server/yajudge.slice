@@ -1,0 +1,8 @@
+[Unit]
+Description=Slice to Run Yajudge Services and Submissions
+
+[Slice]
+MemoryAccounting=yes
+MemoryMax=4Gb
+TasksAccounting=yes
+TasksMax=3000

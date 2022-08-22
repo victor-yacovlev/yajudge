@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart' as grpc;
 import 'package:tuple/tuple.dart';
-import '../controllers/courses_controller.dart';
+import '../controllers/course_content_controller.dart';
 import 'screen_submission.dart';
 import '../controllers/connection_controller.dart';
 import 'screen_base.dart';
@@ -63,7 +63,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _loadSchedule() {
-    final service = ConnectionController.instance!.coursesService;
+    final service = ConnectionController.instance!.deadlinesService;
     final request = LessonScheduleRequest(course: _course, user: screen.loggedUser);
     service.getLessonSchedules(request).then((response) {
       if (mounted) {
@@ -75,7 +75,7 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _loadProblemData() {
-    final coursesController = CoursesController.instance!;
+    final coursesController = CourseContentController.instance!;
     coursesController.loadCourseByPrefix(screen.loggedUser, screen.courseUrlPrefix)
     .then((Tuple2<Course,Role> courseEntry) {
       setState(() {
@@ -113,13 +113,13 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
   }
 
   void _checkStatus() {
-    final submissionsService = ConnectionController.instance!.submissionsService;
+    final service = ConnectionController.instance!.progressService;
     final request = ProblemStatusRequest(
       user: screen.loggedUser,
       course: _course,
       problemId: screen.problemId,
     );
-    submissionsService.checkProblemStatus(request)
+    service.checkProblemStatus(request)
     .then((ProblemStatus status) {
       setState(() {
         errorMessage = '';
@@ -142,13 +142,13 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       });
     }
 
-    final submissionsService = ConnectionController.instance!.submissionsService;
+    final service = ConnectionController.instance!.progressService;
     final request = ProblemStatusRequest(
       user: screen.loggedUser,
       course: _course,
       problemId: screen.problemId,
     );
-    _statusStream = submissionsService.subscribeToProblemStatusNotifications(request);
+    _statusStream = service.subscribeToProblemStatusNotifications(request);
     _statusStream!.listen(
       (ProblemStatus event) {
         int submissionsCount = event.submissions.length;
@@ -637,7 +637,10 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
       });
     }).onError((error, _) {
       setState(() {
-        errorMessage = error;
+        log.severe('while submitting solution: $error');
+        if (error is grpc.GrpcError) {
+          errorMessage = error;
+        }
       });
     });
   }

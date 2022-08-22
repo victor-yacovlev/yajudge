@@ -62,11 +62,19 @@ func ParseWebServerConfig(fileName string) (*WebServerConfig, error) {
 	if config.Sites == nil {
 		config.Sites = make(map[string]*SiteConfig)
 	}
-	if config.SitesConfDirectory != "" {
-		dirEntries, _ := os.ReadDir(config.SitesConfDirectory)
-		if dirEntries != nil {
-			for _, dirEntry := range dirEntries {
-				siteConfFileName := config.SitesConfDirectory + "/" + dirEntry.Name()
+	sitesRootDir := config.SitesConfDirectory
+	if sitesRootDir == "" {
+		// search subdirectories in the same dir where config file
+		sitesRootDir = path.Dir(fileName)
+	}
+	dirEntries, _ := os.ReadDir(sitesRootDir)
+	if dirEntries != nil {
+		for _, dirEntry := range dirEntries {
+			if !dirEntry.IsDir() {
+				continue
+			}
+			siteConfFileName := path.Join(sitesRootDir, dirEntry.Name(), "/web.yaml")
+			if _, err := os.Stat(siteConfFileName); err == nil {
 				siteConf, err := ParseSiteConfig(siteConfFileName)
 				if err != nil {
 					return nil, fmt.Errorf("cant parse site config %s: %v", siteConfFileName, err)
@@ -76,7 +84,7 @@ func ParseWebServerConfig(fileName string) (*WebServerConfig, error) {
 		}
 	}
 	if len(config.Sites) == 0 {
-		return nil, fmt.Errorf("no any sites defined by confiration")
+		return nil, fmt.Errorf("no any sites defined by configuration")
 	}
 	if config.Listen.BindAddress == "" || config.Listen.BindAddress == "any" {
 		config.Listen.BindAddress = "0.0.0.0"
@@ -119,10 +127,11 @@ func ParseSiteConfig(fileName string) (*SiteConfig, error) {
 	if config.StaticReloadInterval == 0 {
 		config.StaticReloadInterval = 600
 	}
-	endpointLocalFileName := config.EndpointsFileName
-	_ = endpointLocalFileName
-	confDir, _ := path.Split(fileName)
-	endpointFileName := path.Join(confDir, endpointLocalFileName)
+	endpointFileName := config.EndpointsFileName
+	if !path.IsAbs(endpointFileName) {
+		confRootDir := path.Dir(fileName)
+		endpointFileName = path.Join(confRootDir, endpointFileName)
+	}
 	endpointConfData, err := ioutil.ReadFile(endpointFileName)
 	if err != nil {
 		return nil, err
@@ -144,8 +153,4 @@ func ParseSiteConfig(fileName string) (*SiteConfig, error) {
 		})
 	}
 	return &config, nil
-}
-
-func ParseEndpointsConfig(fileName string) {
-
 }

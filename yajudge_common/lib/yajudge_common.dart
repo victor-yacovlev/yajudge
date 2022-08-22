@@ -1,8 +1,11 @@
 export 'src/generated/yajudge_common.pb.dart';
 export 'src/generated/yajudge_users.pbgrpc.dart';
+export 'src/generated/yajudge_sessions.pbgrpc.dart';
 export 'src/generated/yajudge_courses.pbgrpc.dart';
+export 'src/generated/yajudge_progress.pbgrpc.dart';
+export 'src/generated/yajudge_deadlines.pbgrpc.dart';
+export 'src/generated/yajudge_courses_content.pbgrpc.dart';
 export 'src/generated/yajudge_submissions.pbgrpc.dart';
-export 'src/generated/yajudge_enrollments.pbgrpc.dart';
 export 'src/generated/yajudge_code_reviews.pbgrpc.dart';
 export 'src/conf/database_conf.dart';
 export 'src/conf/grader_identity_conf.dart';
@@ -14,7 +17,6 @@ export 'src/conf/service_conf.dart';
 export 'src/conf/config_file.dart';
 export 'src/course_loader.dart';
 export 'src/conf/config_file.dart';
-export 'src/grpc_utils.dart';
 
 export 'src/models/build_system.dart';
 export 'src/models/code_review.dart';
