@@ -39,7 +39,7 @@ func main() {
 	cacheDir := path.Join(yajudgeRoot, "cache")
 	workDir := path.Join(yajudgeRoot, "work")
 	sockDir := path.Join(yajudgeRoot, "sock")
-	sliceDir := path.Join("sys", "fs", "cgroup", *yajudgeSliceName+".slice")
+	sliceDir := path.Join("/sys/fs/cgroup", *yajudgeSliceName+".slice")
 	mustEnsureDirectoryWritable(logDir, uid, gid)
 	mustEnsureDirectoryWritable(pidDir, uid, gid)
 	mustEnsureDirectoryWritable(cacheDir, uid, gid)
@@ -93,6 +93,14 @@ func resolveYajudgeRootDir() (string, error) {
 		cwd, _ := os.Getwd()
 		executableDir = path.Clean(path.Join(cwd, executableDir))
 	}
-	parentDir := path.Clean(path.Join(executableDir, "../.."))
+	dirBaseName := path.Base(executableDir)
+	var parentDir string
+	if dirBaseName == "bin" {
+		// packaged into bundle
+		parentDir = path.Clean(path.Join(executableDir, ".."))
+	} else {
+		// development
+		parentDir = path.Clean(path.Join(executableDir, "../.."))
+	}
 	return parentDir, nil
 }
