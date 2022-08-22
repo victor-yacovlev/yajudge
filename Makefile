@@ -38,7 +38,7 @@ tgz_bundle: server_files
 	cp yajudge_grpcwebserver/webserver.yaml $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/nginx@.in.conf $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/web@.in.yaml $(TGZ_DIR)/conf
-	cp yajudge_server/supervisor@.in.yaml $(TGZ_DIR)/conf
+	cp yajudge_server/supervisor@.yaml $(TGZ_DIR)/conf
 	cp yajudge_server/yajudge.slice $(TGZ_DIR)/systemd
 	cp yajudge_server/yajudge.in.service $(TGZ_DIR)/systemd
 	cp bundle_README.md $(TGZ_DIR)/README.md
