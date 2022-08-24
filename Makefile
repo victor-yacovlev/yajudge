@@ -13,6 +13,7 @@ server_files:
 	make -C yajudge_grader
 	make -C yajudge_grpcwebserver
 	make -C yajudge_client web-client
+	make -C yajudge_server
 	make -C tools
 
 clean:
@@ -21,6 +22,7 @@ clean:
 	make -C yajudge_grader clean
 	make -C yajudge_grpcwebserver clean
 	make -C yajudge_client clean
+	make -C yajudge_server clean
 	make -C tools clean
 
 tgz_bundle: server_files
@@ -31,6 +33,7 @@ tgz_bundle: server_files
 	cp yajudge_master_services/bin/yajudge-service-* $(TGZ_DIR)/bin
 	cp yajudge_grader/bin/yajudge-grader $(TGZ_DIR)/bin
 	cp yajudge_grpcwebserver/yajudge-grpcwebserver $(TGZ_DIR)/bin
+	cp yajudge_server/yajudge-server $(TGZ_DIR)/bin
 	cp -R yajudge_client/build/web $(TGZ_DIR)
 	cp tools/bin/* $(TGZ_DIR)/bin
 	cp yajudge_master_services/conf/*.yaml $(TGZ_DIR)/conf
