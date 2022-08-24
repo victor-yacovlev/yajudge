@@ -34,7 +34,7 @@ tgz_bundle: server_files
 	cp -R yajudge_client/build/web $(TGZ_DIR)
 	cp tools/bin/* $(TGZ_DIR)/bin
 	cp yajudge_master_services/conf/*.yaml $(TGZ_DIR)/conf
-	cp yajudge_grader/conf/grader.in.yaml $(TGZ_DIR)/conf
+	cp yajudge_grader/conf/grader@.in.yaml $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/webserver.yaml $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/nginx@.in.conf $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/web@.in.yaml $(TGZ_DIR)/conf
