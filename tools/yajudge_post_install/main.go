@@ -23,8 +23,7 @@ const (
 
 func main() {
 	force := flag.Bool("force", false, "try to run without root privileges")
-	userName := flag.String("U", "yajudge", "service user name")
-	groupName := flag.String("G", "yajudge", "service group name")
+	userName := flag.String("U", "yajudge", "service user and group name")
 	httpPort := flag.Int("W", 1080, "http web port number")
 	postgresPassword := flag.String("P", "yajudge", "PostgreSQL password for yajudge role")
 	flag.Parse()
@@ -32,19 +31,22 @@ func main() {
 		println("Must be root user to run this post-install script")
 		os.Exit(1)
 	}
-	CreateSystemUserAndGroup(*userName, *groupName)
+	yajudgeHome, err := resolveYajudgeRootDir()
+	if err != nil {
+		log.Fatalf("cant resolve yajudge home directory: %v", err)
+	}
+	if yajudgeHome == "/" {
+		log.Fatalf("wrong yajudge home dir detected: /")
+	}
+	CreateSystemUserAndGroup(*userName, yajudgeHome)
 	CreatePostgreSQLUser("yajudge", *postgresPassword)
 	yajudgeUser, err := user.Lookup(*userName)
 	if err != nil {
 		log.Fatalf("yajudge user not created: %v", err)
 	}
-	yajudgeGroup, err := user.LookupGroup(*groupName)
+	yajudgeGroup, err := user.LookupGroup(*userName) // group name matches username
 	if err != nil {
 		log.Fatalf("yajudge group not created: %v", err)
-	}
-	yajudgeHome, err := resolveYajudgeRootDir()
-	if err != nil {
-		log.Fatalf("cant resolve yajudge home directory: %v", err)
 	}
 	CreateInitialConfig(yajudgeUser, yajudgeGroup, yajudgeHome, *httpPort)
 	println("Created initial system configuration.")
@@ -66,26 +68,26 @@ func CreatePostgreSQLUser(userName, password string) {
 	if err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Fatalf("cant execute sql statements: %v", err)
+	}
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
 	if _, err := io.WriteString(stdin, sqlStatement); err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Fatalf("cant execute sql statements: %v", err)
-	}
 	stdin.Close()
+	stderrContent, err := io.ReadAll(stderr)
 	cmd.Wait()
-	stdoutContent, err := io.ReadAll(stdout)
 	if err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
-	stdoutLines := strings.Split(string(stdoutContent), "\n")
+	stdoutLines := strings.Split(string(stderrContent), "\n")
 	for _, line := range stdoutLines {
 		if strings.Contains(line, "ERROR") {
-			log.Print(line)
+			log.Printf("Error from PostgreSQL command: %s", line)
 		}
 	}
 }
@@ -154,18 +156,23 @@ func CreateInitialConfig(yajudgeUser *user.User, yajudgeGroup *user.Group, yajud
 		0, 0, 0o644,
 		map[string]string{
 			"YAJUDGE_HOME":  yajudgeHome,
-			"YAJUDGE_USER":  yajudgeUser.Name,
+			"YAJUDGE_USER":  yajudgeUser.Username,
+			"YAJUDGE_GROUP": yajudgeGroup.Name,
+		},
+	)
+	InstallConfigFile(
+		path.Join(systemdDir, "yajudge.in.service"),
+		path.Join(etcSystemdSystem, "yajudge.service"),
+		0, 0, 0o644,
+		map[string]string{
+			"YAJUDGE_HOME":  yajudgeHome,
+			"YAJUDGE_USER":  yajudgeUser.Username,
 			"YAJUDGE_GROUP": yajudgeGroup.Name,
 		},
 	)
 	CreatePlainText(
 		"yajudge",
 		path.Join(confDir, "database-password.txt"),
-		uid, gid, 0o660,
-	)
-	CreatePlainText(
-		GeneratePrivateToken(),
-		path.Join(confDir, "private-token.txt"),
 		uid, gid, 0o660,
 	)
 }
@@ -183,6 +190,12 @@ func CreatePlainText(content, target string, uid, gid int, perms uint32) {
 		log.Fatalf("cant write %s: %v", target, err)
 	}
 	targetFile.Close()
+	if err := os.Chown(target, uid, gid); err != nil {
+		log.Fatalf("cant chown created file to %v:%v : %v", uid, gid, err)
+	}
+	if err := os.Chmod(target, os.FileMode(perms)); err != nil {
+		log.Fatalf("cant chmod created file to 0%o : %v", perms, err)
+	}
 }
 
 func InstallConfigFile(source, target string, uid, gid int, perms uint32, substitutions map[string]string) {
@@ -211,6 +224,12 @@ func InstallConfigFile(source, target string, uid, gid int, perms uint32, substi
 		log.Fatalf("cant write %s: %v", target, err)
 	}
 	targetFile.Close()
+	if err := os.Chown(target, uid, gid); err != nil {
+		log.Fatalf("cant chown created file to %v:%v : %v", uid, gid, err)
+	}
+	if err := os.Chmod(target, os.FileMode(perms)); err != nil {
+		log.Fatalf("cant chmod created file to 0%o : %v", perms, err)
+	}
 }
 
 func resolveYajudgeRootDir() (string, error) {
@@ -226,6 +245,13 @@ func resolveYajudgeRootDir() (string, error) {
 		cwd, _ := os.Getwd()
 		executableDir = path.Clean(path.Join(cwd, executableDir))
 	}
-	parentDir := path.Clean(path.Join(executableDir, "../.."))
+	executableDirName := path.Base(executableDir)
+	var suffix string
+	if executableDirName == "bin" || executableDirName == "sbin" {
+		suffix = ".."
+	} else {
+		suffix = "../.."
+	}
+	parentDir := path.Clean(path.Join(executableDir, suffix))
 	return parentDir, nil
 }
