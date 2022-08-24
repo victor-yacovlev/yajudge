@@ -1,3 +1,3 @@
 listen:
-  http_port: 1080
+  http_port: @HTTP_PORT
   bind_address: localhost
