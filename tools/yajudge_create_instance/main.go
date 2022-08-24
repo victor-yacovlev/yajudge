@@ -32,7 +32,7 @@ var masterServices = []string{
 	"progress",
 }
 
-// go:embed yajudge-db-schema.sql
+//go:embed yajudge-db-schema.sql
 var YajudgeDBSchemaSQL string
 
 func main() {
@@ -45,26 +45,26 @@ func main() {
 	noCreateNginx := flag.Bool("no-create-nginx-conf", false, "skip nginx configuration creation")
 	disableGrader := flag.Bool("disable-grader", false, "disable grader for this configuration")
 	graderOnly := flag.Bool("grader-only", false, "configure only grader but not master services")
-	adminLogin := flag.String("admin-login", "", "admin user login name")
-	adminPassword := flag.String("admin-initial-password", "", "admin user initial password")
+	adminLogin := flag.String("L", "", "admin user login name")
+	adminPassword := flag.String("P", "", "admin user initial password")
 	flag.Parse()
 	confName := flag.Arg(0)
 	if confName == "" {
-		println("required instance name to create new yajudge configuration")
+		println("Required instance name to create new yajudge configuration")
 		os.Exit(1)
 	}
 	yajudgeUser, err := user.Lookup(*userName)
 	if err != nil {
-		println("no %s system user created, run 'yajudge-post-install' as root first", userName)
+		println("No %s system user created, run 'yajudge-post-install' as root first", userName)
 		os.Exit(1)
 	}
 	if *graderOnly && *disableGrader {
-		println("conflicting flags '--disable-grader' and '--grader-only'")
+		println("Conflicting flags '--disable-grader' and '--grader-only'")
 		os.Exit(1)
 	}
 	if !*graderOnly && (*adminLogin == "" || *adminPassword == "") {
 		println("Must specify admin login and initial temporary (not secure) password")
-		println("using '--admin-login NAME' and '--admin-initial-password VAL' flags")
+		println("using '-L ADMIN_LOGIN' and '-P ADMIN_INITIAL_PASSWORD' flags")
 		os.Exit(1)
 	}
 	skipRootPermissions := *force || *noCreateDb && *noCreateNginx || *graderOnly
@@ -115,6 +115,10 @@ func main() {
 	println("Created configuration in " + yajudgeHome + "/conf/" + confName)
 	println("Now you can start it using 'yajudge-control' command.")
 	println("Important! Administrator password stored in insecure way, so change it first after login.")
+	if !*disableGrader {
+		println("To complete grader setup you must install local Linux distribution in " + yajudgeHome + "/system.")
+		println("See README.md for detailed information.")
+	}
 }
 
 type ListenConf struct {
@@ -157,18 +161,18 @@ func CreatePostgreSQLDatabase(dbName string, yajudgeUser *user.User) {
 	if err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Fatalf("cant execute sql statements: %v", err)
+	}
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
 	if _, err := io.WriteString(stdin, sqlStatement); err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
 	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		log.Fatalf("cant execute sql statements: %v", err)
-	}
-	stderrContent, err := io.ReadAll(stderr)
 	stdin.Close()
+	stderrContent, err := io.ReadAll(stderr)
 	cmd.Wait()
 	if err != nil {
 		log.Fatalf("cant execute sql statements: %v", err)
@@ -182,12 +186,13 @@ func CreatePostgreSQLDatabase(dbName string, yajudgeUser *user.User) {
 }
 
 func InitializeDatabase(userName, password, dbName string) {
-	connString := fmt.Sprintf("postgres://%s:%s@localhost/%s?sslmode=verify-null", userName, password, dbName)
+	connString := fmt.Sprintf("postgres://%s:%s@localhost/%s?sslmode=disable", userName, password, dbName)
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		log.Fatalf("cant estabish dababase connection to %s: %v", dbName, err)
 	}
-	_, err = db.Exec(YajudgeDBSchemaSQL)
+	sqlStatements := YajudgeDBSchemaSQL
+	_, err = db.Exec(sqlStatements)
 	if err != nil {
 		log.Printf("Error executing SQL statements while initializing database: %v", err)
 	}
@@ -195,7 +200,7 @@ func InitializeDatabase(userName, password, dbName string) {
 }
 
 func CreateAdminUser(dbUser, dbPassword, dbName string, adminLogin, adminPassword string) {
-	connString := fmt.Sprintf("postgres://%s:%s@localhost/%s?sslmode=verify-null", dbUser, dbPassword, dbName)
+	connString := fmt.Sprintf("postgres://%s:%s@localhost/%s?sslmode=disable", dbUser, dbPassword, dbName)
 	db, err := sql.Open("postgres", connString)
 	if err != nil {
 		log.Fatalf("cant estabish dababase connection to %s: %v", dbName, err)
@@ -314,15 +319,23 @@ func CreateConfigFiles(confName string, yajudgeUser *user.User, yajudgeGroup *us
 		)
 	}
 	if enableNginx {
-		nginxConfDir := "/etc/nginx/sites-available"
-		if err := os.MkdirAll(nginxConfDir, 0o755); err != nil {
-			log.Fatalf("cant create directory %s: %v", nginxConfDir, err)
+		nginxSitesAvailable := "/etc/nginx/sites-available"
+		nginxSitesEnabled := "/etc/nginx/sites-enabled"
+		if err := os.MkdirAll(nginxSitesAvailable, 0o755); err != nil {
+			log.Fatalf("cant create directory %s: %v", nginxSitesAvailable, err)
+		}
+		if err := os.MkdirAll(nginxSitesEnabled, 0o755); err != nil {
+			log.Fatalf("cant create directory %s: %v", nginxSitesEnabled, err)
 		}
 		InstallConfigFile(
 			path.Join(sourceConfDir, "nginx@.in.conf"),
-			path.Join(nginxConfDir, fmt.Sprintf("yajudge-%s.conf", confName)),
+			path.Join(nginxSitesAvailable, fmt.Sprintf("yajudge-%s.conf", confName)),
 			0, 0, 0o644,
 			substitutions,
+		)
+		os.Symlink(
+			fmt.Sprintf("../sites-available/yajudge-%s.conf", confName),
+			path.Join(nginxSitesEnabled, fmt.Sprintf("yajudge-%s.conf", confName)),
 		)
 	}
 	CreatePlainText(

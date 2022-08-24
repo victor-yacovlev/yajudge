@@ -1,5 +1,6 @@
 [Unit]
 Description=Yet Another Judge Services Root Supervisor
+Requires=postgresql.service
 
 # Variables to be replaced in this template file:
 #    (at)YAJUDGE_HOME  - full path to Yajudge installation [like /opt/yajudge-linux-x86_64]

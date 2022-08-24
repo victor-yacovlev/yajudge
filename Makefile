@@ -24,10 +24,10 @@ clean:
 	make -C tools clean
 
 tgz_bundle: server_files
-	mkdir -p $(TGZ_DIR)/bin
-	mkdir -p $(TGZ_DIR)/web
-	mkdir -p $(TGZ_DIR)/conf
-	mkdir -p $(TGZ_DIR)/systemd
+	mkdir -m 0775 -p $(TGZ_DIR)/bin
+	mkdir -m 0775 -p $(TGZ_DIR)/web
+	mkdir -m 0775 -p $(TGZ_DIR)/conf
+	mkdir -m 0775 -p $(TGZ_DIR)/systemd 
 	cp yajudge_master_services/bin/yajudge-service-* $(TGZ_DIR)/bin
 	cp yajudge_grader/bin/yajudge-grader $(TGZ_DIR)/bin
 	cp yajudge_grpcwebserver/yajudge-grpcwebserver $(TGZ_DIR)/bin
@@ -38,7 +38,7 @@ tgz_bundle: server_files
 	cp yajudge_grpcwebserver/webserver.in.yaml $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/nginx@.in.conf $(TGZ_DIR)/conf
 	cp yajudge_grpcwebserver/web@.in.yaml $(TGZ_DIR)/conf
-	cp yajudge_server/supervisor@.yaml $(TGZ_DIR)/conf
+	cp yajudge_server/supervisor@.in.yaml $(TGZ_DIR)/conf
 	cp yajudge_server/yajudge.slice $(TGZ_DIR)/systemd
 	cp yajudge_server/yajudge.in.service $(TGZ_DIR)/systemd
 	cp bundle_README.md $(TGZ_DIR)/README.md

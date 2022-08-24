@@ -1,8 +1,6 @@
-create table courses
+create table if not exists courses
 (
-    id                                           serial
-        constraint courses_pk
-            primary key,
+    id                                           serial primary key,
     name                                         varchar(50)           not null,
     course_data                                  varchar(100)          not null,
     url_prefix                                   varchar(50)           not null,
@@ -14,23 +12,16 @@ create table courses
 );
 
 
-create table submission_results
+create table if not exists submission_results
 (
-    id                          integer not null
-        constraint submission_results_pk
-            primary key,
-    submission_protobuf_gzipped_base64 varchar   not null
+    id                                  serial  primary key,
+    submission_protobuf_gzipped_base64  varchar   not null
 );
 
 
-create index if not exists submission_results_target_index
-    on submission_results (submissions_id);
-
 create table if not exists users
 (
-    id           serial
-        constraint users_pk
-            primary key,
+    id           serial primary key,
     password     varchar(128)          not null,
     first_name   varchar(50),
     last_name    varchar(50),
@@ -45,15 +36,9 @@ create table if not exists users
 
 create table if not exists personal_enrollments
 (
-    id            integer     default nextval('enrollments_id_seq'::regclass) not null
-        constraint enrollments_pk
-            primary key,
-    courses_id    integer                                                     not null
-        constraint enrollments_courses_id_fk
-            references courses,
-    users_id      integer                                                     not null
-        constraint enrollments_users_id_fk
-            references users,
+    id                                           serial primary key,
+    courses_id    integer                                                     not null,
+    users_id      integer                                                     not null,
     role          integer                                                     not null,
     group_pattern varchar(30) default ''::character varying                   not null
 );
@@ -61,29 +46,18 @@ create table if not exists personal_enrollments
 
 create table if not exists sessions
 (
-    cookie   varchar(64) not null
-        constraint sessions_pk
-            primary key,
+    cookie   varchar(64) not null primary key,
     start    timestamp   not null,
     users_id integer     not null
-        constraint sessions_users_id_fk
-            references users
-            on delete cascade
 );
 
 
-create table submissions
+create table if not exists submissions
 (
-    id                serial
-        constraint submissions_pk
-            primary key,
+    id                serial primary key,
     datetime          timestamp         not null,
-    users_id          integer           not null
-        constraint submissions_users_id_fk
-            references users,
-    courses_id        integer           not null
-        constraint submissions_courses_id_fk
-            references courses,
+    users_id          integer           not null,
+    courses_id        integer           not null,
     problem_id        varchar(100)      not null,
     status            integer           not null,
     grading_status    integer default 0 not null,
@@ -95,37 +69,24 @@ create table submissions
 
 create table if not exists submission_files
 (
-    id             integer default nextval('submission_files_id_seq'::regclass) not null
-        constraint submission_files_pk
-            primary key,
+    id                                           serial primary key,
     file_name      varchar(30)                                                  not null,
     content        varchar                                                      not null,
     submissions_id integer                                                      not null
-        constraint submission_files_submissions_id_fk
-            references submissions
 );
 
 
-create unique index if not exists users_login_uindex
-    on users (login);
-
 create table if not exists group_enrollments
 (
-    id            serial
-        constraint group_enrollments_pk
-            primary key,
-    courses_id    integer     not null
-        constraint group_enrollments_courses_id_fk
-            references courses,
+    id            serial primary key,
+    courses_id    integer     not null,
     group_pattern varchar(30) not null
 );
 
 
 create table if not exists code_reviews
 (
-    id             serial
-        constraint code_reviews_pk
-            primary key,
+    id             serial primary key,
     submissions_id integer not null,
     author_id      integer not null,
     global_comment varchar,
@@ -135,9 +96,7 @@ create table if not exists code_reviews
 
 create table if not exists review_line_comments
 (
-    id              serial
-        constraint review_line_comments_pk
-            primary key,
+    id              serial      primary key,
     code_reviews_id integer     not null,
     line_number     integer     not null,
     message         varchar     not null,
@@ -145,11 +104,9 @@ create table if not exists review_line_comments
     file_name       varchar(80) not null
 );
 
-create table lesson_schedules
+create table if not exists lesson_schedules
 (
-    id                   serial
-        constraint lesson_schedules_pk
-            primary key,
+    id                   serial            primary key,
     courses_id           integer           not null,
     datetime             timestamp         not null,
     repeat_count         integer default 1 not null,
@@ -157,11 +114,9 @@ create table lesson_schedules
     repeat_interval_days integer default 0 not null
 );
 
-create table submission_deadlines
+create table if not exists submission_deadlines
 (
-    submissions_id integer not null
-        constraint submission_deadlines_pk
-            primary key,
+    submissions_id integer not null primary key,
     hard           timestamp,
     soft           timestamp
 );
