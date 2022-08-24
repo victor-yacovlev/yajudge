@@ -2,6 +2,7 @@ package main
 
 import (
 	log "github.com/sirupsen/logrus"
+	"io"
 	"os"
 	"sync"
 	"syscall"
@@ -25,6 +26,8 @@ type Service struct {
 	shutdownComplete chan interface{}
 	restartAttempts  int
 	process          *os.Process
+	stdout           *os.File
+	stderr           *os.File
 }
 
 func NewService(instanceName, serviceName, executable, logFile, pidFile string,
@@ -116,9 +119,21 @@ func (service *Service) monitorProcess() {
 			log.Infof("service %s@%s shut down", service.ServiceName, service.InstanceName)
 			service.shutdownComplete <- 1
 		} else if service.canRespawn() {
+			service.mutex.Lock()
+			stdoutData, _ := io.ReadAll(service.stdout)
+			stderrData, _ := io.ReadAll(service.stderr)
+			service.stdout.Close()
+			service.stderr.Close()
+			service.stdout = nil
+			service.stderr = nil
 			log.Warningf("service %s@%s dead with status %v, trying to restart",
 				service.ServiceName, service.InstanceName, processState.ExitCode())
-			service.mutex.Lock()
+			if stdoutData != nil && len(stdoutData) > 0 {
+				log.Warningf("stdout before death: %s", string(stdoutData))
+			}
+			if stderrData != nil && len(stderrData) > 0 {
+				log.Warningf("stderr before death: %s", string(stderrData))
+			}
 			service.Status = ServiceStatus_RESPAWNING
 			service.CrashesSinceStart++
 			service.process = nil
@@ -158,12 +173,25 @@ func (service *Service) canRespawn() bool {
 
 func (service *Service) startProcess() {
 	executable, arguments := service.prepareArguments()
-	process, err := os.StartProcess(executable, arguments, &os.ProcAttr{})
+	fds := make([]*os.File, 3)
+	service.mutex.Lock()
+	service.stdout, fds[1], _ = os.Pipe()
+	service.stderr, fds[2], _ = os.Pipe()
+	service.mutex.Unlock()
+	process, err := os.StartProcess(executable, arguments, &os.ProcAttr{
+		Files: fds,
+	})
+	fds[1].Close()
+	fds[2].Close()
 	if err != nil {
 		service.mutex.Lock()
 		service.Status = ServiceStatus_FAILED
 		service.Error = err.Error()
 		service.process = nil
+		service.stderr.Close()
+		service.stderr.Close()
+		service.stdout = nil
+		service.stderr = nil
 		log.Warningf("failed to start %s@%s: %v",
 			service.ServiceName, service.InstanceName, err)
 		service.mutex.Unlock()

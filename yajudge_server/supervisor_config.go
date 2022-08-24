@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 )
 
 type RestartPolicyConf struct {
@@ -21,12 +22,13 @@ type StartIntervalsConf struct {
 }
 
 type SupervisorConfig struct {
-	FileName          string
-	InstanceName      string
-	AutostartServices []string `yaml:"autostart_services" json:"autostart_services"`
-	AutostartGrader   bool     `yaml:"autostart_grader" json:"autostart_grader"`
-	GraderBinPath     string
-	ServicesBinPaths  map[string]string
+	FileName                string
+	InstanceName            string
+	AutostartServices       []string
+	AutostartGrader         bool `yaml:"autostart_grader" json:"autostart_grader"`
+	GraderBinPath           string
+	ServicesBinPaths        map[string]string
+	AutostartServicesString string `yaml:"autostart_services" json:"autostart_services"`
 }
 
 type ServerConfig struct {
@@ -103,6 +105,9 @@ func LoadSupervisorConfig(fileName string) (*SupervisorConfig, error) {
 	supervisorConfig := &SupervisorConfig{FileName: fileName}
 	if err := yaml.Unmarshal(yamlContent, supervisorConfig); err != nil {
 		return nil, fmt.Errorf("cant parse %s: %v", fileName, err)
+	}
+	if supervisorConfig.AutostartServicesString != "" {
+		supervisorConfig.AutostartServices = strings.Split(supervisorConfig.AutostartServicesString, " ")
 	}
 	return supervisorConfig, nil
 }
