@@ -2,9 +2,9 @@
 Description=Yet Another Judge Services Root Supervisor
 
 # Variables to be replaced in this template file:
-#    @YAJUDGE_HOME  - full path to Yajudge installation [like /opt/yajudge-linux-x86_64]
-#    @YAJUDGE_USER  - user name to run these services [yajudge]
-#    @YAJUDGE_GROUP - group name to run these services [yajudge]
+#    (at)YAJUDGE_HOME  - full path to Yajudge installation [like /opt/yajudge-linux-x86_64]
+#    (at)YAJUDGE_USER  - user name to run these services [yajudge]
+#    (at)YAJUDGE_GROUP - group name to run these services [yajudge]
 
 [Service]
 Type=exec
