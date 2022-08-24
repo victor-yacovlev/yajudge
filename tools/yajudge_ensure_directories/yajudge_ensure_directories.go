@@ -61,6 +61,9 @@ func chownRecursive(dirPath string, uid, gid int) error {
 	if err := os.Chown(dirPath, uid, gid); err != nil {
 		return fmt.Errorf("while processing %s: %v", dirPath, err)
 	}
+	if err := os.Chmod(dirPath, os.FileMode(0o770)); err != nil {
+		return fmt.Errorf("while processing %s: %v", dirPath, err)
+	}
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return fmt.Errorf("while processing %s: %v", dirPath, err)
@@ -73,6 +76,9 @@ func chownRecursive(dirPath string, uid, gid int) error {
 			}
 		} else {
 			if err := os.Chown(fullPath, uid, gid); err != nil {
+				return fmt.Errorf("while processing %s: %v", fullPath, err)
+			}
+			if err := os.Chmod(fullPath, os.FileMode(0x660)); err != nil {
 				return fmt.Errorf("while processing %s: %v", fullPath, err)
 			}
 		}
