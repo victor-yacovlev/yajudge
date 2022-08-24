@@ -1,0 +1,2 @@
+autostart_services: @MASTER_SERVICES
+autostart_grader: @ENABLE_GRADER

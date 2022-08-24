@@ -139,6 +139,9 @@ func CreateInitialConfig(yajudgeUser *user.User, yajudgeGroup *user.Group, yajud
 	if err := os.Chown(confDir, uid, gid); err != nil {
 		log.Fatalf("cant chown %s to %v:%v: %v", confDir, uid, gid, err)
 	}
+	if err := os.Chmod(confDir, os.FileMode(0o775)); err != nil {
+		log.Fatalf("cant chmod %s to 0755: %v", confDir, err)
+	}
 	InstallConfigFile(
 		path.Join(confDir, "webserver.in.yaml"),
 		path.Join(confDir, "webserver.yaml"),
