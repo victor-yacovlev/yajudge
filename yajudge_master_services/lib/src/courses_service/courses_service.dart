@@ -26,6 +26,7 @@ class CourseManagementService extends CourseManagementServiceBase {
   Future<CoursesList> getCourses(ServiceCall call, CoursesFilter request) async {
     User? currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
+      log.warning('current user from session is null while getting courses list, client metadata is ${call.clientMetadata}');
       throw GrpcError.unauthenticated('requires user authentication to get courses list');
     }
     currentUser = await userManagement.getProfileById(currentUser,
