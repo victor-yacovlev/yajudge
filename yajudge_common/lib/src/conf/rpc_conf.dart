@@ -110,10 +110,17 @@ class RpcProperties {
     RpcProperties result = RpcProperties(privateToken);
     YamlMap endpoints;
     if (endpointsValue is String) {
+      String targetFileName;
+      String targetFileTemplate;
       final parentConfigFile = io.File(parentConfigFileName);
       final parentConfigDirectory = parentConfigFile.parent;
-      final targetFileTemplate = '${parentConfigDirectory.path}/$endpointsValue';
-      final targetFileName = expandPathEnvVariables(targetFileTemplate, instanceName);
+      if (io.File(endpointsValue).isAbsolute) {
+        targetFileTemplate = endpointsValue;
+      }
+      else {
+        targetFileTemplate = '${parentConfigDirectory.path}/$endpointsValue';
+      }
+      targetFileName = expandPathEnvVariables(targetFileTemplate, instanceName);
       endpoints = parseYamlConfig(targetFileName);
     }
     else {
