@@ -137,7 +137,7 @@ abstract class ServiceLauncherBase {
         io.exit(1);
       }
     }
-
+    Logger.root.info('using rpc configuration $rpcProperties');
     _privateServiceClientInterceptor = _PrivateServiceClientInterceptor(
         rpcProperties.privateToken, Logger.root,
     );

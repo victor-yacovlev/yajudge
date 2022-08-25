@@ -253,7 +253,7 @@ func findUserAndGroup(userName, groupName string) (*user.User, *user.Group, bool
 func GeneratePrivateToken() string {
 	rand.Seed(time.Now().Unix())
 	randData := ""
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 20; i++ {
 		randUint := rand.Uint64()
 		randData += strconv.FormatUint(randUint, 16)
 	}

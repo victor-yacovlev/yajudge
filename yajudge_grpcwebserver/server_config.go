@@ -132,6 +132,10 @@ func ParseSiteConfig(fileName string) (*SiteConfig, error) {
 		confRootDir := path.Dir(fileName)
 		endpointFileName = path.Join(confRootDir, endpointFileName)
 	}
+	if !path.IsAbs(config.WebAppStaticRoot) {
+		confRootDir := path.Dir(fileName)
+		config.WebAppStaticRoot = path.Clean(path.Join(confRootDir, config.WebAppStaticRoot))
+	}
 	endpointConfData, err := ioutil.ReadFile(endpointFileName)
 	if err != nil {
 		return nil, err

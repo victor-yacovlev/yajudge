@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:convert';
 
 import 'package:yaml/yaml.dart';
 import 'config_file.dart';
@@ -95,6 +96,15 @@ class RpcProperties {
   final Map<String,Endpoint> endpoints = {};
 
   RpcProperties(this.privateToken);
+
+  @override
+  String toString() {
+    final objectToShow = <String,dynamic> {
+      'privateTokenLength': privateToken.length,
+      'endpoints': endpoints.map((key, value) => MapEntry(key, value.toString())),
+    };
+    return jsonEncode(objectToShow);
+  }
 
   factory RpcProperties.fromYamlConfig(YamlMap conf, {
     String parentConfigFileName = '', String instanceName = '',

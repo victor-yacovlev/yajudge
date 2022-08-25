@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:protobuf/protobuf.dart';
+import 'package:hex/hex.dart';
 
 import '../../yajudge_common.dart';
 
@@ -17,10 +18,11 @@ extension UserExtension on User {
 
   static User? fromEncryptedBase64(String b64Data, String secretKey) {
     try {
+      final normalizedSecretKey =  HEX.encode(sha256.convert(utf8.encode(secretKey)).bytes);
       final compressed = base64Decode(b64Data);
       final encrypted = Uint8List.fromList(io.gzip.decode(compressed.toList()));
-      final encrypter = _initializeEncrypter(secretKey);
-      final iv = IV.fromUtf8(secretKey);
+      final encrypter = _initializeEncrypter(normalizedSecretKey);
+      final iv = IV.fromUtf8(normalizedSecretKey.substring(0, 16));
       final userProto = encrypter.decryptBytes(Encrypted(encrypted), iv: iv);
       final result = User.fromBuffer(userProto);
       return result;
@@ -31,10 +33,11 @@ extension UserExtension on User {
   }
 
   String toEncryptedBase64(String secretKey) {
+    final normalizedSecretKey =  HEX.encode(sha256.convert(utf8.encode(secretKey)).bytes);
     final userWithoutPassword = deepCopy()..clearPassword();
     final userProto = userWithoutPassword.writeToBuffer();
-    final encrypter = _initializeEncrypter(secretKey);
-    final iv = IV.fromUtf8(secretKey);
+    final encrypter = _initializeEncrypter(normalizedSecretKey);
+    final iv = IV.fromUtf8(normalizedSecretKey.substring(0, 16));
     final encrypted = encrypter.encryptBytes(userProto.toList(), iv: iv).bytes.toList();
     final compressed = io.gzip.encode(encrypted);
     final b64Data = base64Encode(compressed);
