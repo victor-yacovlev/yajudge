@@ -99,6 +99,15 @@ func (service *SupervisorService) Start(ctx context.Context, request *StartReque
 	if !instanceFound {
 		return nil, status.Errorf(codes.NotFound, "instance %s not found", request.InstanceName)
 	}
+
+	// instance configuration might be changed so reload config file before start
+	configFileName := instance.Config.FileName
+	newConfig, err := LoadSupervisorConfig(configFileName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "configuration failed in file %s: %v", configFileName, err)
+	}
+	instance.Config = newConfig
+
 	instance.Start(request.ServiceNames)
 	return &StatusResponse{
 		InstanceName:    request.InstanceName,
