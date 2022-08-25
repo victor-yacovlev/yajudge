@@ -36,6 +36,9 @@ extension UserExtension on User {
     final normalizedSecretKey =  HEX.encode(sha256.convert(utf8.encode(secretKey)).bytes);
     final userWithoutPassword = deepCopy()..clearPassword();
     final userProto = userWithoutPassword.writeToBuffer();
+    if (userProto.length == 0) {
+      return '';
+    }
     final encrypter = _initializeEncrypter(normalizedSecretKey);
     final iv = IV.fromUtf8(normalizedSecretKey.substring(0, 16));
     final encrypted = encrypter.encryptBytes(userProto.toList(), iv: iv).bytes.toList();

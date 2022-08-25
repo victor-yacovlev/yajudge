@@ -335,6 +335,12 @@ abstract class ServiceLauncherBase {
         }
       }
       address = io.InternetAddress(endpoint.unixPath, type: io.InternetAddressType.unix);
+      Timer(Duration(seconds: 1), () {
+        // set full permissions on unix socket for debug purposes
+        // if service is running from supervisor in release mode, then
+        // permissions will be fixed by supervisor
+        io.Process.runSync('chmod', ['0666', unixSocketFile.absolute.path]);
+      });
       await grpcServer.serve(address: address);
     }
   }

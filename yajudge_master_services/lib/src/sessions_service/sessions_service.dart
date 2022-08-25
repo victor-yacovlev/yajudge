@@ -113,16 +113,17 @@ class SessionManagementService extends SessionManagementServiceBase {
     DateTime timestamp = DateTime.now();
     String sessionKey = '${user.id} ${user.email} ${timestamp.millisecondsSinceEpoch}';
     sessionKey = sha256.convert(utf8.encode(sessionKey)).toString();
-    call.session = sessionKey;
+    call.setSessionAndUser(sessionKey, User(), secretKey);
     final userProfile = await usersManager.getProfileById(user,
       options: CallOptions(metadata: {'session': sessionKey}),
     );
+    final userProfileData = userProfile.toEncryptedBase64(secretKey);
     Session session = Session(
-      cookie: sessionKey,
+      cookie: '$sessionKey|$userProfileData',
       start: Int64(timestamp.millisecondsSinceEpoch ~/ 1000),
       user: userProfile,
       initialRoute: initialRoute.isEmpty? "/" : initialRoute,
-      userEncryptedData: user.toEncryptedBase64(secretKey),
+      // userEncryptedData: user.toEncryptedBase64(secretKey),
     );
     // try to find existing session first
     List<dynamic> existingSessionsRows = await dbConnection.query(
