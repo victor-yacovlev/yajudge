@@ -38,6 +38,7 @@ func NewSupervisorService(config *ServerConfig) *SupervisorService {
 		config.ServiceExecutables["webserver"],
 		path.Join(config.LogFileDir, "webserver.log"),
 		path.Join(config.PidFileDir, "webserver.pid"),
+		"",
 		initialWebserverStatus,
 		config.RestartPolicy,
 		config.ShutdownTimeout,
@@ -146,6 +147,7 @@ func (service *SupervisorService) Main() {
 	if err != nil {
 		log.Fatalf("cant bind gRPC service: %v", err)
 	}
+	os.Chmod(service.Config.GRPCSocketFileName, 0o660)
 	go service.GRPCServer.Serve(lis)
 	time.AfterFunc(100*time.Millisecond, service.ProcessAutostart)
 	<-exitChan
@@ -170,16 +172,18 @@ func (service *SupervisorService) ProcessAutostart() {
 
 func (service *SupervisorService) createPIDFile() {
 	pidDir := path.Dir(service.Config.PidFileName)
-	if err := os.MkdirAll(pidDir, 0640); err != nil {
+	if err := os.MkdirAll(pidDir, 0o775); err != nil {
 		log.Errorf("cant create directory %s for PIDs: %v", pidDir, err)
 		return
 	}
+	os.Chmod(pidDir, 0o775)
 	myPid := strconv.Itoa(os.Getpid()) + "\n"
 	pidFile, err := os.Create(service.Config.PidFileName)
 	if err != nil {
 		log.Errorf("cant create PID file %s: %v", service.Config.PidFileName, err)
 		return
 	}
+	os.Chmod(service.Config.PidFileName, 0o664)
 	pidFile.WriteString(myPid)
 	pidFile.Close()
 }

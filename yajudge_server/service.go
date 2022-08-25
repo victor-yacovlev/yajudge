@@ -20,6 +20,7 @@ type Service struct {
 	ShutdownTimeout   int
 	LogFile           string
 	PidFile           string
+	SockFile          string
 	CrashesSinceStart int
 
 	mutex            sync.RWMutex
@@ -30,7 +31,7 @@ type Service struct {
 	stderr           *os.File
 }
 
-func NewService(instanceName, serviceName, executable, logFile, pidFile string,
+func NewService(instanceName, serviceName, executable, logFile, pidFile, sockFile string,
 	initialStatus ServiceStatus,
 	restartPolicy RestartPolicyConf,
 	shutdownTimeout int,
@@ -41,6 +42,7 @@ func NewService(instanceName, serviceName, executable, logFile, pidFile string,
 		Executable:       executable,
 		LogFile:          logFile,
 		PidFile:          pidFile,
+		SockFile:         sockFile,
 		RestartPolicy:    restartPolicy,
 		Status:           initialStatus,
 		ShutdownTimeout:  shutdownTimeout,
@@ -104,7 +106,26 @@ func (service *Service) Stop() {
 	service.stopProcess()
 }
 
+func (service *Service) checkFilesPermissions() {
+	for {
+		time.Sleep(time.Duration(250) * time.Millisecond)
+		service.mutex.RLock()
+		status := service.Status
+		pidFile := service.PidFile
+		logFile := service.LogFile
+		sockFile := service.SockFile
+		service.mutex.RUnlock()
+		if status == ServiceStatus_SHUTDOWN || status == ServiceStatus_DISABLED || status == ServiceStatus_STOPPED {
+			break
+		}
+		os.Chmod(pidFile, 0o664)
+		os.Chmod(logFile, 0o660)
+		os.Chmod(sockFile, 0o660)
+	}
+}
+
 func (service *Service) monitorProcess() {
+	go service.checkFilesPermissions()
 	for {
 		service.mutex.RLock()
 		process := service.process
@@ -117,6 +138,7 @@ func (service *Service) monitorProcess() {
 		mustStopMonitor := true
 		if serviceStatus == ServiceStatus_SHUTDOWN {
 			log.Infof("service %s@%s shut down", service.ServiceName, service.InstanceName)
+			service.cleanFiles()
 			service.shutdownComplete <- 1
 		} else if service.canRespawn() {
 			service.mutex.Lock()
@@ -138,6 +160,7 @@ func (service *Service) monitorProcess() {
 			service.CrashesSinceStart++
 			service.process = nil
 			service.mutex.Unlock()
+			service.cleanFiles()
 			time.Sleep(time.Duration(service.RestartPolicy.RestartIntervalMs) * time.Millisecond)
 			service.mutex.Lock()
 			service.restartAttempts++
@@ -151,6 +174,7 @@ func (service *Service) monitorProcess() {
 			service.Status = ServiceStatus_DEAD
 			service.process = nil
 			service.mutex.Unlock()
+			service.cleanFiles()
 		}
 		if mustStopMonitor {
 			break
@@ -203,6 +227,17 @@ func (service *Service) startProcess() {
 		service.StartTime = time.Now().Unix()
 		service.mutex.Unlock()
 	}
+}
+
+func (service *Service) cleanFiles() {
+	service.mutex.RLock()
+	if service.PidFile != "" {
+		os.Remove(service.PidFile)
+	}
+	if service.SockFile != "" {
+		os.Remove(service.SockFile)
+	}
+	service.mutex.RUnlock()
 }
 
 func (service *Service) stopProcess() {

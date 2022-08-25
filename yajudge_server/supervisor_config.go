@@ -44,6 +44,7 @@ type ServerConfig struct {
 	ServiceExecutables     map[string]string
 	LogFileDir             string
 	PidFileDir             string
+	SockFileDir            string
 }
 
 func (config *ServerConfig) ResolvePaths(yajudgeRootDir string) error {
@@ -129,6 +130,12 @@ func LoadServerConfig(fileName string) (*ServerConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	if serverConfig.GRPCSocketFileName == "" {
+		yajudgeHome := path.Dir(configDir)
+		sockDir := path.Join(yajudgeHome, "sock")
+		serverConfig.GRPCSocketFileName = path.Join(sockDir, "supervisor.sock")
+	}
+	serverConfig.SockFileDir = path.Dir(serverConfig.GRPCSocketFileName)
 	return serverConfig, nil
 }
 

@@ -32,6 +32,7 @@ func NewInstance(globalConfig *ServerConfig, config *SupervisorConfig) *Instance
 			globalConfig.ServiceExecutables["grader"],
 			path.Join(globalConfig.LogFileDir, config.InstanceName, "grader.log"),
 			path.Join(globalConfig.PidFileDir, config.InstanceName, "grader.pid"),
+			"",
 			graderInitialStatus,
 			globalConfig.RestartPolicy,
 			globalConfig.ShutdownTimeout,
@@ -59,6 +60,7 @@ func (instance *Instance) CreateServices() {
 			instance.GlobalConfig.ServiceExecutables[serviceName],
 			path.Join(instance.GlobalConfig.LogFileDir, instance.Config.InstanceName, serviceName+".log"),
 			path.Join(instance.GlobalConfig.PidFileDir, instance.Config.InstanceName, serviceName+".pid"),
+			path.Join(instance.GlobalConfig.SockFileDir, instance.Config.InstanceName, serviceName+".sock"),
 			initialStatus,
 			instance.GlobalConfig.RestartPolicy,
 			instance.GlobalConfig.ShutdownTimeout,
@@ -112,11 +114,23 @@ func (instance *Instance) Stop(names []string) {
 	log.Infof("stopping instance %s services %v", instance.Config.InstanceName, servicesToStop)
 	for _, serviceName := range servicesToStop {
 		service := instance.Services[serviceName]
-		service.Stop()
+		if service != nil {
+			service.Stop()
+		}
 	}
 }
 
 func (instance *Instance) Start(names []string) {
+	instanceLogDir := path.Join(instance.GlobalConfig.LogFileDir, instance.Config.InstanceName)
+	instancePidDir := path.Join(instance.GlobalConfig.PidFileName, instance.Config.InstanceName)
+	sockDir := path.Dir(instance.GlobalConfig.GRPCSocketFileName)
+	instanceSockDir := path.Join(sockDir, instance.Config.InstanceName)
+	os.MkdirAll(instanceSockDir, 0o775)
+	os.MkdirAll(instancePidDir, 0o775)
+	os.MkdirAll(instanceLogDir, 0o775)
+	os.Chmod(instanceSockDir, 0o775)
+	os.Chmod(instanceLogDir, 0o775)
+	os.Chmod(instancePidDir, 0o775)
 	servicesToStart := make([]string, 0, len(instance.Services)+1)
 	if len(names) > 0 {
 		// start specific services

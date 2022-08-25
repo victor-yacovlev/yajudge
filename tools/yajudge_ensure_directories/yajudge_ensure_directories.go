@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path"
 	"strconv"
+	"syscall"
 )
 
 func main() {
@@ -20,6 +21,7 @@ func main() {
 		log.Fatalf("Requires root privileges to ensure correct file permissions")
 		os.Exit(1)
 	}
+	syscall.Umask(0)
 	yajudgeRoot, err := resolveYajudgeRootDir()
 	if err != nil {
 		log.Fatalf("cant resolve yajudge installation root directory: %v", err)
@@ -40,24 +42,28 @@ func main() {
 	workDir := path.Join(yajudgeRoot, "work")
 	sockDir := path.Join(yajudgeRoot, "sock")
 	sliceDir := path.Join("/sys/fs/cgroup", *yajudgeSliceName+".slice")
-	mustEnsureDirectoryWritable(logDir, uid, gid)
-	mustEnsureDirectoryWritable(pidDir, uid, gid)
-	mustEnsureDirectoryWritable(cacheDir, uid, gid)
-	mustEnsureDirectoryWritable(workDir, uid, gid)
-	mustEnsureDirectoryWritable(sockDir, uid, gid)
-	mustEnsureDirectoryWritable(sliceDir, uid, gid)
+	mustEnsureDirectoryWritable(logDir, uid, gid, 2)
+	mustEnsureDirectoryWritable(pidDir, uid, gid, 2)
+	mustEnsureDirectoryWritable(cacheDir, uid, gid, 2)
+	mustEnsureDirectoryWritable(workDir, uid, gid, 2)
+	mustEnsureDirectoryWritable(sockDir, uid, gid, 2)
+	mustEnsureDirectoryWritable(sliceDir, uid, gid, 5)
 }
 
-func mustEnsureDirectoryWritable(dirPath string, uid, gid int) {
+func mustEnsureDirectoryWritable(dirPath string, uid, gid int, maxdeep int) {
 	if err := os.MkdirAll(dirPath, 0o770); err != nil {
 		log.Fatalf("cant create directory %s: %v", dirPath, err)
 	}
-	if err := chownRecursive(dirPath, uid, gid); err != nil {
+	if err := chownRecursive(dirPath, uid, gid, maxdeep); err != nil {
 		log.Fatalf("cant chown: %v", err)
 	}
 }
 
-func chownRecursive(dirPath string, uid, gid int) error {
+func chownRecursive(dirPath string, uid, gid int, maxdeep int) error {
+	maxdeep--
+	if maxdeep <= 0 {
+		return nil
+	}
 	if err := os.Chown(dirPath, uid, gid); err != nil {
 		return fmt.Errorf("while processing %s: %v", dirPath, err)
 	}
@@ -71,14 +77,14 @@ func chownRecursive(dirPath string, uid, gid int) error {
 	for _, entry := range entries {
 		fullPath := path.Join(dirPath, entry.Name())
 		if entry.IsDir() {
-			if err := chownRecursive(fullPath, uid, gid); err != nil {
+			if err := chownRecursive(fullPath, uid, gid, maxdeep-1); err != nil {
 				return err
 			}
 		} else {
 			if err := os.Chown(fullPath, uid, gid); err != nil {
 				return fmt.Errorf("while processing %s: %v", fullPath, err)
 			}
-			if err := os.Chmod(fullPath, os.FileMode(0x660)); err != nil {
+			if err := os.Chmod(fullPath, os.FileMode(0o660)); err != nil {
 				return fmt.Errorf("while processing %s: %v", fullPath, err)
 			}
 		}

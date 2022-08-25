@@ -123,13 +123,15 @@ func initializeLogger(logFileName string) {
 		parts := strings.Split(logFileName, "/")
 		dirParts := parts[0 : len(parts)-1]
 		dirPath := strings.Join(dirParts, "/")
-		if err := os.MkdirAll(dirPath, 0o770); err != nil {
+		if err := os.MkdirAll(dirPath, 0o775); err != nil {
 			log.Fatalf("cant create directory for log file %s: %v", logFileName, err)
 		}
+		os.Chmod(dirPath, 0o775)
 		file, err := os.OpenFile(logFileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o660)
 		if err != nil {
 			log.Fatalf("cant create or open log file %s: %v", logFileName, err)
 		}
+		os.Chmod(logFileName, 0o660)
 		log.SetOutput(file)
 	}
 }
@@ -139,15 +141,17 @@ func createPIDFile(pidFileName string) {
 		parts := strings.Split(pidFileName, "/")
 		dirParts := parts[0 : len(parts)-1]
 		dirPath := strings.Join(dirParts, "/")
-		if err := os.MkdirAll(dirPath, 0o770); err != nil {
+		if err := os.MkdirAll(dirPath, 0o775); err != nil {
 			log.Warningf("cant create directory for PID file %s: %v", pidFileName, err)
 			return
 		}
+		os.Chmod(dirPath, 0o775)
 		file, err := os.OpenFile(pidFileName, os.O_WRONLY|os.O_CREATE, 0o660)
 		if err != nil {
 			log.Warningf("cant create or open log file %s: %v", pidFileName, err)
 			return
 		}
+		os.Chmod(pidFileName, 0o664)
 		file.WriteString(fmt.Sprintf("%d\n", os.Getpid()))
 		file.Close()
 	}

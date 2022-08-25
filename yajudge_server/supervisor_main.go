@@ -51,6 +51,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("cant create or open log file %s: %v", serverConfig.LogFileName, err)
 		}
+		os.Chmod(serverConfig.LogFileName, 0o660)
 		log.SetOutput(logFile)
 	}
 	service := NewSupervisorService(serverConfig)

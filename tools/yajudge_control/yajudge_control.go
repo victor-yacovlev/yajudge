@@ -115,19 +115,27 @@ func loadServerConfig(fileName string) (*ServerConfig, error) {
 }
 
 func resolveYajudgeRootDir() (string, error) {
-	serverExecutable, err := os.Executable()
+	scriptExecutable, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("cant resolve yajudge directory: %v", err)
 	}
-	if stat, _ := os.Lstat(serverExecutable); stat.Mode()&os.ModeSymlink != 0 {
-		serverExecutable, _ = os.Readlink(serverExecutable)
+	if stat, _ := os.Lstat(scriptExecutable); stat.Mode()&os.ModeSymlink != 0 {
+		scriptExecutable, _ = os.Readlink(scriptExecutable)
 	}
-	executableDir := path.Dir(serverExecutable)
+	executableDir := path.Dir(scriptExecutable)
 	if !path.IsAbs(executableDir) {
 		cwd, _ := os.Getwd()
 		executableDir = path.Clean(path.Join(cwd, executableDir))
 	}
-	parentDir := path.Clean(path.Join(executableDir, "../.."))
+	dirBaseName := path.Base(executableDir)
+	var parentDir string
+	if dirBaseName == "bin" {
+		// packaged into bundle
+		parentDir = path.Clean(path.Join(executableDir, ".."))
+	} else {
+		// development
+		parentDir = path.Clean(path.Join(executableDir, "../.."))
+	}
 	return parentDir, nil
 }
 

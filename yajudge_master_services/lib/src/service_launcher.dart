@@ -324,6 +324,16 @@ abstract class ServiceLauncherBase {
       if (unixSocketFile.existsSync()) {
         io.Process.runSync('rm', ['-f', unixSocketFile.absolute.path]);
       }
+      final socketDir = unixSocketFile.parent;
+      if (socketDir.existsSync()) {
+        try {
+          socketDir.createSync(recursive: true);
+        }
+        catch (e) {
+          Logger.root.shout('cant create directory for sockets: $e');
+          io.exit(1);
+        }
+      }
       address = io.InternetAddress(endpoint.unixPath, type: io.InternetAddressType.unix);
       await grpcServer.serve(address: address);
     }
