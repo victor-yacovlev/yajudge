@@ -224,11 +224,14 @@ class ConnectionController {
   }
 
   set sessionUserEncrypted(String b64Data) {
+    PlatformsUtils.getInstance().saveSettingsValue('session_user', b64Data);
     _authGrpcInterceptor.sessionUserEncrypted = b64Data;
   }
 
   String get sessionUserEncrypted {
-    return _authGrpcInterceptor.sessionUserEncrypted;
+    String? settingsValue = PlatformsUtils.getInstance().loadSettingsValue('session');
+    return settingsValue ?? '';
+    // return _authGrpcInterceptor.sessionUserEncrypted;
   }
 
 }

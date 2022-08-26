@@ -71,7 +71,8 @@ class LoginScreenState extends State<LoginScreen> {
     ConnectionController.initialize(_serverUri);
     logger.info("Will use $_serverUri for API access");
     ConnectionController.instance!.sessionsService.authorize(_candidate).then((Session session) {
-      logger.info('logger user ${session.user}');
+      logger.info('logged user ${session.user}');
+      logger.info('logged user will be passed as session user ${session.userEncryptedData}');
       ConnectionController.instance!.setSession(session);
       setState(() {
         String initialRoute = session.initialRoute;
