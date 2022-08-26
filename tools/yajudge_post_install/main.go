@@ -54,7 +54,7 @@ func main() {
 }
 
 func CreateSystemUserAndGroup(userName, homeDir string) {
-	cmd := exec.Command("useradd", "-rmU", "/usr/sbin/nologin", "-d", homeDir, userName)
+	cmd := exec.Command("useradd", "-rmU", "-s", "/usr/sbin/nologin", "-d", homeDir, userName)
 	cmd.Start()
 	cmd.Wait()
 }
