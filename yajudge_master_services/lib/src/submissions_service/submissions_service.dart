@@ -981,7 +981,14 @@ values (@id,@data)
   }
 
   Future<bool> pushSubmissionToGrader(Submission submission) async {
-    final problemData = await getProblemDataForSubmission(null, submission);
+    ProblemData problemData;
+    try {
+      problemData = await getProblemDataForSubmission(null, submission);
+    }
+    catch (e) {
+      log.severe('cant get problem data for ${submission.problemId} while pushing to grader');
+      return false;
+    }
     final platformRequired = problemData.gradingOptions.platformRequired;
     final graderConnection = _gradersManager.findService(ServiceRole.SERVICE_GRADING, platformRequired);
     bool result = false;

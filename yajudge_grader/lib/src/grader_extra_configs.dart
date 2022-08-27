@@ -17,7 +17,7 @@ class JobsConfig {
     bool archSpecificOnly = false;
     int workers = 0;
     if (conf['arch_specific_only'] is bool) {
-      archSpecificOnly = true;
+      archSpecificOnly = conf['arch_specific_only'];
     }
     if (conf['workers'] is int) {
       workers = conf['workers'];
