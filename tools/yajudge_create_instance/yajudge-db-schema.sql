@@ -141,10 +141,10 @@ end
 $$;
 
 create trigger update_lesson_schedule after update on lesson_schedules
-    for each row execute function mark_course_deadlines_dirty();
+    for each row execute procedure mark_course_deadlines_dirty();
 
 create trigger insert_lesson_schedule after insert on lesson_schedules
-    for each row execute function mark_course_deadlines_dirty();
+    for each row execute procedure mark_course_deadlines_dirty();
 
 create trigger delete_lesson_schedule after delete on lesson_schedules
-    for each row execute function mark_course_deadlines_dirty();
+    for each row execute procedure mark_course_deadlines_dirty();
