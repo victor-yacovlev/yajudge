@@ -23,7 +23,7 @@ type ServerHandler struct {
 	Sites map[string]*Site
 }
 
-func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+func (server *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(request.Host, ":")
 	hostName := parts[0]
 	if hostName == "localhost" {
@@ -35,7 +35,7 @@ func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 			hostName = parts[0]
 		}
 	}
-	host, found := s.Sites[hostName]
+	host, found := server.Sites[hostName]
 	if !found {
 		msg := fmt.Sprintf("no host %s configured", hostName)
 		log.Warningf("%s", msg)
@@ -48,6 +48,14 @@ func (s *ServerHandler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 func NewServerHandler() *ServerHandler {
 	return &ServerHandler{
 		Sites: make(map[string]*Site, 0),
+	}
+}
+
+func (server *ServerHandler) InvalidateEndpointConnections() {
+	for _, host := range server.Sites {
+		if host != nil {
+			host.InvalidateEndpointConnections()
+		}
 	}
 }
 
@@ -82,6 +90,14 @@ func NewHostInstance(name string, config *SiteConfig, httpsPort int) (*Site, err
 	result.CreateGrpcChannels()
 
 	return result, nil
+}
+
+func (host *Site) InvalidateEndpointConnections() {
+	for _, endpoint := range host.endpoints {
+		if endpoint != nil {
+			endpoint.InvalidateEndpointConnection()
+		}
+	}
 }
 
 func (host *Site) FindEndpoint(req *http.Request) (result *GrpcEndpoint) {

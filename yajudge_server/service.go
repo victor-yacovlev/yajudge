@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+type NotifyFunc func(serviceName string)
+
 type Service struct {
 	InstanceName      string
 	ServiceName       string
@@ -29,12 +31,14 @@ type Service struct {
 	process          *os.Process
 	stdout           *os.File
 	stderr           *os.File
+	exitListener     NotifyFunc
 }
 
 func NewService(instanceName, serviceName, executable, logFile, pidFile, sockFile string,
 	initialStatus ServiceStatus,
 	restartPolicy RestartPolicyConf,
 	shutdownTimeout int,
+	processExitListener NotifyFunc,
 ) *Service {
 	result := &Service{
 		InstanceName:     instanceName,
@@ -47,6 +51,7 @@ func NewService(instanceName, serviceName, executable, logFile, pidFile, sockFil
 		Status:           initialStatus,
 		ShutdownTimeout:  shutdownTimeout,
 		shutdownComplete: make(chan interface{}),
+		exitListener:     processExitListener,
 	}
 	return result
 }
@@ -134,7 +139,9 @@ func (service *Service) monitorProcess() {
 
 		service.mutex.RLock()
 		serviceStatus := service.Status
+		exitListener := service.exitListener
 		service.mutex.RUnlock()
+		exitListener(service.ServiceName)
 		mustStopMonitor := true
 		if serviceStatus == ServiceStatus_SHUTDOWN {
 			log.Infof("service %s@%s shut down", service.ServiceName, service.InstanceName)
@@ -285,4 +292,14 @@ func (service *Service) prepareArguments() (string, []string) {
 		arguments = append(arguments, "-N", service.InstanceName)
 	}
 	return service.Executable, arguments
+}
+
+func (service *Service) SendSIGHUP() {
+	service.mutex.RLock()
+	process := service.process
+	status := service.Status
+	service.mutex.RUnlock()
+	if process != nil && status == ServiceStatus_RUNNING {
+		process.Signal(syscall.SIGHUP)
+	}
 }

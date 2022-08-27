@@ -32,7 +32,11 @@ func NewSupervisorService(config *ServerConfig) *SupervisorService {
 	} else {
 		initialWebserverStatus = ServiceStatus_DISABLED
 	}
-	webServer := NewService(
+	result := &SupervisorService{
+		Config:    config,
+		Instances: make(map[string]*Instance),
+	}
+	result.WebServer = NewService(
 		"",
 		"webserver",
 		config.ServiceExecutables["webserver"],
@@ -42,14 +46,10 @@ func NewSupervisorService(config *ServerConfig) *SupervisorService {
 		initialWebserverStatus,
 		config.RestartPolicy,
 		config.ShutdownTimeout,
+		result.NotifyWebserverOnServiceExit,
 	)
-	result := &SupervisorService{
-		Config:    config,
-		Instances: make(map[string]*Instance),
-		WebServer: webServer,
-	}
 	for _, instanceConfig := range config.Instances {
-		result.Instances[instanceConfig.InstanceName] = NewInstance(config, instanceConfig)
+		result.Instances[instanceConfig.InstanceName] = NewInstance(config, instanceConfig, result.NotifyWebserverOnServiceExit)
 	}
 	return result
 }
@@ -134,6 +134,20 @@ func (service *SupervisorService) Stop(ctx context.Context, request *StopRequest
 		InstanceName:    request.InstanceName,
 		ServiceStatuses: instance.GetServiceStatuses(),
 	}, nil
+}
+
+func (service *SupervisorService) NotifyWebserverOnServiceExit(serviceName string) {
+	// required to inform webserver to invalidate opened endpoint connections
+	// TODO make notify all services when they will handle SIGHUP signal properly
+
+	if serviceName == "grader" {
+		// grader do not expose any socket, so it is not required to reconnect
+		return
+	}
+	if service.WebServer != nil {
+		log.Infof("sending SIGHUP to webserver due to one of services ")
+		service.WebServer.SendSIGHUP()
+	}
 }
 
 func (service *SupervisorService) Main() {

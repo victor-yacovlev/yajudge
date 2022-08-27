@@ -14,6 +14,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -64,15 +65,26 @@ func main() {
 	if httpsListener != nil {
 		go http1Server.Serve(httpsListener)
 	}
-	signalsChan := make(chan interface{})
-	handleSignal := func(signum os.Signal) {
+	shutdownSignalsChan := make(chan interface{})
+	handleReloadSignal := func() {
 		signalChan := make(chan os.Signal, 1)
-		signal.Notify(signalChan, signum)
-		<-signalsChan
-		close(signalsChan)
+		signal.Notify(signalChan, syscall.SIGHUP)
+		for {
+			<-signalChan
+			log.Infof("got SIGHUP signal")
+			handler.InvalidateEndpointConnections()
+		}
 	}
-	go handleSignal(os.Interrupt)
-	<-signalsChan
+	go handleReloadSignal()
+	handleShutdownSignals := func() {
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, syscall.SIGINT)
+		signal.Notify(signalChan, syscall.SIGTERM)
+		<-shutdownSignalsChan
+		close(shutdownSignalsChan)
+	}
+	go handleShutdownSignals()
+	<-shutdownSignalsChan
 	log.Infof("shutdown webserver")
 	removePIDFile(config.Service.PidFile)
 }

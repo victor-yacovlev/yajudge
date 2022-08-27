@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"strconv"
+	"sync"
 )
 
 type GrpcEndpoint struct {
@@ -17,6 +18,8 @@ type GrpcEndpoint struct {
 	grpcClient    *grpc.ClientConn
 	config        *EndpointConfig
 	target        string
+
+	grpcMutex sync.RWMutex
 }
 
 func (endpoint *GrpcEndpoint) CreateEndpointConnection() (err error) {
@@ -44,12 +47,23 @@ func (endpoint *GrpcEndpoint) CreateEndpointConnection() (err error) {
 	} else {
 		return fmt.Errorf("unknown endpoint url scheme %v", endpointURL)
 	}
+	endpoint.grpcMutex.Lock()
 	if useSSL {
 		endpoint.grpcClient, err = grpc.Dial(endpoint.target, grpc.WithCodec(proxy.Codec()))
 	} else {
 		endpoint.grpcClient, err = grpc.Dial(endpoint.target, grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	}
+	endpoint.grpcMutex.Unlock()
 	return err
+}
+
+func (endpoint *GrpcEndpoint) InvalidateEndpointConnection() {
+	go func() {
+		log.Infof("invalidating endpoint connection to %s", endpoint.config.ServiceName)
+		endpoint.grpcMutex.Lock()
+		endpoint.grpcClient = nil
+		endpoint.grpcMutex.Unlock()
+	}()
 }
 
 func (endpoint *GrpcEndpoint) GrpcRedirectHandler(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
@@ -59,15 +73,21 @@ func (endpoint *GrpcEndpoint) GrpcRedirectHandler(ctx context.Context, method st
 	proxyMd.Delete("Connection")
 	proxyCtx := metadata.NewOutgoingContext(ctx, proxyMd)
 	var err error
-	if endpoint.grpcClient == nil {
+	endpoint.grpcMutex.RLock()
+	grpcClient := endpoint.grpcClient
+	endpoint.grpcMutex.RUnlock()
+	if grpcClient == nil {
 		err = endpoint.CreateEndpointConnection()
+		endpoint.grpcMutex.RLock()
+		grpcClient = endpoint.grpcClient
+		endpoint.grpcMutex.RUnlock()
 		if err == nil {
 			log.Printf("connected to gRPC server %v", endpoint.config.ServiceURL)
 		} else {
 			log.Warningf("cant connect to gRPC server %v: %v", endpoint.config.ServiceURL, err)
 		}
 	}
-	return proxyCtx, endpoint.grpcClient, err
+	return proxyCtx, grpcClient, err
 }
 
 func NewGrpcEndpoint(config *EndpointConfig) *GrpcEndpoint {

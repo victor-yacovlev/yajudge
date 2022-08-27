@@ -14,9 +14,11 @@ type Instance struct {
 	Config       *SupervisorConfig
 	Grader       *Service
 	Services     map[string]*Service
+
+	exitHandler NotifyFunc
 }
 
-func NewInstance(globalConfig *ServerConfig, config *SupervisorConfig) *Instance {
+func NewInstance(globalConfig *ServerConfig, config *SupervisorConfig, exitHandler NotifyFunc) *Instance {
 	var graderInitialStatus ServiceStatus
 	if config.AutostartGrader {
 		graderInitialStatus = ServiceStatus_STOPPED
@@ -36,7 +38,9 @@ func NewInstance(globalConfig *ServerConfig, config *SupervisorConfig) *Instance
 			graderInitialStatus,
 			globalConfig.RestartPolicy,
 			globalConfig.ShutdownTimeout,
+			exitHandler,
 		),
+		exitHandler: exitHandler,
 	}
 	result.CreateServices()
 	return result
@@ -64,6 +68,7 @@ func (instance *Instance) CreateServices() {
 			initialStatus,
 			instance.GlobalConfig.RestartPolicy,
 			instance.GlobalConfig.ShutdownTimeout,
+			instance.exitHandler,
 		)
 		instance.Services[serviceName] = service
 	}
