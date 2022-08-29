@@ -103,9 +103,12 @@ class SessionManagementService extends SessionManagementServiceBase {
         initialRoute = '/$courseUrlPrefix';
       }
     }
+    final cookie = request.cookie.split('|').first;
+    final userEncryptedData = user.toEncryptedBase64(secretKey);
     resultSession.user = user;
     resultSession.initialRoute = initialRoute;
     resultSession.userEncryptedData = user.toEncryptedBase64(secretKey);
+    resultSession.cookie = '$cookie|$userEncryptedData';
     return resultSession;
   }
 
@@ -142,8 +145,10 @@ class SessionManagementService extends SessionManagementServiceBase {
 
   @override
   Future<User> getUserIdAndRole(ServiceCall call, Session request) async {
+    final sessionParts = request.cookie.split('|');
+    final cookie = sessionParts[0];
     final userIdQuery = 'select users_id from sessions where cookie=@c';
-    final userRows = await dbConnection.query(userIdQuery, substitutionValues: {'c': request.cookie});
+    final userRows = await dbConnection.query(userIdQuery, substitutionValues: {'c': cookie});
     if (userRows.isEmpty) {
       throw GrpcError.unauthenticated('session not found');
     }
