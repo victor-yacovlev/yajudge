@@ -175,3 +175,11 @@ func (instance *Instance) Start(names []string) {
 		}
 	}
 }
+
+func (instance *Instance) NotifyOnServiceExit(serviceName string) {
+	for _, service := range instance.Services {
+		if service != nil && service.InstanceName != serviceName {
+			service.SendSIGHUP()
+		}
+	}
+}

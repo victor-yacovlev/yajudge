@@ -11,6 +11,7 @@ import 'package:postgres/postgres.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import '../course_data_consumer.dart';
+import '../services_connector.dart';
 
 const checkInterval = 5;
 
@@ -18,20 +19,17 @@ class DeadlinesManagementService extends DeadlinesManagementServiceBase with Cou
 
   final PostgreSQLConnection connection;
   final log = Logger('DeadlinesManager');
-  final UserManagementClient userManager;
-  final CourseManagementClient courseManager;
   final String secretKey;
+  final ServicesConnector services;
 
   final Map<String,Int64> _courseDataLastModified = {};
 
   DeadlinesManagementService({
     required this.connection,
-    required this.userManager,
-    required this.courseManager,
-    required CourseContentProviderClient contentProvider,
+    required this.services,
     required this.secretKey,
   }) : super() {
-    super.contentProvider = contentProvider;
+    super.courseDataConsumerServices = services;
   }
 
   void start() {
@@ -73,7 +71,12 @@ class DeadlinesManagementService extends DeadlinesManagementServiceBase with Cou
       cachedTimestamp: lastModified,
     );
     try {
-      final response = await contentProvider.getCoursePublicContent(contentRequest);
+      if (services.content == null) {
+        final message = 'service content offline';
+        log.severe(message);
+        throw GrpcError.unavailable(message);
+      }
+      final response = await services.content!.getCoursePublicContent(contentRequest);
       bool courseModified = response.status == ContentStatus.HAS_DATA;
       _courseDataLastModified[course.dataId] = response.lastModified;
       return courseModified;
@@ -108,7 +111,12 @@ class DeadlinesManagementService extends DeadlinesManagementServiceBase with Cou
     final scheduleSets = <User,LessonScheduleSet>{};
     for (final submission in submissions) {
       if (!users.containsKey(submission.user.id)) {
-        users[submission.user.id] = await userManager.getProfileById(
+        if (services.users == null) {
+          final message = 'service users offline while updateCourseSubmission';
+          log.severe(message);
+          throw GrpcError.unavailable(message);
+        }
+        users[submission.user.id] = await services.users!.getProfileById(
           submission.user
         );
       }
@@ -176,7 +184,12 @@ class DeadlinesManagementService extends DeadlinesManagementServiceBase with Cou
   @override
   Future<Submission> insertNewSubmission(ServiceCall call, Submission request) async {
     final user = request.user;
-    final course = await courseManager.getCourse(request.course);
+    if (services.courses == null) {
+      final message = 'service courses offline while InsertNewSubmission';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    final course = await services.courses!.getCourse(request.course);
     final courseData = await getCourseData(call, course);
     final lesson = courseData.findEnclosingLessonForProblem(request.problemId);
     final deadlines = lesson.deadlines;
@@ -259,7 +272,12 @@ class DeadlinesManagementService extends DeadlinesManagementServiceBase with Cou
 
   @override
   Future<LessonScheduleSet> getLessonSchedules(ServiceCall? call, LessonScheduleRequest request) async {
-    final userEnrollments = await courseManager.getUserEnrollments(request.user);
+    if (services.courses == null) {
+      final message = 'service courses offline while GetLessonSchedules';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    final userEnrollments = await services.courses!.getUserEnrollments(request.user);
     final courseData = await getCourseData(call, request.course);
     final allLessons = courseData.allLessons();
     String groupPattern = '';

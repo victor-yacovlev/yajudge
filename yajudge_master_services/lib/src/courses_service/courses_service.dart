@@ -5,20 +5,19 @@ import 'package:postgres/postgres.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 
 import '../service_call_extension.dart';
+import '../services_connector.dart';
 
 
 class CourseManagementService extends CourseManagementServiceBase {
   final PostgreSQLConnection connection;
   final Logger log = Logger('CoursesManager');
-  final CourseContentProviderClient contentProvider;
-  final UserManagementClient userManagement;
   final String secretKey;
+  final ServicesConnector services;
 
   CourseManagementService({
     required this.connection,
-    required this.contentProvider,
-    required this.userManagement,
     required this.secretKey,
+    required this.services,
   }) : super();
 
 
@@ -29,7 +28,12 @@ class CourseManagementService extends CourseManagementServiceBase {
       log.warning('current user from session is null while getting courses list, client metadata is ${call.clientMetadata}');
       throw GrpcError.unauthenticated('requires user authentication to get courses list');
     }
-    currentUser = await userManagement.getProfileById(currentUser,
+    if (services.users == null) {
+      final message = 'users service offline while GetCourses';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    currentUser = await services.users!.getProfileById(currentUser,
       options: CallOptions(metadata: call.clientMetadata),
     );
     final userEnrollments = await getUserEnrollments(call, currentUser);
@@ -287,7 +291,12 @@ class CourseManagementService extends CourseManagementServiceBase {
     Future<List<User>> updateUserProfiles(List<User> source) async {
       List<User> result = [];
       for (final entry in source) {
-        final withProfile = await userManagement.getProfileById(entry,
+        if (services.users == null) {
+          final message = 'users service offline while GetGroupEnrollments';
+          log.severe(message);
+          throw GrpcError.unavailable(message);
+        }
+        final withProfile = await services.users!.getProfileById(entry,
           options: CallOptions(metadata: call.clientMetadata),
         );
         result.add(withProfile);

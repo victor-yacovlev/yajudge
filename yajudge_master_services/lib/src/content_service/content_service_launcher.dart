@@ -9,14 +9,11 @@ import 'content_service.dart';
 
 class ContentServiceLauncher extends ServiceLauncherBase {
 
-  late final UserManagementClient userManager;
-
   ContentServiceLauncher() : super('content');
 
   @override
   Future<void> initialize(List<String> commandLineArguments) async {
     await super.initialize(commandLineArguments);
-    userManager = createExternalApi('UserManagement', (c,i) => UserManagementClient(c, interceptors: i));
     MasterLocationProperties locationProperties;
     try {
       YamlMap locationConf = configFile!['locations']!;

@@ -6,24 +6,28 @@ import 'package:fixnum/fixnum.dart';
 import 'package:protobuf/protobuf.dart';
 
 import '../service_call_extension.dart';
+import '../services_connector.dart';
 
 
 class CodeReviewManagementService extends CodeReviewManagementServiceBase {
   final log = Logger('CodeReviewManagement');
   final PostgreSQLConnection connection;
-  final SubmissionManagementClient submissionManager;
-  final UserManagementClient userManager;
   final String secretKey;
+  final ServicesConnector services;
 
   CodeReviewManagementService({
     required this.connection,
-    required this.submissionManager,
-    required this.userManager,
+    required this.services,
     required this.secretKey,
   });
 
   @override
   Future<CodeReview> applyCodeReview(ServiceCall call, CodeReview request) async {
+    if (services.submissions == null) {
+      final message = 'service submissions offline while ApplyCodeReview';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     CodeReview review = request.deepCopy();
     CodeReview? existingReview = await _getCodeReviewForSubmission(call, request.submissionId.toInt());
     bool updateReview = false;
@@ -31,7 +35,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       updateReview = true;
       bool sameReview = existingReview.contentEqualsTo(review);
       if (sameReview) {
-        await submissionManager.updateSubmissionStatus(
+        await services.submissions!.updateSubmissionStatus(
           Submission(id: review.submissionId, status: review.newStatus),
           options: CallOptions(metadata: call.clientMetadata),
         );
@@ -85,7 +89,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       });
       await _addLineComments(review.lineComments, existingReview.id);
     }
-    await submissionManager.updateSubmissionStatus(
+    await services.submissions!.updateSubmissionStatus(
       Submission(id: review.submissionId, status: review.newStatus),
       options: CallOptions(metadata: call.clientMetadata),
     );
@@ -94,7 +98,12 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
 
   @override
   Future<ReviewHistory> getReviewHistory(ServiceCall call, Submission request) async {
-    final submission = await submissionManager.getSubmissionResult(request,
+    if (services.submissions == null) {
+      final message = 'service submissions offline while GetReviewHistory';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    final submission = await services.submissions!.getSubmissionResult(request,
       options: CallOptions(metadata: call.clientMetadata),
     );
     final problemId = submission.problemId;
@@ -131,6 +140,11 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
   }
 
   Future<CodeReview?> _getCodeReviewForSubmission(ServiceCall call, int submissionId) async {
+    if (services.users == null) {
+      final message = 'service users offline while _getCodeReviewForSubmission';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     final query = '''
     select id, author_id, global_comment, datetime
     from code_reviews
@@ -145,7 +159,7 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
     final authorId = row[1] as int;
     final globalComment = row[2] is String? row[2] as String : '';
     final datetime = row[3] as DateTime;
-    final author = await userManager.getProfileById(
+    final author = await services.users!.getProfileById(
       User(id: Int64(authorId)),
       options: CallOptions(metadata: call.clientMetadata)
     );

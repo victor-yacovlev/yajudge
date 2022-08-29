@@ -6,6 +6,7 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'package:grpc/grpc.dart';
 import 'package:logging/logging.dart';
 import '../course_data_consumer.dart';
+import '../services_connector.dart';
 
 typedef ProblemStatusController = StreamController<ProblemStatus>;
 typedef CourseStatusController = StreamController<CourseStatus>;
@@ -14,28 +15,28 @@ class ProgressCalculatorService extends ProgressCalculatorServiceBase with Cours
 
   final log = Logger('ProgressCalculator');
   final PostgreSQLConnection connection;
-  final CourseManagementClient courseManagement;
-  final SubmissionManagementClient submissionManagement;
-  final DeadlinesManagementClient deadlinesManager;
+  final ServicesConnector services;
 
   final _problemStatusControllers = <String,List<ProblemStatusController>>{};
   final _courseStatusControllers = <String,List<CourseStatusController>>{};
 
   ProgressCalculatorService({
     required this.connection,
-    required this.courseManagement,
-    required this.submissionManagement,
-    required this.deadlinesManager,
-    required CourseContentProviderClient contentProvider,
+    required this.services,
   }) : super() {
-    super.contentProvider = contentProvider;
+    super.courseDataConsumerServices = services;
   }
 
   @override
   Future<CourseProgressResponse> getProgress(ServiceCall call, CourseProgressRequest request) async {
     AllGroupsEnrollments enrollment;
+    if (services.courses == null) {
+      final message = 'courses service offline while GetProgress';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     try {
-      enrollment = await courseManagement.getAllGroupsEnrollments(
+      enrollment = await services.courses!.getAllGroupsEnrollments(
         request.course,
         options: CallOptions(metadata: call.clientMetadata),
       );
@@ -405,7 +406,12 @@ class ProgressCalculatorService extends ProgressCalculatorServiceBase with Cours
     int hardDeadline = 0;
 
     if (finalSubmission != null) {
-      final deadlines = await deadlinesManager.getSubmissionDeadlines(finalSubmission);
+      if (services.deadlines == null) {
+        final message = 'deadline service offline while GetProblemStatus';
+        log.severe(message);
+        throw GrpcError.unavailable(message);
+      }
+      final deadlines = await services.deadlines!.getSubmissionDeadlines(finalSubmission);
       softDeadline = deadlines.softDeadline.toInt();
       hardDeadline = deadlines.hardDeadline.toInt();
     }

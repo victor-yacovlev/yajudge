@@ -6,25 +6,52 @@ import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'abstract_runner.dart';
 import 'grader_extra_configs.dart';
+import 'grader_service.dart';
 
 
 class ProblemLoader {
   final Submission submission;
   final GraderLocationProperties locationProperties;
-  final CourseContentProviderClient contentService;
+  final RpcProperties rpcProperties;
   final DefaultBuildProperties buildProperties;
   final SecurityContext defaultSecurityContext;
   final AbstractRunner runner;
   final log = Logger('ProblemLoader');
 
+  CourseContentProviderClient? _contentServiceConnection;
+
   ProblemLoader({
     required this.submission,
-    required this.contentService,
+    required this.rpcProperties,
     required this.locationProperties,
     required this.buildProperties,
     required this.defaultSecurityContext,
     required this.runner,
   });
+
+  CourseContentProviderClient? get contentService {
+    const serviceName = 'yajudge.CourseContentProvider';
+    if (_contentServiceConnection != null) {
+      return _contentServiceConnection;
+    }
+    final endpoint = rpcProperties.endpoints[serviceName]!;
+    final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
+    try {
+      final clientChannel = GraderService.connectToEndpoint(endpoint);
+      _contentServiceConnection = CourseContentProviderClient(
+          clientChannel,
+          interceptors: [interceptor]
+      );
+      return _contentServiceConnection;
+    }
+    catch (e) {
+      return null;
+    }
+  }
+
+  void invalidateServicesConnection() {
+    _contentServiceConnection = null;
+  }
 
   Future<void> loadProblemData() async {
     final courseId = submission.course.dataId;
@@ -43,12 +70,17 @@ class ProblemLoader {
       cachedTimestamp: Int64(timeStamp),
     );
     ProblemContentResponse response;
+    if (contentService == null) {
+      final message = 'not connected to content service while processing problem $problemId';
+      log.severe(message);
+      throw Exception(message);
+    }
     try {
-      response = await contentService.getProblemFullContent(request);
+      response = await contentService!.getProblemFullContent(request);
     }
     catch (e) {
-      log.severe('cant get course $courseId content for problem $problemId: $e');
-      return;
+      log.severe('cant get course content for problem $problemId: $e');
+      rethrow;
     }
     if (response.status == ContentStatus.HAS_DATA) {
       problemDir.createSync(recursive: true);
