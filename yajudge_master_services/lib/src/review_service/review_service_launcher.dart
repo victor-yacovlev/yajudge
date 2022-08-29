@@ -12,11 +12,8 @@ class ReviewServiceLauncher extends ServiceLauncherBase {
   @override
   Future<void> initialize(List<String> commandLineArguments) async {
     await super.initialize(commandLineArguments);
-    userManager = createExternalApi('UserManagement', (c,i) => UserManagementClient(c, interceptors: i));
-    submissionManager = createExternalApi('SubmissionManagement', (c,i) => SubmissionManagementClient(c, interceptors: i));
     final service = CodeReviewManagementService(
-      submissionManager: submissionManager,
-      userManager: userManager,
+      services: services,
       connection: databaseConnection,
       secretKey: rpcProperties.privateToken,
     );

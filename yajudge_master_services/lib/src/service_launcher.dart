@@ -12,6 +12,8 @@ import 'package:logging/logging.dart';
 import 'dart:io' as io;
 import 'package:path/path.dart' as path;
 
+import 'services_connector.dart';
+
 
 abstract class ServiceLauncherBase {
 
@@ -51,7 +53,7 @@ abstract class ServiceLauncherBase {
   @protected
   late final Service service;
   @protected
-  late final _PrivateServiceClientInterceptor _privateServiceClientInterceptor;
+  late final ServicesConnector services;
 
   @protected
   ServiceLauncherBase(
@@ -138,9 +140,8 @@ abstract class ServiceLauncherBase {
       }
     }
     Logger.root.info('using rpc configuration $rpcProperties');
-    _privateServiceClientInterceptor = _PrivateServiceClientInterceptor(
-        rpcProperties.privateToken, Logger.root,
-    );
+
+    services = ServicesConnector(rpcProperties);
 
     _setupSignals();
     _createPidFile();
@@ -298,6 +299,7 @@ abstract class ServiceLauncherBase {
   void _setupSignals() {
     io.ProcessSignal.sigterm.watch().listen((_) => _terminate('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => _terminate('SIGHUP'));
+    io.ProcessSignal.sighup.watch().listen((_) => services.invalidateConnections('SIGHUP'));
   }
 
   @protected
@@ -343,44 +345,6 @@ abstract class ServiceLauncherBase {
       });
       await grpcServer.serve(address: address);
     }
-  }
-
-  @protected
-  ClientChannel createExternalApiChannel(String apiName) {
-    final endpoint = rpcProperties.endpoints[apiName];
-    if (endpoint == null) {
-      throw ArgumentError('service $apiName has not registered endpoint in configuration', apiName);
-    }
-    dynamic address;
-    if (!endpoint.isUnix) {
-      if (endpoint.host.isEmpty) {
-        address = io.InternetAddress.anyIPv4;
-      }
-      else {
-        address = endpoint.host;
-      }
-      return GrpcOrGrpcWebClientChannel.toSingleEndpoint(
-          host: endpoint.host, port: endpoint.port, transportSecure: endpoint.useSsl
-      );
-    }
-    else {
-      address = io.InternetAddress(endpoint.unixPath, type: io.InternetAddressType.unix);
-      return ClientChannel(address,
-        port: 0,
-        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
-      );
-    }
-  }
-
-  @protected
-  dynamic createExternalApi(String serviceSimpleName, Function ctor,
-      [List<ClientInterceptor> extraInterceptors = const <ClientInterceptor>[]])
-  {
-    final serviceName = 'yajudge.$serviceSimpleName';
-    final interceptors = <ClientInterceptor>[_privateServiceClientInterceptor] + extraInterceptors;
-    final channel = createExternalApiChannel(serviceName);
-    dynamic instance = ctor(channel, interceptors);
-    return instance;
   }
 
   void markMethodAllowNotLoggedUser(String methodName) {
@@ -462,40 +426,5 @@ abstract class ServiceLauncherBase {
       // yajudge binary bundle have only one 'bin' directory
       return topDir;
     }
-  }
-}
-
-
-class _PrivateServiceClientInterceptor implements ClientInterceptor {
-
-  final String privateApiToken;
-  final Logger logger;
-
-  _PrivateServiceClientInterceptor(this.privateApiToken, this.logger);
-
-  @override
-  ResponseStream<R> interceptStreaming<Q, R>(
-      ClientMethod<Q, R> method,
-      Stream<Q> requests,
-      CallOptions options,
-      ClientStreamingInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(CallOptions(metadata: _createMetadata()));
-    return invoker(method, requests, newOptions);
-  }
-
-  @override
-  ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
-      CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(CallOptions(metadata: _createMetadata()));
-    return invoker(method, request, newOptions)..onError((error, stackTrace) {
-      logger.severe('Error while executing external API call to ${method.path}: $error, stack trace: $stackTrace');
-      return Future.error(error!);
-    });
-  }
-
-  Map<String,String> _createMetadata() {
-    final metadata = <String,String>{};
-    metadata['token'] = privateApiToken;
-    return metadata;
   }
 }

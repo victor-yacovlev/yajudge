@@ -66,8 +66,7 @@ class GraderService {
   final DefaultRuntimeProperties defaultRuntimeProperties;
   int _idleWorkersCount = 0;
 
-  late final CourseContentProviderClient contentService;
-  late final SubmissionManagementClient submissionsService;
+  SubmissionManagementClient? _submissionsServiceConnection;
 
   late final double _performanceRating;
   Timer? _statusPushTimer;
@@ -91,23 +90,12 @@ class GraderService {
     this.overrideLimits,
     required this.defaultSecurityContext,
   }) {
-    final coursesEndpoint = rpcProperties.endpoints['yajudge.CourseContentProvider']!;
-    final submissionsEndpoint = rpcProperties.endpoints['yajudge.SubmissionManagement']!;
-    final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
-    if (coursesEndpoint.connectionEquals(submissionsEndpoint)) {
-      // connect once and use endpoint for both services
-      final clientChannel = connectToEndpoint(coursesEndpoint);
-      contentService = CourseContentProviderClient(clientChannel, interceptors: [interceptor]);
-      submissionsService = SubmissionManagementClient(clientChannel, interceptors: [interceptor]);
-    }
-    else {
-      final coursesChannel = connectToEndpoint(coursesEndpoint);
-      contentService = CourseContentProviderClient(coursesChannel, interceptors: [interceptor]);
-      final submissionsChannel = connectToEndpoint(submissionsEndpoint);
-      submissionsService = SubmissionManagementClient(submissionsChannel, interceptors: [interceptor]);
-    }
     io.ProcessSignal.sigterm.watch().listen((_) => shutdown('SIGTERM'));
     io.ProcessSignal.sigint.watch().listen((_) => shutdown('SIGINT'));
+    io.ProcessSignal.sighup.watch().listen((_) {
+      log.info('got SIGHUP, invalidating service connections');
+      invalidateServicesConnection();
+    });
     log.info('estimating performance rating, this will take some time...');
     _performanceRating = estimatePerformanceRating();
     log.info('performance rating: $_performanceRating');
@@ -117,6 +105,30 @@ class GraderService {
       availableWorkersCount = maxWorkersCount;
     }
     _idleWorkersCount = availableWorkersCount;
+  }
+
+  SubmissionManagementClient? get submissionsService {
+    const serviceName = 'yajudge.SubmissionManagement';
+    if (_submissionsServiceConnection != null) {
+      return _submissionsServiceConnection;
+    }
+    final endpoint = rpcProperties.endpoints[serviceName]!;
+    final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
+    try {
+      final clientChannel = connectToEndpoint(endpoint);
+      _submissionsServiceConnection = SubmissionManagementClient(
+          clientChannel,
+          interceptors: [interceptor]
+      );
+      return _submissionsServiceConnection;
+    }
+    catch (e) {
+      return null;
+    }
+  }
+
+  void invalidateServicesConnection() {
+    _submissionsServiceConnection = null;
   }
 
   static int estimateWorkersCount() {
@@ -302,7 +314,10 @@ class GraderService {
   }
 
   Future<void> serveSubmissionsStream() async {
-    final masterStream = submissionsService.receiveSubmissionsToProcess(graderProperties());
+    if (submissionsService == null) {
+      return; // not ready to get submissions
+    }
+    final masterStream = submissionsService!.receiveSubmissionsToProcess(graderProperties());
     _statusPushTimer?.cancel();
     _statusPushTimer = Timer.periodic(Duration(seconds: 10), (_) {
       pushGraderStatus();
@@ -325,7 +340,15 @@ class GraderService {
         log.info('processing submission ${submission.id} from master');
         processSubmission(submission).then((result) async {
           try {
-            await submissionsService.updateGraderOutput(result);
+            if (submissionsService == null) {
+              log.severe(
+                'connection to submissions service lost, '
+                'submission ${result.id } result not sent back'
+              );
+            }
+            else {
+              await submissionsService!.updateGraderOutput(result);
+            }
           }
           catch (e) {
             log.severe('cant send back grader output on submission ${result.id} '
@@ -340,9 +363,10 @@ class GraderService {
     }
     catch (error) {
       if (isConnectionError(error)) {
+        invalidateServicesConnection();
         // pushGraderStatus has implementation to check when connection will restored
         pushGraderStatus();
-        return; // restart connection by supervisor
+        return; // restart connection by local grader supervisor
       }
       else {
         log.severe('got unhandled error $error');
@@ -358,7 +382,7 @@ class GraderService {
     bool connectionLostError = error is GrpcError && error.code==StatusCode.unknown
         && error.message!=null && error.message!.toLowerCase().startsWith('http/2 error');
     bool httpDeadlineError = error is GrpcError && error.code==StatusCode.deadlineExceeded;
-    return serviceUnavailableError || connectionLostError || httpDeadlineError;
+    return _submissionsServiceConnection==null || serviceUnavailableError || connectionLostError || httpDeadlineError;
   }
 
   Future<void> pushGraderStatus() async {
@@ -371,22 +395,28 @@ class GraderService {
       else {
         status = isIdle()? ServiceStatus.SERVICE_STATUS_IDLE : ServiceStatus.SERVICE_STATUS_BUSY;
       }
-      try {
-        await submissionsService.setExternalServiceStatus(ConnectedServiceStatus(
-          properties: graderProperties(),
-          status: status,
-          capacity: _idleWorkersCount,
-        ));
-        pushOK = true;
-      }
-      catch (error) {
-        pushOK = false;
-        if (isConnectionError(error)) {
-          io.sleep(Duration(seconds: 2));
+      final serviceStatus = ConnectedServiceStatus(
+        properties: graderProperties(),
+        status: status,
+        capacity: _idleWorkersCount,
+      );
+      if (submissionsService != null) {
+        try {
+          await submissionsService!.setExternalServiceStatus(serviceStatus);
+          pushOK = true;
         }
-        else {
-          rethrow;
+        catch (error) {
+          pushOK = false;
+          if (isConnectionError(error)) {
+            io.sleep(reconnectTimeout);
+          }
+          else {
+            rethrow;
+          }
         }
+      } else {
+        // no connection established
+        io.sleep(reconnectTimeout);
       }
     }
   }
@@ -423,7 +453,7 @@ class GraderService {
 
     final problemLoader = ProblemLoader(
       submission: submission,
-      contentService: contentService,
+      rpcProperties: rpcProperties,
       runner: createRunner(submission, locationProperties),
       locationProperties: locationProperties,
       defaultSecurityContext: defaultSecurityContext,
@@ -488,7 +518,7 @@ class GraderService {
     log.info('grader shutting down due to $reason');
     shuttingDown = true;
     try {
-      await submissionsService.setExternalServiceStatus(ConnectedServiceStatus(
+      await submissionsService?.setExternalServiceStatus(ConnectedServiceStatus(
         properties: graderProperties(),
         status: ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN,
       ));

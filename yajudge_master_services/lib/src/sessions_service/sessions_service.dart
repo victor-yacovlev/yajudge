@@ -8,21 +8,20 @@ import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import '../service_call_extension.dart';
+import '../services_connector.dart';
 
 
 class SessionManagementService extends SessionManagementServiceBase {
 
   final PostgreSQLConnection dbConnection;
   final log = Logger('UsersManager');
-  final UserManagementClient usersManager;
-  final CourseManagementClient coursesManager;
   final String secretKey;
+  final ServicesConnector services;
 
   SessionManagementService({
     required this.dbConnection,
-    required this.coursesManager,
-    required this.usersManager,
     required this.secretKey,
+    required this.services,
   }): super();
 
   @override
@@ -83,15 +82,25 @@ class SessionManagementService extends SessionManagementServiceBase {
 
   @override
   Future<Session> startSession(ServiceCall call, Session request) async {
+    if (services.users == null) {
+      final message = 'service users offline while StartSession';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    if (services.courses == null) {
+      final message = 'service courses offline while StartSession';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     Session resultSession = request.deepCopy();
     String initialRoute = '/';
     User user = await getUserIdAndRole(call, request);
-    user = await usersManager.getProfileById(user,
+    user = await services.users!.getProfileById(user,
       options: CallOptions(metadata: call.clientMetadata!..putIfAbsent('session', () => resultSession.cookie)),
     );
 
     if (user.defaultRole != Role.ROLE_ADMINISTRATOR) {
-      final enrollmentsResponse = await coursesManager.getUserEnrollments(
+      final enrollmentsResponse = await services.courses!.getUserEnrollments(
         user,
         options: CallOptions(metadata: call.clientMetadata!..putIfAbsent('session', () => resultSession.cookie)),
       );
@@ -113,11 +122,16 @@ class SessionManagementService extends SessionManagementServiceBase {
   }
 
   Future<Session> createSessionForAuthenticatedUser(ServiceCall call, User user, String initialRoute) async {
+    if (services.users == null) {
+      final message = 'service users offline while createSessionForAuthenticatedUser';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     DateTime timestamp = DateTime.now();
     String sessionKey = '${user.id} ${user.email} ${timestamp.millisecondsSinceEpoch}';
     sessionKey = sha256.convert(utf8.encode(sessionKey)).toString();
     call.setSessionAndUser(sessionKey, User(), secretKey);
-    final userProfile = await usersManager.getProfileById(user,
+    final userProfile = await services.users!.getProfileById(user,
       options: CallOptions(metadata: {'session': sessionKey}),
     );
     final userProfileData = userProfile.toEncryptedBase64(secretKey);

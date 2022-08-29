@@ -1,11 +1,15 @@
 import 'package:fixnum/fixnum.dart';
 import 'package:grpc/grpc.dart';
+import 'package:logging/logging.dart';
 import 'package:yajudge_common/yajudge_common.dart';
+
+import 'services_connector.dart';
 
 class CourseDataConsumer {
 
   final Map<String,CourseDataCacheItem> loadedCourses = {};
-  late final CourseContentProviderClient contentProvider;
+  late final ServicesConnector courseDataConsumerServices;
+  final _log = Logger("CourseDataConsumer");
 
   Future<CourseData> getCourseData(ServiceCall? call, Course course) async {
     int cachedTimestamp = 0;
@@ -18,7 +22,12 @@ class CourseDataConsumer {
       cachedTimestamp: Int64(cachedTimestamp),
     );
     CallOptions options = CallOptions(metadata: call?.clientMetadata);
-    final response = await contentProvider.getCoursePublicContent(request, options: options);
+    if (courseDataConsumerServices.content == null) {
+      final message = 'content service offline';
+      _log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    final response = await courseDataConsumerServices.content!.getCoursePublicContent(request, options: options);
     CourseData result;
     if (response.status == ContentStatus.HAS_DATA) {
       loadedCourses[course.dataId] = CourseDataCacheItem(

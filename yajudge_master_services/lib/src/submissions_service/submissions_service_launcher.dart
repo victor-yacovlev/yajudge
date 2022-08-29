@@ -11,11 +11,7 @@ class SubmissionsServiceLauncher extends ServiceLauncherBase {
   Future<void> initialize(List<String> commandLineArguments) async {
     await super.initialize(commandLineArguments);
     final service = SubmissionManagementService(
-      courseManager: createExternalApi('CourseManagement', (c,i) => CourseManagementClient(c, interceptors: i)),
-      courseContentProvider: createExternalApi('CourseContentProvider', (c,i) => CourseContentProviderClient(c, interceptors: i)),
-      userManager: createExternalApi('UserManagement', (c,i) => UserManagementClient(c, interceptors: i)),
-      deadlinesManager: createExternalApi('DeadlinesManagement', (c,i) => DeadlinesManagementClient(c, interceptors: i)),
-      progressNotifier: createExternalApi('ProgressCalculator', (c,i) => ProgressCalculatorClient(c, interceptors: i)),
+      services: services,
       connection: databaseConnection,
       secretKey: rpcProperties.privateToken,
     );

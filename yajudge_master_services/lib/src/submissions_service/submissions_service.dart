@@ -8,6 +8,7 @@ import 'package:protobuf/protobuf.dart';
 import 'package:yajudge_common/yajudge_common.dart';
 import 'package:fixnum/fixnum.dart';
 import '../service_call_extension.dart';
+import '../services_connector.dart';
 import 'external_services_manager.dart';
 import '../course_data_consumer.dart';
 import '../last_seen_tracker.dart';
@@ -27,10 +28,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
 
   final Logger log = Logger('SubmissionManager');
   final PostgreSQLConnection connection;
-  final CourseManagementClient courseManager;
-  final UserManagementClient userManager;
-  final DeadlinesManagementClient deadlinesManager;
-  final ProgressCalculatorClient progressNotifier;
+  final ServicesConnector services;
   final String secretKey;
 
   final Map<String,List<StreamController<Submission>>> _submissionResultStreamControllers = {};
@@ -41,15 +39,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
 
   SubmissionManagementService({
     required this.connection,
-    required this.courseManager,
-    required this.userManager,
-    required this.deadlinesManager,
-    required this.progressNotifier,
-    required CourseContentProviderClient courseContentProvider,
+    required this.services,
     required this.secretKey,
   }) : super()
   {
-    super.contentProvider = courseContentProvider;
+    super.courseDataConsumerServices = services;
     Timer.periodic(graderPushInterval, (_) {
       try {
         processSubmissionsQueue();
@@ -69,11 +63,16 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
+    if (services.courses == null) {
+      final message = 'service courses offline while _checkAccessToCourse';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     final currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
       throw GrpcError.unauthenticated('no user information in request call');
     }
-    final enrollmentsResponse = await courseManager.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     List<Enrollment> enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -95,6 +94,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
 
   @override
   Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
+    if (services.deadlines == null) {
+      final message = 'service deadlines offline while GetSubmissionsList';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     final currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
       throw GrpcError.unauthenticated('must be logged in user to get submissions list');
@@ -204,7 +208,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
         gradingStatus: gradingStatus,
         user: sender,
       );
-      final deadlines = await deadlinesManager.getSubmissionDeadlines(submission);
+      final deadlines = await services.deadlines!.getSubmissionDeadlines(submission);
       final hardDeadline = deadlines.hardDeadline;
       bool hardDeadlinePassed = false;
       if (hardDeadline > 0) {
@@ -287,11 +291,26 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   Future<Submission> getSubmissionInfo(ServiceCall call, Submission request) async {
+    if (services.users == null) {
+      final message = 'service users offline while GetSubmissionInfo';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    if (services.courses == null) {
+      final message = 'service courses offline while GetSubmissionInfo';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    if (services.deadlines == null) {
+      final message = 'service deadlines offline while GetSubmissionInfo';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     User? currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
       throw GrpcError.unauthenticated('no user information in service call');
     }
-    currentUser = await userManager.getProfileById(currentUser,
+    currentUser = await services.users!.getProfileById(currentUser,
       options: CallOptions(metadata: call.clientMetadata),
     );
     final submissionId = request.id.toInt();
@@ -316,7 +335,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     styleErrorLog ??= '';
     compileErrorLog ??= '';
 
-    final enrollmentsResponse = await courseManager.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -333,7 +352,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
       }
     }
 
-    final deadlines = await deadlinesManager.getSubmissionDeadlines(Submission(id: Int64(submissionId)));
+    final deadlines = await services.deadlines!.getSubmissionDeadlines(Submission(id: Int64(submissionId)));
 
     final submission = Submission(
       id: Int64(submissionId),
@@ -428,14 +447,29 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
 
   @override
   Future<Submission> submitProblemSolution(ServiceCall call, Submission request) async {
+    if (services.users == null) {
+      final message = 'service users offline while SubmitProblemSolution';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    if (services.courses == null) {
+      final message = 'service courses offline while SubmitProblemSolution';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    if (services.deadlines == null) {
+      final message = 'service deadlines offline while SubmitProblemSolution';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     User? currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
       throw GrpcError.unauthenticated('no user data in call request while trying to submit solution');
     }
-    currentUser = await userManager.getProfileById(currentUser,
+    currentUser = await services.users!.getProfileById(currentUser,
       options: CallOptions(metadata: call.clientMetadata),
     );
-    final enrollmentsResponse = await courseManager.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -464,7 +498,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     );
     int submissionId = submissionsRows[0][0];
     request.updateId(submissionId);
-    await deadlinesManager.insertNewSubmission(request);
+    await services.deadlines!.insertNewSubmission(request);
     for (File file in request.solutionFiles.files) {
       await connection.query(
         '''
@@ -479,7 +513,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
       );
     }
     try {
-      progressNotifier.notifyProblemStatusChanged(request);
+      services.progress?.notifyProblemStatusChanged(request);
     }
     catch (e) {
       log.warning('cant notify progress service about submission ${request.id}: $e');
@@ -568,7 +602,12 @@ values (@id,@data)
     final submissionResultsDeleter = deleteSubmissionResultsFromSQL;
     final submissionResultsInserter = insertSubmissionResultsIntoSQL;
     if (request.status == SolutionStatus.OK) {
-      final course = await courseManager.getCourse(request.course);
+      if (services.courses == null) {
+        final message = 'service courses offline while UpdateGraderOutput';
+        log.severe(message);
+        throw GrpcError.unavailable(message);
+      }
+      final course = await services.courses!.getCourse(request.course);
       final courseData = await getCourseData(call, course);
       final problemId = request.problemId;
       final problemMetadata = courseData.findProblemMetadataById(problemId);
@@ -626,7 +665,7 @@ values (@id,@data)
     await submissionResultsInserter(request);
 
     try {
-      progressNotifier.notifyProblemStatusChanged(request);
+      services.progress?.notifyProblemStatusChanged(request);
     }
     catch (e) {
       log.warning('cant notify progress service about submission ${request.id}: $e');
@@ -744,7 +783,7 @@ values (@id,@data)
       if (graderMatch(request, problemData.gradingOptions)) {
         assignGrader(submission, request.name);
         try {
-          progressNotifier.notifyProblemStatusChanged(submission);
+          services.progress?.notifyProblemStatusChanged(submission);
         }
         catch (e) {
           log.warning('cant notify progress service about submission ${submission.id}: $e');
@@ -762,22 +801,37 @@ values (@id,@data)
   }
 
   Future<ProblemData> getProblemDataForSubmission(ServiceCall? call, Submission sub) async {
-    final course = await courseManager.getCourse(sub.course,
+    if (services.content == null) {
+      final message = 'service content offline while GetProblemDataForSubmission';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    if (services.courses == null) {
+      final message = 'service courses offline while GetProblemDataForSubmission';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
+    final course = await services.courses!.getCourse(sub.course,
       options: CallOptions(metadata: call?.clientMetadata),
     );
     final request = ProblemContentRequest(
       courseDataId: course.dataId,
       problemId: sub.problemId,
     );
-    final response = await contentProvider.getProblemFullContent(request,
+    final response = await services.content!.getProblemFullContent(request,
       options: CallOptions(metadata: call?.clientMetadata),
     );
     return response.data;
   }
 
   Future _notifySubmissionResultChanged(Submission submission) async {
-
-    final deadlines = await deadlinesManager.getSubmissionDeadlines(submission);
+    Submission deadlines = Submission();
+    if (services.deadlines == null) {
+      log.warning('service deadlines offline while trying to make notifications');
+    }
+    else {
+      deadlines = await services.deadlines!.getSubmissionDeadlines(submission);
+    }
     submission = submission.deepCopy();
     submission.softDeadline = deadlines.softDeadline;
     submission.hardDeadline = deadlines.hardDeadline;
@@ -823,11 +877,16 @@ values (@id,@data)
 
   @override
   Future<RejudgeRequest> rejudge(ServiceCall call, RejudgeRequest request) async {
+    if (services.courses == null) {
+      final message = 'service courses offline while Rejudge';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     final currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
       throw GrpcError.unauthenticated('requires user metadata in request to rejudge');
     }
-    final enrollmentsResponse = await courseManager.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -996,7 +1055,7 @@ values (@id,@data)
       if (graderConnection.pushSubmission(submission)) {
         assignGrader(submission, graderConnection.properties.name);
         try {
-          progressNotifier.notifyProblemStatusChanged(submission);
+          services.progress?.notifyProblemStatusChanged(submission);
         }
         catch (e) {
           log.warning('cant notify progress service about submission ${submission.id}: $e');
@@ -1097,6 +1156,11 @@ values (@id,@data)
 
   @override
   Future<DiffViewResponse> getSubmissionsToDiff(ServiceCall call, DiffViewRequest request) async {
+    if (services.users == null) {
+      final message = 'service users offline while GetSubmissionsToDiff';
+      log.severe(message);
+      throw GrpcError.unavailable(message);
+    }
     final firstSource = request.first;
     final secondSource = request.second;
     request = request.deepCopy();
@@ -1104,7 +1168,7 @@ values (@id,@data)
       throw UnimplementedError();
     }
     final firstSubmission = await getSubmissionInfo(call, firstSource.submission);
-    firstSubmission.user = await userManager.getProfileById(firstSubmission.user,
+    firstSubmission.user = await services.users!.getProfileById(firstSubmission.user,
       options: CallOptions(metadata: call.clientMetadata)
     );
     request.first.submission = firstSubmission;
@@ -1112,7 +1176,7 @@ values (@id,@data)
         files: await getSubmissionFiles(firstSubmission.id.toInt())
     );
     final secondSubmission = await getSubmissionInfo(call, secondSource.submission);
-    secondSubmission.user = await userManager.getProfileById(secondSubmission.user,
+    secondSubmission.user = await services.users!.getProfileById(secondSubmission.user,
       options: CallOptions(metadata: call.clientMetadata)
     );
     request.second.submission = secondSubmission;

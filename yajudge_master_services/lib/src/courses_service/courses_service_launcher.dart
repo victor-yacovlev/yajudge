@@ -5,20 +5,14 @@ import 'courses_service.dart';
 
 class CourseServiceLauncher extends ServiceLauncherBase {
 
-  late final CourseContentProviderClient contentProvider;
-  late final UserManagementClient users;
-
   CourseServiceLauncher() : super('courses');
 
   @override
   Future<void> initialize(List<String> commandLineArguments) async {
     await super.initialize(commandLineArguments);
-    users = createExternalApi('UserManagement', (c,i) => UserManagementClient(c, interceptors: i));
-    contentProvider = createExternalApi('CourseContentProvider', (c,i) => CourseContentProviderClient(c, interceptors: i));
     final service = CourseManagementService(
       connection: databaseConnection,
-      userManagement: users,
-      contentProvider: contentProvider,
+      services: services,
       secretKey: rpcProperties.privateToken,
     );
     super.service = service;

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type NotifyFunc func(serviceName string)
+type NotifyFunc func(instanceName, serviceName string)
 
 type Service struct {
 	InstanceName      string
@@ -141,7 +141,7 @@ func (service *Service) monitorProcess() {
 		serviceStatus := service.Status
 		exitListener := service.exitListener
 		service.mutex.RUnlock()
-		exitListener(service.ServiceName)
+		exitListener(service.InstanceName, service.ServiceName)
 		mustStopMonitor := true
 		if serviceStatus == ServiceStatus_SHUTDOWN {
 			log.Infof("service %s@%s shut down", service.ServiceName, service.InstanceName)
