@@ -174,7 +174,8 @@ class CLangBuilder extends AbstractBuilder {
     required List<String> sanitizerOptions,
   }) async {
 
-    final fileSet = submission.solutionFiles;
+    final fileSet = <File>{};
+    fileSet.addAll(submission.solutionFiles.files);
 
     final submissionRootPath = runner.submissionPrivateDirectory(submission);
     final buildFullPath = '$submissionRootPath/$buildDirRelativePath';
@@ -195,7 +196,7 @@ class CLangBuilder extends AbstractBuilder {
     }
 
     List<String> objectFiles = [];
-    for (final sourceFile in fileSet.files) {
+    for (final sourceFile in fileSet) {
       String suffix = path.extension(sourceFile.name);
       if (!['.S', '.s', '.c', '.cpp', '.cxx', '.cc'].contains(suffix)) continue;
       String objectFileName = sourceFile.name + objectSuffix;
