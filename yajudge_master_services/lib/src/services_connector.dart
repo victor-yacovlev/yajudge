@@ -20,7 +20,8 @@ class ServicesConnector {
 
   ServicesConnector(this.rpcProperties) {
     interceptor = _PrivateServiceClientInterceptor(
-      rpcProperties.privateToken, Logger.root,
+      rpcProperties.privateToken,
+      Logger.root,
     );
   }
 
@@ -30,10 +31,10 @@ class ServicesConnector {
     }
     try {
       final channel = _createExternalApiChannel('CourseContentProvider');
-      _content = CourseContentProviderClient(channel, interceptors: [interceptor]);
+      _content =
+          CourseContentProviderClient(channel, interceptors: [interceptor]);
       return _content;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to content service: $e');
       return null;
     }
@@ -47,8 +48,7 @@ class ServicesConnector {
       final channel = _createExternalApiChannel('CourseManagement');
       _courses = CourseManagementClient(channel, interceptors: [interceptor]);
       return _courses;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to courses service: $e');
       return null;
     }
@@ -60,10 +60,10 @@ class ServicesConnector {
     }
     try {
       final channel = _createExternalApiChannel('DeadlinesManagement');
-      _deadlines = DeadlinesManagementClient(channel, interceptors: [interceptor]);
+      _deadlines =
+          DeadlinesManagementClient(channel, interceptors: [interceptor]);
       return _deadlines;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to deadlines service: $e');
       return null;
     }
@@ -75,10 +75,10 @@ class ServicesConnector {
     }
     try {
       final channel = _createExternalApiChannel('ProgressCalculator');
-      _progress = ProgressCalculatorClient(channel, interceptors: [interceptor]);
+      _progress =
+          ProgressCalculatorClient(channel, interceptors: [interceptor]);
       return _progress;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to progress service: $e');
       return null;
     }
@@ -90,10 +90,10 @@ class ServicesConnector {
     }
     try {
       final channel = _createExternalApiChannel('CodeReviewManagement');
-      _review = CodeReviewManagementClient(channel, interceptors: [interceptor]);
+      _review =
+          CodeReviewManagementClient(channel, interceptors: [interceptor]);
       return _review;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to review service: $e');
       return null;
     }
@@ -107,8 +107,7 @@ class ServicesConnector {
       final channel = _createExternalApiChannel('SessionManagement');
       _sessions = SessionManagementClient(channel, interceptors: [interceptor]);
       return _sessions;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to sessions service: $e');
       return null;
     }
@@ -120,10 +119,10 @@ class ServicesConnector {
     }
     try {
       final channel = _createExternalApiChannel('SubmissionManagement');
-      _submissions = SubmissionManagementClient(channel, interceptors: [interceptor]);
+      _submissions =
+          SubmissionManagementClient(channel, interceptors: [interceptor]);
       return _submissions;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to submissions service: $e');
       return null;
     }
@@ -137,35 +136,38 @@ class ServicesConnector {
       final channel = _createExternalApiChannel('UserManagement');
       _users = UserManagementClient(channel, interceptors: [interceptor]);
       return _users;
-    }
-    catch (e) {
+    } catch (e) {
       log.severe('cant connect to users service: $e');
       return null;
     }
   }
 
   ClientChannel _createExternalApiChannel(String apiName) {
-    final endpoint = rpcProperties.endpoints[apiName];
+    final endpoint = rpcProperties.endpoints['yajudge.$apiName'];
     if (endpoint == null) {
-      throw ArgumentError('service $apiName has not registered endpoint in configuration', apiName);
+      throw ArgumentError(
+          'service $apiName has not registered endpoint in configuration',
+          apiName);
     }
     dynamic address;
     if (!endpoint.isUnix) {
       if (endpoint.host.isEmpty) {
         address = io.InternetAddress.anyIPv4;
-      }
-      else {
+      } else {
         address = endpoint.host;
       }
       return GrpcOrGrpcWebClientChannel.toSingleEndpoint(
-          host: endpoint.host, port: endpoint.port, transportSecure: endpoint.useSsl
-      );
-    }
-    else {
-      address = io.InternetAddress(endpoint.unixPath, type: io.InternetAddressType.unix);
-      return ClientChannel(address,
+          host: endpoint.host,
+          port: endpoint.port,
+          transportSecure: endpoint.useSsl);
+    } else {
+      address = io.InternetAddress(endpoint.unixPath,
+          type: io.InternetAddressType.unix);
+      return ClientChannel(
+        address,
         port: 0,
-        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        options:
+            const ChannelOptions(credentials: ChannelCredentials.insecure()),
       );
     }
   }
@@ -181,12 +183,9 @@ class ServicesConnector {
     _submissions = null;
     _users = null;
   }
-
 }
 
-
 class _PrivateServiceClientInterceptor implements ClientInterceptor {
-
   final String privateApiToken;
   final Logger logger;
 
@@ -198,22 +197,26 @@ class _PrivateServiceClientInterceptor implements ClientInterceptor {
       Stream<Q> requests,
       CallOptions options,
       ClientStreamingInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(CallOptions(metadata: _createMetadata()));
+    CallOptions newOptions =
+        options.mergedWith(CallOptions(metadata: _createMetadata()));
     return invoker(method, requests, newOptions);
   }
 
   @override
   ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
       CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
-    CallOptions newOptions = options.mergedWith(CallOptions(metadata: _createMetadata()));
-    return invoker(method, request, newOptions)..onError((error, stackTrace) {
-      logger.severe('Error while executing external API call to ${method.path}: $error, stack trace: $stackTrace');
-      return Future.error(error!);
-    });
+    CallOptions newOptions =
+        options.mergedWith(CallOptions(metadata: _createMetadata()));
+    return invoker(method, request, newOptions)
+      ..onError((error, stackTrace) {
+        logger.severe(
+            'Error while executing external API call to ${method.path}: $error, stack trace: $stackTrace');
+        return Future.error(error!);
+      });
   }
 
-  Map<String,String> _createMetadata() {
-    final metadata = <String,String>{};
+  Map<String, String> _createMetadata() {
+    final metadata = <String, String>{};
     metadata['token'] = privateApiToken;
     return metadata;
   }

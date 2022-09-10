@@ -66,6 +66,10 @@ extension DeadlinesExtension on Deadlines {
 
   static int _parseDuration(String value) {
     value = value.replaceAll(RegExp(r'\s+'), '');
+    if (value == 'disable' || value == 'infinity') {
+      // return maximum signed int32 value to mark there is no deadline
+      return 2147483647;
+    }
     if (value.length < 2) {
       return 0;
     }
