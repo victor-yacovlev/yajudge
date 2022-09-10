@@ -5,6 +5,8 @@ import 'abstract_runner.dart';
 import 'assets_loader.dart';
 import 'package:posix/posix.dart' as posix;
 
+import 'grader_service.dart';
+
 abstract class AbstractInteractor {
   Future<Function> interact(YajudgeProcess targetProcess, String workDir, String dataFileName);
 }
@@ -21,13 +23,13 @@ class PythonInteractor extends AbstractInteractor {
     final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
-      posix.chmod(wrappersDir.absolute.path, '770');
+      tryChmod(wrappersDir.absolute.path, '770');
     }
     final wrapperFile = io.File('${wrappersDir.path}/interactor_wrapper.py');
     if (!wrapperFile.existsSync()) {
       final content = assetsLoader.fileAsBytes('interactor_wrapper.py');
       wrapperFile.writeAsBytesSync(content);
-      posix.chmod(wrapperFile.absolute.path, '660');
+      tryChmod(wrapperFile.absolute.path, '660');
     }
 
     final targetPid = await targetProcess.realPid;

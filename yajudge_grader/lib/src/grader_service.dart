@@ -18,6 +18,13 @@ import 'submission_processor.dart';
 
 const reconnectTimeout = Duration(seconds: 5);
 
+void tryChmod(String path, String mode) {
+  try {
+    posix.chmod(path, mode);
+  }
+  catch (e) {}
+}
+
 class TokenAuthGrpcInterceptor implements ClientInterceptor {
   final String _token;
   final Logger log = Logger('GraderExternalApiClient');
@@ -193,7 +200,7 @@ class GraderService {
       }
       final logFile = io.File(logFilePath);
       final openedFile = logFile.openSync(mode: io.FileMode.writeOnlyAppend);
-      posix.chmod(logFilePath, '660');
+      tryChmod(logFilePath, '660');
       _initializeLogger(openedFile, isolateName);
       if (isolateName.isEmpty) {
         print(
@@ -339,27 +346,23 @@ class GraderService {
         }
         submissionsInProgress.add(submissionId);
         log.info('processing submission ${submission.id} from master');
-        processSubmission(submission).then((result) async {
-          try {
-            if (submissionsService == null) {
-              log.severe(
+        try {
+          final result = await processSubmission(submission);
+          if (submissionsService == null) {
+            log.severe(
                 'connection to submissions service lost, '
-                'submission ${result.id } result not sent back'
-              );
-            }
-            else {
-              await submissionsService!.updateGraderOutput(result);
-            }
-          }
-          catch (e) {
-            log.severe('cant send back grader output on submission ${result.id} '
-                'with status ${result.status.name} (${result.status.value}): $e'
+                    'submission ${result.id} result not sent back'
             );
           }
+          else {
+            await submissionsService!.updateGraderOutput(result);
+          }
           submissionsInProgress.remove(submissionId);
-          await pushGraderStatus();
-          log.info('done processing submission ${submission.id} from master');
-        });
+        }
+        catch (e) {
+          log.severe('error processing submissions ${submission.id}: $e');
+        }
+        await pushGraderStatus();
       }
     }
     catch (error) {
