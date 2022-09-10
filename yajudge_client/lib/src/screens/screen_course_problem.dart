@@ -251,13 +251,14 @@ class CourseProblemScreenOnePageState extends BaseScreenState {
     final lessonSchedule = _scheduleSet.findByLesson(lesson.id);
     final deadlines = _problemMetadata.deadlines;
     int penalty = deadlines.softPenalty;
-    if (lessonSchedule.datetime > 0 && deadlines.softDeadline > 0 && penalty > 0) {
+    final tenYearsInSeconds = Duration(days: 10*365).inSeconds;
+    if (lessonSchedule.datetime > 0 && deadlines.softDeadline > 0 && deadlines.softDeadline < tenYearsInSeconds && penalty > 0) {
       int deadline = lessonSchedule.datetime.toInt() + deadlines.softDeadline;
       String dateFormat = formatDateTime(deadline);
       String scoreFormat = formatScoreInRussian(penalty);
       contents.add(Text('Мягкий дедлайн: $dateFormat, после этого штраф - минус $scoreFormat в час', style: mainTextStyle));
     }
-    if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0) {
+    if (lessonSchedule.datetime > 0 && deadlines.hardDeadline > 0 && deadlines.hardDeadline < tenYearsInSeconds) {
       int deadline = lessonSchedule.datetime.toInt() + deadlines.hardDeadline;
       String dateFormat = formatDateTime(deadline);
       contents.add(Text('Жесткий дедлайн: $dateFormat, после этого баллы за задачу не начисляются', style: mainTextStyle));
