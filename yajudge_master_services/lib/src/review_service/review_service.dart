@@ -126,7 +126,11 @@ class CodeReviewManagementService extends CodeReviewManagementServiceBase {
       'userId': userId.toInt(),
       'maxDateTime': maxDateTime,
     });
-    final ids = rows.map<int>((e) => e[0] as int);
+    List<int> ids = List.from(rows.map<int>((e) => e[0] as int), growable: true);
+    int currentSubmissionId = submission.id.toInt();
+    if (!ids.contains(currentSubmissionId)) {
+      ids.add(currentSubmissionId);
+    }
     List<CodeReview> reviews = [];
     for (final id in ids) {
       CodeReview? review = await _getCodeReviewForSubmission(call, id);
