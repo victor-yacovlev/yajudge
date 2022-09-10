@@ -308,6 +308,13 @@ class SubmissionScreenState extends BaseScreenState {
     final headStyle = theme.textTheme.headline6!.merge(TextStyle());
     final headPadding = EdgeInsets.fromLTRB(8, 4, 8, 4);
     final mainPadding = EdgeInsets.fromLTRB(8, 4, 8, 4);
+    final globalCommentStyle = theme.textTheme.bodyText1!.merge(
+      TextStyle(
+        color: Colors.red,
+        fontStyle: FontStyle.italic,
+        fontSize: 18.0,
+      )
+    );
 
     final globalReview = codeReview.globalComment.trim();
     if (globalReview.isNotEmpty) {
@@ -317,7 +324,7 @@ class SubmissionScreenState extends BaseScreenState {
       );
       contents.add(Container(
           padding: mainPadding,
-          child: Text(globalReview))
+          child: Text(globalReview, style: globalCommentStyle))
       );
     }
 
