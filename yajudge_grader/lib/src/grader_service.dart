@@ -12,7 +12,7 @@ import 'chrooted_runner.dart';
 import 'grading_worker.dart';
 import 'problem_loader.dart';
 import 'simple_runner.dart';
-
+import 'package:posix/posix.dart' as posix;
 import 'abstract_runner.dart';
 import 'submission_processor.dart';
 
@@ -193,6 +193,7 @@ class GraderService {
       }
       final logFile = io.File(logFilePath);
       final openedFile = logFile.openSync(mode: io.FileMode.writeOnlyAppend);
+      posix.chmod(logFilePath, '660');
       _initializeLogger(openedFile, isolateName);
       if (isolateName.isEmpty) {
         print(

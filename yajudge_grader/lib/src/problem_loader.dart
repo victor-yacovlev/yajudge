@@ -7,7 +7,7 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'abstract_runner.dart';
 import 'grader_extra_configs.dart';
 import 'grader_service.dart';
-
+import 'package:posix/posix.dart' as posix;
 
 class ProblemLoader {
   final Submission submission;
@@ -84,11 +84,14 @@ class ProblemLoader {
     }
     if (response.status == ContentStatus.HAS_DATA) {
       problemDir.createSync(recursive: true);
+      posix.chmod(problemDir.absolute.path, '770');
       io.Directory buildDir = io.Directory('${problemDir.path}/build');
       io.Directory optsDir = io.Directory('${problemDir.path}/build');
       io.Directory testsDir = io.Directory('${problemDir.path}/tests');
       buildDir.createSync(recursive: true);
+      posix.chmod(buildDir.absolute.path, '770');
       testsDir.createSync(recursive: true);
+      posix.chmod(testsDir.absolute.path, '770');
       final problemData = response.data.deepCopy();
       final opts = problemData.gradingOptions;
       opts.extraBuildFiles.saveAll(buildDir);
@@ -123,6 +126,7 @@ class ProblemLoader {
     }
     final buildDir = io.Directory(buildDirPath);
     buildDir.createSync(recursive: true);
+    posix.chmod(buildDir.absolute.path, '770');
     sourceFile.save(buildDir);
 
     final compilerProperties = buildProperties.propertiesForLanguage(

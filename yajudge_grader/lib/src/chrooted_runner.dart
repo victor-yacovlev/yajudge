@@ -8,6 +8,7 @@ import 'package:posix/posix.dart' as posix;
 import 'abstract_runner.dart';
 import 'assets_loader.dart';
 import 'grader_service.dart';
+import 'package:posix/posix.dart' as posix;
 
 class ChrootedRunner extends AbstractRunner {
   final GraderLocationProperties locationProperties;
@@ -29,6 +30,7 @@ class ChrootedRunner extends AbstractRunner {
   }) {
     log.info('using work dir root ${locationProperties.workDir}');
     io.Directory(locationProperties.workDir).createSync(recursive: true);
+    posix.chmod(locationProperties.workDir, '770');
     log.info('using Linux distribution from ${locationProperties.osImageDir}');
     if (!io.Directory(locationProperties.osImageDir).existsSync()) {
       log.shout('Linux distribution chroot not found');
@@ -36,6 +38,7 @@ class ChrootedRunner extends AbstractRunner {
     }
     log.info('using cache dir for course data ${locationProperties.cacheDir}');
     io.Directory(locationProperties.cacheDir).createSync(recursive: true);
+    posix.chmod(locationProperties.cacheDir, '770');
     String problemCachePath = path.normalize(path.absolute(
       '${locationProperties.cacheDir}/$courseId/${problemId.replaceAll(':', '/')}'
     ));
@@ -135,7 +138,9 @@ class ChrootedRunner extends AbstractRunner {
     overlayWorkDir = io.Directory('$base/workdir');
     overlayMergeDir = io.Directory('$base/mergedir');
     overlayWorkDir!.createSync(recursive: true);
+    posix.chmod(overlayWorkDir!.absolute.path, '770');
     overlayMergeDir!.createSync(recursive: true);
+    posix.chmod(overlayMergeDir!.absolute.path, '770');
   }
   
   void createSubmissionDir(Submission submission) {
@@ -144,21 +149,29 @@ class ChrootedRunner extends AbstractRunner {
     overlayWorkDir = io.Directory('$submissionPath/workdir');
     overlayMergeDir = io.Directory('$submissionPath/mergedir');
     overlayUpperDir!.createSync(recursive: true);
+    posix.chmod(overlayUpperDir!.absolute.path, '770');
     overlayWorkDir!.createSync(recursive: true);
+    posix.chmod(overlayWorkDir!.absolute.path, '770');
     overlayMergeDir!.createSync(recursive: true);
+    posix.chmod(overlayMergeDir!.absolute.path, '770');
     io.Directory submissionBuildDir = io.Directory('${overlayUpperDir!.path}/build');
     io.Directory submissionTestsDir = io.Directory('${overlayUpperDir!.path}/tests');
     submissionBuildDir.createSync(recursive: true);
+    posix.chmod(submissionBuildDir.absolute.path, '770');
     submissionTestsDir.createSync(recursive: true);
+    posix.chmod(submissionTestsDir.absolute.path, '770');
     final fileNames = submission.solutionFiles.files.map((e) => e.name);
     io.File('${submissionBuildDir.path}/.solution_files').writeAsStringSync(
       fileNames.join('\n')
     );
+    posix.chmod('${submissionBuildDir.path}/.solution_files', '660');
     for (final file in submission.solutionFiles.files) {
       String filePath = '${submissionBuildDir.path}/${file.name}';
       String fileDir = path.dirname(filePath);
       io.Directory(fileDir).createSync(recursive: true);
+      posix.chmod(fileDir, '770');
       io.File(filePath).writeAsBytesSync(file.data);
+      posix.chmod(filePath, '660');
     }
     io.Directory problemTestsDir = io.Directory('${problemDir.path}/tests');
     for (final entry in problemTestsDir.listSync(recursive: true)) {
@@ -166,6 +179,7 @@ class ChrootedRunner extends AbstractRunner {
         String entryPath = entry.path.substring(problemTestsDir.path.length);
         io.Directory testsSubdir = io.Directory('${submissionTestsDir.path}/$entryPath');
         testsSubdir.createSync(recursive: true);
+        posix.chmod(testsSubdir.absolute.path, '770');
       }
     }
     log.fine('created submission directory layout $submissionPath');
@@ -175,6 +189,7 @@ class ChrootedRunner extends AbstractRunner {
     final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
+      posix.chmod(wrappersDir.absolute.path, '770');
     }
     final names = [
       'run_wrapper_stage01.sh',
@@ -189,6 +204,7 @@ class ChrootedRunner extends AbstractRunner {
       if (!file.existsSync()) {
         final content = assetsLoader.fileAsBytes(name);
         file.writeAsBytesSync(content);
+        posix.chmod(file.absolute.path, '660');
       }
     }
     return path.absolute(wrappersDir.path, names.first);

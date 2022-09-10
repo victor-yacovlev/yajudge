@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:yajudge_common/yajudge_common.dart';
+import 'package:posix/posix.dart' as posix;
 
 import 'assets_loader.dart';
 
@@ -21,11 +22,13 @@ class PythonChecker extends AbstractChecker {
     final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
+      posix.chmod(wrappersDir.absolute.path, '770');
     }
     final wrapperFile = io.File('${wrappersDir.path}/checker_wrapper.py');
     if (!wrapperFile.existsSync()) {
       final content = assetsLoader.fileAsBytes('checker_wrapper.py');
       wrapperFile.writeAsBytesSync(content);
+      posix.chmod(wrapperFile.absolute.path, '660');
     }
 
     final arguments = [
