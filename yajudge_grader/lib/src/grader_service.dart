@@ -15,14 +15,23 @@ import 'simple_runner.dart';
 import 'package:posix/posix.dart' as posix;
 import 'abstract_runner.dart';
 import 'submission_processor.dart';
+import 'package:path/path.dart' as path;
 
 const reconnectTimeout = Duration(seconds: 5);
 
-void tryChmod(String path, String mode) {
-  try {
-    posix.chmod(path, mode);
+void chmodGroupWritable(String targetPath) {
+  final parts = path.split(path.absolute(targetPath));
+  for (int i=parts.length; i>=0; --i) {
+    final thePath = '/${parts.sublist(0, i).join("/")}';
+    bool isDirectory = io.Directory(thePath).existsSync();
+    String mode = isDirectory ? '0770' : '0660';
+    try {
+      posix.chmod(thePath, mode);
+    }
+    catch (e) {
+      break;
+    }
   }
-  catch (e) {}
 }
 
 class TokenAuthGrpcInterceptor implements ClientInterceptor {
@@ -200,7 +209,7 @@ class GraderService {
       }
       final logFile = io.File(logFilePath);
       final openedFile = logFile.openSync(mode: io.FileMode.writeOnlyAppend);
-      tryChmod(logFilePath, '660');
+      chmodGroupWritable(logFilePath);
       _initializeLogger(openedFile, isolateName);
       if (isolateName.isEmpty) {
         print(

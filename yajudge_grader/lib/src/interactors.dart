@@ -3,7 +3,6 @@ import 'package:yajudge_common/yajudge_common.dart';
 import 'dart:io' as io;
 import 'abstract_runner.dart';
 import 'assets_loader.dart';
-import 'package:posix/posix.dart' as posix;
 
 import 'grader_service.dart';
 
@@ -23,13 +22,13 @@ class PythonInteractor extends AbstractInteractor {
     final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
     if (!wrappersDir.existsSync()) {
       wrappersDir.createSync(recursive: true);
-      tryChmod(wrappersDir.absolute.path, '770');
+      chmodGroupWritable(wrappersDir.absolute.path);
     }
     final wrapperFile = io.File('${wrappersDir.path}/interactor_wrapper.py');
     if (!wrapperFile.existsSync()) {
       final content = assetsLoader.fileAsBytes('interactor_wrapper.py');
       wrapperFile.writeAsBytesSync(content);
-      tryChmod(wrapperFile.absolute.path, '660');
+      chmodGroupWritable(wrapperFile.absolute.path);
     }
 
     final targetPid = await targetProcess.realPid;

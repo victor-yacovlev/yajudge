@@ -12,7 +12,6 @@ import 'builders.dart';
 import 'checkers.dart';
 import 'grader_extra_configs.dart';
 import 'abstract_runner.dart';
-import 'package:posix/posix.dart' as posix;
 
 import 'grader_service.dart';
 import 'interactors.dart';
@@ -309,7 +308,7 @@ class SubmissionProcessor {
     final runsDir = io.Directory('${runner.submissionPrivateDirectory(submission)}/runs/$targetPrefix/');
 
     runsDir.createSync(recursive: true);
-    tryChmod(runsDir.absolute.path, '770');
+    chmodGroupWritable(runsDir.absolute.path);
 
     // Unpack .tgz bundles if any exists
     for (int i=1; i<=problemTestsCount(submission); i++) {
@@ -338,13 +337,13 @@ class SubmissionProcessor {
       final wrappersDir = io.Directory('${locationProperties.cacheDir}/wrappers');
       if (!wrappersDir.existsSync()) {
         wrappersDir.createSync(recursive: true);
-        tryChmod(wrappersDir.absolute.path, '770');
+        chmodGroupWritable(wrappersDir.absolute.path);
       }
       final wrapperFile = io.File('${wrappersDir.path}/tests_generator_wrapper.py');
       if (!wrapperFile.existsSync()) {
         final content = assetsLoader.fileAsBytes('tests_generator_wrapper.py');
         wrapperFile.writeAsBytesSync(content);
-        tryChmod(wrapperFile.absolute.path, '660');
+        chmodGroupWritable(wrapperFile.absolute.path);
       }
 
       final arguments = [
