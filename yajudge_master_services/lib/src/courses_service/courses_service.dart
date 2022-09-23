@@ -396,6 +396,7 @@ class CourseManagementService extends CourseManagementServiceBase {
           user: entry.user,
           role: entry.role,
           course: courseWithInfo,
+          groupPattern: entry.groupPattern,
         ));
       }
       return result;
