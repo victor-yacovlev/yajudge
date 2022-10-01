@@ -388,10 +388,12 @@ class NativeRuntime extends AbstractRuntime {
     }
     final errLines = artifact.stderrAsString.split('\n');
     final rxRuntimeError = RegExp(r'==\d+==ERROR:\s+.+Sanitizer:');
+    final rxSanitizerSummary = RegExp(r'SUMMARY:\s+.+Sanitizer:');
     List<String> errorLines = [];
     for (final line in errLines) {
-      final match = rxRuntimeError.matchAsPrefix(line);
-      if (match != null) {
+      final matchRE = rxRuntimeError.matchAsPrefix(line);
+      final matchSS = rxSanitizerSummary.matchAsPrefix(line);
+      if (matchRE != null || matchSS != null) {
         errorLines.add(line);
       }
     }
