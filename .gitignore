@@ -18,7 +18,7 @@
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
-#.vscode/
+.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -61,10 +61,29 @@ debian/
 alpine/
 *.sh
 
-yajudge_grader/src/build
-yajudge_grader/src/cmake-build-*
+*.sum
+*.pb.go
 
-yajudge_grader/resources/overlay-mount
-yajudge_grader/resources/limited-run
-yajudge_grader/resources/initial-cgroup-setup
+# binary artifacts
+yajudge_master_services/bin/yajudge-service-*
+yajudge_server/yajudge-server
+yajudge_grpcwebserver/yajudge-grpcwebserver
+yajudge_grader/bin/yajudge-grader 
+tools/bin/*
+
+# web temporary downloaded files
+yajudge_client/web/canvaskit.*
+
+# bundle artifacts
+yajudge-linux-*
+yajudge-*-linux-*.tgz
+
+# runtime working directories
+cache
+courses
+log 
+problems 
+work
+pid
+system
 
