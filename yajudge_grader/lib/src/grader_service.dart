@@ -21,14 +21,13 @@ const reconnectTimeout = Duration(seconds: 5);
 
 void chmodGroupWritable(String targetPath) {
   final parts = path.split(path.absolute(targetPath));
-  for (int i=parts.length; i>=0; --i) {
+  for (int i = parts.length; i >= 0; --i) {
     final thePath = '/${parts.sublist(0, i).join("/")}';
     bool isDirectory = io.Directory(thePath).existsSync();
     String mode = isDirectory ? '0770' : '0660';
     try {
       posix.chmod(thePath, mode);
-    }
-    catch (e) {
+    } catch (e) {
       break;
     }
   }
@@ -54,10 +53,12 @@ class TokenAuthGrpcInterceptor implements ClientInterceptor {
   ResponseFuture<R> interceptUnary<Q, R>(ClientMethod<Q, R> method, Q request,
       CallOptions options, ClientUnaryInvoker<Q, R> invoker) {
     final newOptions = getNewOptions(options);
-    return invoker(method, request, newOptions)..onError((error, stackTrace) {
-      log.severe('error accessing method ${method.path}: $error, stacktrace: $stackTrace');
-      return Future.error(error!);
-    });
+    return invoker(method, request, newOptions)
+      ..onError((error, stackTrace) {
+        log.severe(
+            'error accessing method ${method.path}: $error, stacktrace: $stackTrace');
+        return Future.error(error!);
+      });
   }
 
   CallOptions getNewOptions(CallOptions options) {
@@ -86,8 +87,7 @@ class GraderService {
 
   late final double _performanceRating;
   Timer? _statusPushTimer;
-  static String? serviceLogFilePath;  // to recreate log object while in isolate
-
+  static String? serviceLogFilePath; // to recreate log object while in isolate
 
   bool shuttingDown = false;
   int shutdownExitCode = 0;
@@ -132,13 +132,10 @@ class GraderService {
     final interceptor = TokenAuthGrpcInterceptor(rpcProperties.privateToken);
     try {
       final clientChannel = connectToEndpoint(endpoint);
-      _submissionsServiceConnection = SubmissionManagementClient(
-          clientChannel,
-          interceptors: [interceptor]
-      );
+      _submissionsServiceConnection = SubmissionManagementClient(clientChannel,
+          interceptors: [interceptor]);
       return _submissionsServiceConnection;
-    }
-    catch (e) {
+    } catch (e) {
       return null;
     }
   }
@@ -154,13 +151,15 @@ class GraderService {
   static ClientChannel connectToEndpoint(Endpoint endpoint) {
     if (endpoint.isUnix) {
       String path = endpoint.unixPath;
-      final unixAddress = io.InternetAddress(path, type: io.InternetAddressType.unix);
-      return ClientChannel(unixAddress,
+      final unixAddress =
+          io.InternetAddress(path, type: io.InternetAddressType.unix);
+      return ClientChannel(
+        unixAddress,
         port: 0,
-        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        options:
+            const ChannelOptions(credentials: ChannelCredentials.insecure()),
       );
-    }
-    else {
+    } else {
       String host = endpoint.host;
       if (host.isEmpty) {
         host = 'localhost';
@@ -184,26 +183,27 @@ class GraderService {
     final startTime = DateTime.now();
     while (primesFound < maxPrimesCount) {
       bool isPrime = true;
-      for (int divider=2; divider<currentPrime; divider++) {
+      for (int divider = 2; divider < currentPrime; divider++) {
         isPrime = (currentPrime % divider) > 0;
         if (!isPrime) {
           break;
         }
       }
       if (isPrime) {
-        primesFound ++;
+        primesFound++;
       }
-      currentPrime ++;
+      currentPrime++;
     }
     final endTime = DateTime.now();
-    final milliseconds = endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch;
+    final milliseconds =
+        endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch;
     double result = 1000000.0 / milliseconds;
     return result;
   }
 
   static void configureLogger(String logFilePath, String isolateName) {
     serviceLogFilePath = logFilePath;
-    if (logFilePath.isNotEmpty && logFilePath!='stdout') {
+    if (logFilePath.isNotEmpty && logFilePath != 'stdout') {
       if (isolateName.isEmpty) {
         print('Using log file $logFilePath');
       }
@@ -215,8 +215,7 @@ class GraderService {
         print(
             'Logger initialized so next non-critical messages will be in $logFilePath');
       }
-    }
-    else {
+    } else {
       if (isolateName.isEmpty) {
         print('Log file not set so will use stdout for logging');
       }
@@ -224,17 +223,17 @@ class GraderService {
     }
   }
 
-  static void _initializeLogger(io.RandomAccessFile? outFile, String isolateName) {
+  static void _initializeLogger(
+      io.RandomAccessFile? outFile, String isolateName) {
     Logger.root.level = Level.ALL;
     Logger.root.onRecord.listen((record) async {
       String messageLine;
       if (isolateName.isEmpty) {
         messageLine =
-        '${record.time}: ${record.level.name} - ${record.loggerName}: ${record.message}\n';
-      }
-      else {
+            '${record.time}: ${record.level.name} - ${record.loggerName}: ${record.message}\n';
+      } else {
         messageLine =
-        '${record.time}: ${record.level.name} - [$isolateName] ${record.loggerName}: ${record.message}\n';
+            '${record.time}: ${record.level.name} - [$isolateName] ${record.loggerName}: ${record.message}\n';
       }
       try {
         if (outFile != null) {
@@ -245,8 +244,7 @@ class GraderService {
         } else {
           io.stdout.nonBlocking.write(messageLine);
         }
-      }
-      catch (error) {
+      } catch (error) {
         print('LOG: $messageLine');
         print('Got logger error: $error');
       }
@@ -279,10 +277,10 @@ class GraderService {
     runZonedGuarded(() async {
       await serveSubmissionsStream();
       // await serveIncomingSubmissions();
-    },
-    (error, stackTrace) {
+    }, (error, stackTrace) {
       handleGraderError(e);
-    })!.then((_) {
+    })!
+        .then((_) {
       checkForShutdown();
       io.sleep(Duration(seconds: 2));
       serveSupervised();
@@ -299,13 +297,13 @@ class GraderService {
   }
 
   ConnectedServiceProperties graderProperties() => ConnectedServiceProperties(
-    role: ServiceRole.SERVICE_GRADING,
-    name: identityProperties.name,
-    platform: GradingPlatform(arch: identityProperties.arch),
-    performanceRating: _performanceRating,
-    archSpecificOnlyJobs: jobsConfig.archSpecificOnly,
-    numberOfWorkers: availableWorkersCount,
-  );
+        role: ServiceRole.SERVICE_GRADING,
+        name: identityProperties.name,
+        platform: GradingPlatform(arch: identityProperties.arch),
+        performanceRating: _performanceRating,
+        archSpecificOnlyJobs: jobsConfig.archSpecificOnly,
+        numberOfWorkers: availableWorkersCount,
+      );
 
   Future<ServiceStatus> waitForAnyWorkerIdle() async {
     final completer = Completer<ServiceStatus>();
@@ -320,6 +318,7 @@ class GraderService {
       }
       return false;
     }
+
     if (!checkForReady()) {
       Timer.periodic(Duration(milliseconds: 250), (timer) {
         if (checkForReady()) {
@@ -334,7 +333,8 @@ class GraderService {
     if (submissionsService == null) {
       return; // not ready to get submissions
     }
-    final masterStream = submissionsService!.receiveSubmissionsToProcess(graderProperties());
+    final masterStream =
+        submissionsService!.receiveSubmissionsToProcess(graderProperties());
     _statusPushTimer?.cancel();
     _statusPushTimer = Timer.periodic(Duration(seconds: 10), (_) {
       pushGraderStatus();
@@ -347,7 +347,7 @@ class GraderService {
       await for (Submission submission in masterStream) {
         int submissionId = submission.id.toInt();
         if (submissionsInProgress.contains(submissionId)) {
-          continue;  // prevent periodical push of the same submission
+          continue; // prevent periodical push of the same submission
         }
         waitForAnyWorkerIdle();
         if (shuttingDown) {
@@ -358,44 +358,44 @@ class GraderService {
         try {
           final result = await processSubmission(submission);
           if (submissionsService == null) {
-            log.severe(
-                'connection to submissions service lost, '
-                    'submission ${result.id} result not sent back'
-            );
-          }
-          else {
+            log.severe('connection to submissions service lost, '
+                'submission ${result.id} result not sent back');
+          } else {
             await submissionsService!.updateGraderOutput(result);
           }
           submissionsInProgress.remove(submissionId);
-        }
-        catch (e) {
+        } catch (e) {
           log.severe('error processing submissions ${submission.id}: $e');
         }
         await pushGraderStatus();
       }
-    }
-    catch (error) {
+    } catch (error) {
       if (isConnectionError(error)) {
         invalidateServicesConnection();
         // pushGraderStatus has implementation to check when connection will restored
         pushGraderStatus();
         return; // restart connection by local grader supervisor
-      }
-      else {
+      } else {
         log.severe('got unhandled error $error');
         // log error and become restarted by supervisor
         rethrow;
       }
     }
-
   }
-  
+
   bool isConnectionError(dynamic error) {
-    bool serviceUnavailableError = error is GrpcError && error.code==StatusCode.unavailable;
-    bool connectionLostError = error is GrpcError && error.code==StatusCode.unknown
-        && error.message!=null && error.message!.toLowerCase().startsWith('http/2 error');
-    bool httpDeadlineError = error is GrpcError && error.code==StatusCode.deadlineExceeded;
-    return _submissionsServiceConnection==null || serviceUnavailableError || connectionLostError || httpDeadlineError;
+    bool serviceUnavailableError =
+        error is GrpcError && error.code == StatusCode.unavailable;
+    bool connectionLostError = error is GrpcError &&
+        error.code == StatusCode.unknown &&
+        error.message != null &&
+        error.message!.toLowerCase().startsWith('http/2 error');
+    bool httpDeadlineError =
+        error is GrpcError && error.code == StatusCode.deadlineExceeded;
+    return _submissionsServiceConnection == null ||
+        serviceUnavailableError ||
+        connectionLostError ||
+        httpDeadlineError;
   }
 
   Future<void> pushGraderStatus() async {
@@ -404,9 +404,10 @@ class GraderService {
       ServiceStatus status = ServiceStatus.SERVICE_STATUS_UNKNOWN;
       if (shuttingDown) {
         status = ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN;
-      }
-      else {
-        status = isIdle()? ServiceStatus.SERVICE_STATUS_IDLE : ServiceStatus.SERVICE_STATUS_BUSY;
+      } else {
+        status = isIdle()
+            ? ServiceStatus.SERVICE_STATUS_IDLE
+            : ServiceStatus.SERVICE_STATUS_BUSY;
       }
       final serviceStatus = ConnectedServiceStatus(
         properties: graderProperties(),
@@ -417,13 +418,11 @@ class GraderService {
         try {
           await submissionsService!.setExternalServiceStatus(serviceStatus);
           pushOK = true;
-        }
-        catch (error) {
+        } catch (error) {
           pushOK = false;
           if (isConnectionError(error)) {
             io.sleep(reconnectTimeout);
-          }
-          else {
+          } else {
             rethrow;
           }
         }
@@ -442,7 +441,8 @@ class GraderService {
     return !isIdle();
   }
 
-  static AbstractRunner createRunner(Submission submission, GraderLocationProperties locationProperties) {
+  static AbstractRunner createRunner(
+      Submission submission, GraderLocationProperties locationProperties) {
     final courseId = submission.course.dataId;
     final problemId = submission.problemId;
     if (io.Platform.isLinux) {
@@ -451,8 +451,7 @@ class GraderService {
         courseId: courseId,
         problemId: problemId,
       );
-    }
-    else {
+    } else {
       return SimpleRunner(locationProperties: locationProperties);
     }
   }
@@ -463,6 +462,12 @@ class GraderService {
     final problemId = submission.problemId;
 
     log.info('processing submission ${submission.id} $courseId/$problemId');
+    if (submission.solutionFiles.files.isEmpty) {
+      log.severe('submission ${submission.id} has no solution files');
+      submission.status = SolutionStatus.CHECK_FAILED;
+      submission.buildErrorLog = 'No files in solution';
+      return submission;
+    }
 
     final problemLoader = ProblemLoader(
       submission: submission,
@@ -489,10 +494,7 @@ class GraderService {
     submission.buildErrorLog = 'submission processing not completed';
 
     if (singleThreaded) {
-      final runner = createRunner(
-          submission,
-          locationProperties
-      );
+      final runner = createRunner(submission, locationProperties);
       final submissionProcessor = SubmissionProcessor(
         runner: runner,
         locationProperties: locationProperties,
@@ -502,8 +504,7 @@ class GraderService {
         defaultSecurityContext: defaultSecurityContext,
       );
       return submissionProcessor.processSubmission(submission);
-    }
-    else {
+    } else {
       final job = WorkerRequest(
         submission: submission,
         locationProperties: locationProperties,
@@ -514,13 +515,13 @@ class GraderService {
       );
 
       final worker = Worker(submission);
-      _idleWorkersCount --;
+      _idleWorkersCount--;
       final completer = Completer<Submission>();
       worker.process(job).then((value) {
-        _idleWorkersCount ++;
+        _idleWorkersCount++;
         completer.complete(value);
       }, onError: (error, stackTrace) {
-        _idleWorkersCount ++;
+        _idleWorkersCount++;
         completer.completeError(error, stackTrace);
       });
       return completer.future;
@@ -535,12 +536,9 @@ class GraderService {
         properties: graderProperties(),
         status: ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN,
       ));
-    } catch (_) {
-
-    }
+    } catch (_) {}
     shutdownExitCode = error ? 1 : 0;
     io.sleep(Duration(seconds: 2));
     io.exit(shutdownExitCode);
   }
-
 }
