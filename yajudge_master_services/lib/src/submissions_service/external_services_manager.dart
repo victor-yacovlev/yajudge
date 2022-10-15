@@ -14,8 +14,7 @@ class ExternalServiceConnection {
   int capacity = 0;
 
   ExternalServiceConnection(this.call, this.properties) {
-    String identity =
-        '${properties.name} with CPU=${properties.platform.arch}'
+    String identity = '${properties.name} with CPU=${properties.platform.arch}'
         ', THREADS=${properties.numberOfWorkers}'
         ' and PR=${properties.performanceRating}';
     if (properties.archSpecificOnlyJobs) {
@@ -31,9 +30,9 @@ class ExternalServiceConnection {
     status = ServiceStatus.SERVICE_STATUS_SHUTTING_DOWN;
     sink.close();
     if (error != null) {
-      log.severe('${properties.role.name} ${properties.name} disconnected due to error $error');
-    }
-    else {
+      log.severe(
+          '${properties.role.name} ${properties.name} disconnected due to error $error');
+    } else {
       log.info('${properties.role.name} ${properties.name} disconnected');
     }
   }
@@ -42,17 +41,19 @@ class ExternalServiceConnection {
     if (status != ServiceStatus.SERVICE_STATUS_IDLE || capacity <= 0) {
       return false;
     }
+    if (submission.solutionFiles.files.isEmpty) {
+      log.severe(
+          "Trying to push submission ${submission.id} with no solution files");
+    }
     sink.add(submission);
-    capacity --;
+    capacity--;
     return true;
   }
-
-
 }
 
 class ExternalServicesManager {
   final Logger log = Logger('ExternalServicesManager');
-  final Map<String,ExternalServiceConnection> _connections = {};
+  final Map<String, ExternalServiceConnection> _connections = {};
 
   bool get hasGraders => _connections.isNotEmpty;
 
@@ -76,7 +77,8 @@ class ExternalServicesManager {
     }
   }
 
-  StreamController<Submission> registerNewService(ServiceCall call, ConnectedServiceProperties announce) {
+  StreamController<Submission> registerNewService(
+      ServiceCall call, ConnectedServiceProperties announce) {
     // Check if here was not removed connection to the same service
     final identity = '${announce.name}|${announce.role}';
     if (_connections.containsKey(identity)) {
@@ -88,7 +90,8 @@ class ExternalServicesManager {
     return _connections[identity]!.sink;
   }
 
-  void setServiceStatus(ServiceRole role, String name, ServiceStatus status, int capacity) {
+  void setServiceStatus(
+      ServiceRole role, String name, ServiceStatus status, int capacity) {
     final identity = '$name|$role';
     if (!_connections.containsKey(identity)) {
       return;
@@ -101,7 +104,8 @@ class ExternalServicesManager {
     }
   }
 
-  void deregisterService(ServiceRole role, String name, [Object? error, StackTrace? stackTrace]) {
+  void deregisterService(ServiceRole role, String name,
+      [Object? error, StackTrace? stackTrace]) {
     final identity = '$name|$role';
     if (!_connections.containsKey(identity)) {
       return;
@@ -110,14 +114,16 @@ class ExternalServicesManager {
     _connections.remove(identity);
   }
 
-  ExternalServiceConnection? findService(ServiceRole role, GradingPlatform platformRequired) {
+  ExternalServiceConnection? findService(
+      ServiceRole role, GradingPlatform platformRequired) {
     List<ExternalServiceConnection> candidates = [];
     for (final service in _connections.values) {
       if (service.properties.role != role) {
-        continue;  // not suitable service
+        continue; // not suitable service
       }
-      if (service.status != ServiceStatus.SERVICE_STATUS_IDLE && service.capacity > 0) {
-        continue;  // service not ready yet or processing another submission
+      if (service.status != ServiceStatus.SERVICE_STATUS_IDLE &&
+          service.capacity > 0) {
+        continue; // service not ready yet or processing another submission
       }
       if (platformRequired.arch != Arch.ARCH_ANY) {
         // problem requires specific CPU
@@ -125,7 +131,8 @@ class ExternalServicesManager {
           continue; // CPU not matched
         }
       }
-      if (service.properties.archSpecificOnlyJobs && platformRequired.arch == Arch.ARCH_ANY) {
+      if (service.properties.archSpecificOnlyJobs &&
+          platformRequired.arch == Arch.ARCH_ANY) {
         // service accepts only arch-specific jobs but not generic
         continue;
       }
@@ -137,7 +144,8 @@ class ExternalServicesManager {
 
     // if several graders available then return best performance rated
     if (candidates.length > 1) {
-      candidates.sort((ExternalServiceConnection a, ExternalServiceConnection b) {
+      candidates
+          .sort((ExternalServiceConnection a, ExternalServiceConnection b) {
         final aRating = a.properties.performanceRating * a.capacity;
         final bRating = b.properties.performanceRating * b.capacity;
         return aRating.compareTo(bRating);
@@ -145,6 +153,4 @@ class ExternalServicesManager {
     }
     return candidates.last;
   }
-
-
 }
