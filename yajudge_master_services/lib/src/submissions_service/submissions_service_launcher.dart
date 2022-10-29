@@ -4,7 +4,6 @@ import '../service_launcher.dart';
 import 'submissions_service.dart';
 
 class SubmissionsServiceLauncher extends ServiceLauncherBase {
-
   SubmissionsServiceLauncher() : super('submissions');
 
   @override
@@ -23,5 +22,4 @@ class SubmissionsServiceLauncher extends ServiceLauncherBase {
     super.markMethodPrivate('ReceiveSubmissionsToProcess');
     super.markMethodPrivate('SetExternalServiceStatus');
   }
-
 }

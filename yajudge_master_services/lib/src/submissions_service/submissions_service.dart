@@ -23,18 +23,15 @@ class SubmissionListNotificationsEntry {
   SubmissionListNotificationsEntry(this.user, this.request, this.controller);
 }
 
-class SubmissionManagementService extends SubmissionManagementServiceBase
-    with CourseDataConsumer, LastSeenTracker {
+class SubmissionManagementService extends SubmissionManagementServiceBase with CourseDataConsumer, LastSeenTracker {
   final Logger log = Logger('SubmissionManager');
   final PostgreSQLConnection connection;
   final ServicesConnector services;
   final String secretKey;
 
-  final Map<String, List<StreamController<Submission>>>
-      _submissionResultStreamControllers = {};
+  final Map<String, List<StreamController<Submission>>> _submissionResultStreamControllers = {};
 
-  final Map<String, SubmissionListNotificationsEntry> _submissionListListeners =
-      {};
+  final Map<String, SubmissionListNotificationsEntry> _submissionListListeners = {};
 
   final ExternalServicesManager _gradersManager = ExternalServicesManager();
 
@@ -54,16 +51,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   @override
-  Future<SubmissionList> getSubmissions(
-      ServiceCall call, SubmissionFilter request) async {
+  Future<SubmissionList> getSubmissions(ServiceCall call, SubmissionFilter request) async {
     await _checkAccessToCourse(call, request.user, request.course);
-    final submissions = await _getSubmissions(
-        request.user, request.course, request.problemId, request.status);
+    final submissions = await _getSubmissions(request.user, request.course, request.problemId, request.status);
     return SubmissionList(submissions: submissions);
   }
 
-  Future<void> _checkAccessToCourse(
-      ServiceCall call, User user, Course course) async {
+  Future<void> _checkAccessToCourse(ServiceCall call, User user, Course course) async {
     if (services.courses == null) {
       final message = 'service courses offline while _checkAccessToCourse';
       log.severe(message);
@@ -73,8 +67,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     if (currentUser == null) {
       throw GrpcError.unauthenticated('no user information in request call');
     }
-    final enrollmentsResponse =
-        await services.courses!.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     List<Enrollment> enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -85,8 +78,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     }
     if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
       if (courseEnroll == null) {
-        throw GrpcError.permissionDenied(
-            'user ${user.id} not enrolled to ${course.id}');
+        throw GrpcError.permissionDenied('user ${user.id} not enrolled to ${course.id}');
       }
       if (courseEnroll.role == Role.ROLE_STUDENT && user.id != currentUser.id) {
         throw GrpcError.permissionDenied('cant access not own submissions');
@@ -95,8 +87,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   @override
-  Future<SubmissionListResponse> getSubmissionList(
-      ServiceCall call, SubmissionListQuery request) async {
+  Future<SubmissionListResponse> getSubmissionList(ServiceCall call, SubmissionListQuery request) async {
     if (services.deadlines == null) {
       final message = 'service deadlines offline while GetSubmissionsList';
       log.severe(message);
@@ -104,8 +95,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     }
     final currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
-      throw GrpcError.unauthenticated(
-          'must be logged in user to get submissions list');
+      throw GrpcError.unauthenticated('must be logged in user to get submissions list');
     }
     String countQueryBegin = '''
       select count(submissions.id)
@@ -142,10 +132,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
         queryFilter += ' and submissions.courses_id=@course_id ';
         queryValues['course_id'] = request.courseId.toInt();
       }
-      if (!{
-        SolutionStatus.ANY_STATUS_OR_NULL,
-        SolutionStatus.HARD_DEADLINE_PASSED
-      }.contains(request.statusFilter)) {
+      if (!{SolutionStatus.ANY_STATUS_OR_NULL, SolutionStatus.HARD_DEADLINE_PASSED}.contains(request.statusFilter)) {
         queryFilter += ' and status=@status ';
         queryValues['status'] = request.statusFilter.value;
       }
@@ -174,20 +161,17 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
           upper(concat(users.first_name, ' ', users.last_name)) like @name
         )  
         ''';
-          String normalizedName =
-              request.nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
+          String normalizedName = request.nameQuery.trim().toUpperCase().replaceAll(r'\s+', ' ');
           queryValues['name'] = '$normalizedName%';
         }
       }
     }
     final countQuery = countQueryBegin + queryFilter;
     final dataQuery = dataQueryBegin + queryFilter + queryEnd;
-    final countQueryRows =
-        await connection.query(countQuery, substitutionValues: queryValues);
+    final countQueryRows = await connection.query(countQuery, substitutionValues: queryValues);
     final countRow = countQueryRows.single;
     final countValue = countRow.single as int;
-    final dataQueryRows =
-        await connection.query(dataQuery, substitutionValues: queryValues);
+    final dataQueryRows = await connection.query(dataQuery, substitutionValues: queryValues);
     List<SubmissionListEntry> result = [];
     for (final row in dataQueryRows) {
       int id = row[0];
@@ -213,8 +197,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
         gradingStatus: gradingStatus,
         user: sender,
       );
-      final deadlines =
-          await services.deadlines!.getSubmissionDeadlines(submission);
+      final deadlines = await services.deadlines!.getSubmissionDeadlines(submission);
       final hardDeadline = deadlines.hardDeadline;
       bool hardDeadlinePassed = false;
       if (hardDeadline > 0) {
@@ -238,8 +221,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     );
   }
 
-  Future<List<Submission>> _getSubmissions(
-      User user, Course course, String problemId, SolutionStatus status) async {
+  Future<List<Submission>> _getSubmissions(User user, Course course, String problemId, SolutionStatus status) async {
     String query = '''
     select submissions.id, users_id, problem_id, datetime, status,
        users.first_name, users.last_name, users.mid_name,
@@ -264,8 +246,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
       queryArguments['status'] = status.value;
     }
     query += ' and ${conditions.join(' and ')}';
-    List<dynamic> rows =
-        await connection.query(query, substitutionValues: queryArguments);
+    List<dynamic> rows = await connection.query(query, substitutionValues: queryArguments);
     List<Submission> result = [];
     for (List<dynamic> fields in rows) {
       int id = fields[0];
@@ -297,8 +278,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     return result;
   }
 
-  Future<Submission> getSubmissionInfo(
-      ServiceCall call, Submission request) async {
+  Future<Submission> getSubmissionInfo(ServiceCall call, Submission request) async {
     if (services.users == null) {
       final message = 'service users offline while GetSubmissionInfo';
       log.severe(message);
@@ -328,8 +308,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     from submissions
     where id=@id
       ''';
-    final submissionRows =
-        await connection.query(query, substitutionValues: {'id': submissionId});
+    final submissionRows = await connection.query(query, substitutionValues: {'id': submissionId});
     if (submissionRows.isEmpty) {
       throw GrpcError.notFound('no submission found: $submissionId');
     }
@@ -340,13 +319,11 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     final status = SolutionStatus.valueOf(firstSubmissionRow[3])!;
     String? styleErrorLog = firstSubmissionRow[4];
     String? compileErrorLog = firstSubmissionRow[5];
-    final gradingStatus =
-        SubmissionProcessStatus.valueOf(firstSubmissionRow[6])!;
+    final gradingStatus = SubmissionProcessStatus.valueOf(firstSubmissionRow[6])!;
     styleErrorLog ??= '';
     compileErrorLog ??= '';
 
-    final enrollmentsResponse =
-        await services.courses!.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -358,14 +335,12 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
       bool noCourseEnroll = courseEnroll == null;
       bool userNotMatch = userId != currentUser.id.toInt();
-      if (noCourseEnroll ||
-          courseEnroll.role == Role.ROLE_STUDENT && userNotMatch) {
+      if (noCourseEnroll || courseEnroll.role == Role.ROLE_STUDENT && userNotMatch) {
         throw GrpcError.permissionDenied('cant access not own submissions');
       }
     }
 
-    final deadlines = await services.deadlines!
-        .getSubmissionDeadlines(Submission(id: Int64(submissionId)));
+    final deadlines = await services.deadlines!.getSubmissionDeadlines(Submission(id: Int64(submissionId)));
 
     final submission = Submission(
       id: Int64(submissionId),
@@ -385,8 +360,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   @override
-  Future<Submission> getSubmissionResult(
-      ServiceCall call, Submission request) async {
+  Future<Submission> getSubmissionResult(ServiceCall call, Submission request) async {
     final submissionId = request.id.toInt();
     final submission = await getSubmissionInfo(call, request);
 
@@ -401,8 +375,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
       SolutionStatus.WRONG_ANSWER,
     ];
     if (brokenStatuses.contains(submission.status)) {
-      final allTestResults =
-          await getSubmissionTestResults(submission.status, request);
+      final allTestResults = await getSubmissionTestResults(submission.status, request);
       // find first broken test and send it only to save network traffic
       for (final test in allTestResults) {
         if (test.status == submission.status) {
@@ -417,8 +390,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     return submission;
   }
 
-  Future<List<TestResult>> getSubmissionResultsFromSQL(
-      Submission submission) async {
+  Future<List<TestResult>> getSubmissionResultsFromSQL(Submission submission) async {
     final query = '''
       select submission_protobuf_gzipped_base64 
       from submission_results 
@@ -436,8 +408,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
       if (submissionProtobufGzippedBase64 == null) {
         return [];
       }
-      final submissionProtobufGzipped =
-          base64Decode(submissionProtobufGzippedBase64);
+      final submissionProtobufGzipped = base64Decode(submissionProtobufGzippedBase64);
       final submissionProtobuf = io.gzip.decode(submissionProtobufGzipped);
       submission = Submission.fromBuffer(submissionProtobuf);
     } catch (e) {
@@ -447,8 +418,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     return submission.testResults;
   }
 
-  Future<List<TestResult>> getSubmissionTestResults(
-      SolutionStatus solutionStatus, Submission submission) async {
+  Future<List<TestResult>> getSubmissionTestResults(SolutionStatus solutionStatus, Submission submission) async {
     final haveTestsStatuses = [
       SolutionStatus.OK,
       SolutionStatus.WRONG_ANSWER,
@@ -463,8 +433,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   @override
-  Future<Submission> submitProblemSolution(
-      ServiceCall call, Submission request) async {
+  Future<Submission> submitProblemSolution(ServiceCall call, Submission request) async {
     if (services.users == null) {
       final message = 'service users offline while SubmitProblemSolution';
       log.severe(message);
@@ -487,15 +456,13 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     }
     User? currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
-      throw GrpcError.unauthenticated(
-          'no user data in call request while trying to submit solution');
+      throw GrpcError.unauthenticated('no user data in call request while trying to submit solution');
     }
     currentUser = await services.users!.getProfileById(
       currentUser,
       options: CallOptions(metadata: call.clientMetadata),
     );
-    final enrollmentsResponse =
-        await services.courses!.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -504,10 +471,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
         break;
       }
     }
-    if (courseEnroll == null &&
-        request.user.defaultRole != Role.ROLE_ADMINISTRATOR) {
-      throw GrpcError.permissionDenied(
-          'user ${request.user.id} not enrolled to ${request.course.id}');
+    if (courseEnroll == null && request.user.defaultRole != Role.ROLE_ADMINISTRATOR) {
+      throw GrpcError.permissionDenied('user ${request.user.id} not enrolled to ${request.course.id}');
     }
     List<dynamic> submissionsRows = await connection.query('''
       insert into submissions(users_id,courses_id,problem_id,status,datetime,grading_status)
@@ -537,8 +502,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
     try {
       services.progress?.notifyProblemStatusChanged(request);
     } catch (e) {
-      log.warning(
-          'cant notify progress service about submission ${request.id}: $e');
+      log.warning('cant notify progress service about submission ${request.id}: $e');
     }
     await _notifySubmissionResultChanged(request);
     await pushSubmissionToGrader(request);
@@ -546,6 +510,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   Future assignGrader(Submission submission, String graderName) async {
+    final assignTimestamp = DateTime.now().toUtc();
     await connection.query('''
       update submissions
       set grading_status=@grading_status, grader_name=@grader_name
@@ -554,6 +519,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
       'id': submission.id.toInt(),
       'grading_status': SubmissionProcessStatus.PROCESS_ASSIGNED.value,
       'grader_name': graderName,
+      'sent_to_grader': assignTimestamp,
     });
     final assignedSubmission = submission.deepCopy();
     assignedSubmission.graderName = graderName;
@@ -574,10 +540,8 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   }
 
   @override
-  Future<Submission> updateSubmissionStatus(
-      ServiceCall? call, Submission request) async {
-    log.info(
-        'manual submission ${request.id} status update: ${request.status.value} (${request.status.name})');
+  Future<Submission> updateSubmissionStatus(ServiceCall? call, Submission request) async {
+    log.info('manual submission ${request.id} status update: ${request.status.value} (${request.status.name})');
     final query = '''
     update submissions set status=@status where id=@id
     ''';
@@ -592,8 +556,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase
   Future insertSubmissionResultsIntoSQL(Submission submission) async {
     final submissionProtobuf = submission.writeToBuffer();
     final submissionProtobufGzipped = io.gzip.encode(submissionProtobuf);
-    final submissionProtobufGzippedBase64 =
-        base64Encode(submissionProtobufGzipped);
+    final submissionProtobufGzippedBase64 = base64Encode(submissionProtobufGzipped);
     await connection.query('''
 insert into submission_results(id,submission_protobuf_gzipped_base64)
 values (@id,@data)
@@ -604,15 +567,13 @@ values (@id,@data)
   }
 
   Future deleteSubmissionResultsFromSQL(Submission submission) {
-    return connection.execute('delete from submission_results where id=@id',
-        substitutionValues: {'id': submission.id.toInt()});
+    return connection
+        .execute('delete from submission_results where id=@id', substitutionValues: {'id': submission.id.toInt()});
   }
 
   @override
-  Future<Submission> updateGraderOutput(
-      ServiceCall? call, Submission request) async {
-    log.info(
-        'got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
+  Future<Submission> updateGraderOutput(ServiceCall? call, Submission request) async {
+    log.info('got response from grader ${request.graderName} on ${request.id}: status = ${request.status.name}');
     request = request.deepCopy();
     request.gradingStatus = SubmissionProcessStatus.PROCESS_DONE;
     final submissionResultsDeleter = deleteSubmissionResultsFromSQL;
@@ -627,8 +588,7 @@ values (@id,@data)
       final courseData = await getCourseData(call, course);
       final problemId = request.problemId;
       final problemMetadata = courseData.findProblemMetadataById(problemId);
-      bool skipCodeReview =
-          course.disableReview || problemMetadata.skipCodeReview;
+      bool skipCodeReview = course.disableReview || problemMetadata.skipCodeReview;
       if (!skipCodeReview) {
         request.status = SolutionStatus.PENDING_REVIEW;
         // do not change submission status in case of review processed
@@ -686,8 +646,7 @@ values (@id,@data)
     try {
       services.progress?.notifyProblemStatusChanged(request);
     } catch (e) {
-      log.warning(
-          'cant notify progress service about submission ${request.id}: $e');
+      log.warning('cant notify progress service about submission ${request.id}: $e');
     }
     // clean unnecessary test results
     const brokenStatuses = [
@@ -726,13 +685,30 @@ values (@id,@data)
   }
 
   Future<List<Submission>> getSubmissionsToGrade() async {
+    final now = DateTime.now().toUtc();
+    final retryTimestamp = now.subtract(Duration(seconds: 15));
     List<dynamic> rows = await connection.query('''
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
-      where grading_status=@grading_status and courses_id=courses.id
+      where 
+        (
+          grading_status=@queued_status
+          or
+          (
+            grading_status==@done_status
+            and
+            status=@check_error
+            and
+            sent_to_grader<=@retry_timestamp
+          )
+        )
+        and courses_id=courses.id
       order by datetime
       ''', substitutionValues: {
-      'grading_status': SubmissionProcessStatus.PROCESS_QUEUED.value
+      'queued_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
+      'done_status': SubmissionProcessStatus.PROCESS_DONE.value,
+      'check_error': SolutionStatus.CHECK_FAILED,
+      'sent_to_grader': retryTimestamp,
     });
     List<Submission> result = [];
     for (final e in rows) {
@@ -754,8 +730,7 @@ values (@id,@data)
     return result;
   }
 
-  Future<List<Submission>> getUnfinishedSubmissionToGrade(
-      String graderName) async {
+  Future<List<Submission>> getUnfinishedSubmissionToGrade(String graderName) async {
     List<dynamic> rows = await connection.query('''
       select submissions.id, users_id, courses_id, problem_id, course_data 
       from submissions, courses
@@ -787,10 +762,8 @@ values (@id,@data)
   }
 
   @override
-  Future<Submission> takeSubmissionToGrade(
-      ServiceCall call, ConnectedServiceProperties request) async {
-    List<Submission> unfinished =
-        await getUnfinishedSubmissionToGrade(request.name);
+  Future<Submission> takeSubmissionToGrade(ServiceCall call, ConnectedServiceProperties request) async {
+    List<Submission> unfinished = await getUnfinishedSubmissionToGrade(request.name);
     if (unfinished.isNotEmpty) {
       Submission submission = unfinished.first;
       log.info('submission ${submission.id} sent to grader ${request.name}');
@@ -798,18 +771,15 @@ values (@id,@data)
     }
     List<Submission> newSubmissions = await getSubmissionsToGrade();
     for (Submission submission in newSubmissions) {
-      ProblemData problemData =
-          await getProblemDataForSubmission(call, submission);
+      ProblemData problemData = await getProblemDataForSubmission(call, submission);
       if (graderMatch(request, problemData.gradingOptions)) {
         assignGrader(submission, request.name);
         try {
           services.progress?.notifyProblemStatusChanged(submission);
         } catch (e) {
-          log.warning(
-              'cant notify progress service about submission ${submission.id}: $e');
+          log.warning('cant notify progress service about submission ${submission.id}: $e');
         }
-        log.info(
-            'submission ${submission.id} assigned and sent to grader ${request.name}');
+        log.info('submission ${submission.id} assigned and sent to grader ${request.name}');
         return submission;
       }
     }
@@ -817,21 +787,17 @@ values (@id,@data)
   }
 
   bool graderMatch(ConnectedServiceProperties grader, GradingOptions options) {
-    return grader.platform.arch == options.platformRequired.arch ||
-        options.platformRequired.arch == Arch.ARCH_ANY;
+    return grader.platform.arch == options.platformRequired.arch || options.platformRequired.arch == Arch.ARCH_ANY;
   }
 
-  Future<ProblemData> getProblemDataForSubmission(
-      ServiceCall? call, Submission sub) async {
+  Future<ProblemData> getProblemDataForSubmission(ServiceCall? call, Submission sub) async {
     if (services.content == null) {
-      final message =
-          'service content offline while GetProblemDataForSubmission';
+      final message = 'service content offline while GetProblemDataForSubmission';
       log.severe(message);
       throw GrpcError.unavailable(message);
     }
     if (services.courses == null) {
-      final message =
-          'service courses offline while GetProblemDataForSubmission';
+      final message = 'service courses offline while GetProblemDataForSubmission';
       log.severe(message);
       throw GrpcError.unavailable(message);
     }
@@ -853,8 +819,7 @@ values (@id,@data)
   Future _notifySubmissionResultChanged(Submission submission) async {
     Submission deadlines = Submission();
     if (services.deadlines == null) {
-      log.warning(
-          'service deadlines offline while trying to make notifications');
+      log.warning('service deadlines offline while trying to make notifications');
     } else {
       deadlines = await services.deadlines!.getSubmissionDeadlines(submission);
     }
@@ -899,8 +864,7 @@ values (@id,@data)
   }
 
   @override
-  Future<RejudgeRequest> rejudge(
-      ServiceCall call, RejudgeRequest request) async {
+  Future<RejudgeRequest> rejudge(ServiceCall call, RejudgeRequest request) async {
     if (services.courses == null) {
       final message = 'service courses offline while Rejudge';
       log.severe(message);
@@ -908,11 +872,9 @@ values (@id,@data)
     }
     final currentUser = call.getSessionUser(secretKey);
     if (currentUser == null) {
-      throw GrpcError.unauthenticated(
-          'requires user metadata in request to rejudge');
+      throw GrpcError.unauthenticated('requires user metadata in request to rejudge');
     }
-    final enrollmentsResponse =
-        await services.courses!.getUserEnrollments(currentUser);
+    final enrollmentsResponse = await services.courses!.getUserEnrollments(currentUser);
     final enrollments = enrollmentsResponse.enrollments;
     Enrollment? courseEnroll;
     for (Enrollment e in enrollments) {
@@ -923,8 +885,7 @@ values (@id,@data)
     }
     if (currentUser.defaultRole != Role.ROLE_ADMINISTRATOR) {
       if (courseEnroll == null) {
-        throw GrpcError.permissionDenied(
-            'user ${request.user.id} not enrolled to ${request.course.id}');
+        throw GrpcError.permissionDenied('user ${request.user.id} not enrolled to ${request.course.id}');
       }
       if (courseEnroll.role == Role.ROLE_STUDENT) {
         throw GrpcError.permissionDenied('only teachers can initiate rejudge');
@@ -935,12 +896,10 @@ values (@id,@data)
       final submissionResultsDeleter = deleteSubmissionResultsFromSQL;
       await submissionResultsDeleter(submission);
 
-      await connection.query(
-          'update submissions set grading_status=@new_status where id=@id',
-          substitutionValues: {
-            'new_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
-            'id': submission.id.toInt(),
-          });
+      await connection.query('update submissions set grading_status=@new_status where id=@id', substitutionValues: {
+        'new_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
+        'id': submission.id.toInt(),
+      });
       final rows = await connection.query(
           'select users_id, first_name, last_name, mid_name, datetime, grader_name, status '
           'from submissions, users '
@@ -956,11 +915,7 @@ values (@id,@data)
       final datetime = firstRow[4] as DateTime;
       final graderName = firstRow[5] as String;
       final status = firstRow[6] as int;
-      submission.user = User(
-          id: userId,
-          firstName: firstName,
-          lastName: lastName,
-          midName: midName);
+      submission.user = User(id: userId, firstName: firstName, lastName: lastName, midName: midName);
       submission.status = SolutionStatus.valueOf(status)!;
       submission.gradingStatus = SubmissionProcessStatus.PROCESS_QUEUED;
       submission.styleErrorLog = submission.buildErrorLog = '';
@@ -976,8 +931,7 @@ values (@id,@data)
       await rejudgeSubmission(request.submission.deepCopy());
     } else if (request.course.id > 0 && request.problemId.isNotEmpty) {
       // rejudge all problem submissions within course
-      String query =
-          'select id from submissions where courses_id=@courses_id and problem_id=@problem_id';
+      String query = 'select id from submissions where courses_id=@courses_id and problem_id=@problem_id';
       if (request.onlyFailedSubmissions) {
         query += ' and status<>${SolutionStatus.OK.value}';
         query += ' and status<>${SolutionStatus.DISQUALIFIED.value}';
@@ -992,9 +946,7 @@ values (@id,@data)
       final submissions = <Submission>[];
       for (final row in rows) {
         final submissionId = row[0] as int;
-        submissions.add(
-            Submission(id: Int64(submissionId), problemId: request.problemId)
-                .deepCopy());
+        submissions.add(Submission(id: Int64(submissionId), problemId: request.problemId).deepCopy());
       }
       for (final submission in submissions) {
         await rejudgeSubmission(submission);
@@ -1007,13 +959,11 @@ values (@id,@data)
   }
 
   @override
-  Stream<Submission> subscribeToSubmissionResultNotifications(
-      ServiceCall call, Submission request) {
+  Stream<Submission> subscribeToSubmissionResultNotifications(ServiceCall call, Submission request) {
     final key = '${request.id}';
     StreamController<Submission> controller = StreamController<Submission>();
     controller.onCancel = () {
-      log.info(
-          'removing controller from submission status listeners with key $key');
+      log.info('removing controller from submission status listeners with key $key');
       List<StreamController<Submission>> controllers;
       controllers = _submissionResultStreamControllers[key]!;
       controllers.remove(controller);
@@ -1049,8 +999,7 @@ values (@id,@data)
   }
 
   @override
-  Stream<Submission> receiveSubmissionsToProcess(
-      ServiceCall call, ConnectedServiceProperties request) {
+  Stream<Submission> receiveSubmissionsToProcess(ServiceCall call, ConnectedServiceProperties request) {
     final streamController = _gradersManager.registerNewService(call, request);
 
     // check for unfinished submission processing by this grader and reassign them again
@@ -1071,13 +1020,11 @@ values (@id,@data)
     try {
       problemData = await getProblemDataForSubmission(null, submission);
     } catch (e) {
-      log.severe(
-          'cant get problem data for ${submission.problemId} while pushing to grader');
+      log.severe('cant get problem data for ${submission.problemId} while pushing to grader');
       return false;
     }
     final platformRequired = problemData.gradingOptions.platformRequired;
-    final graderConnection = _gradersManager.findService(
-        ServiceRole.SERVICE_GRADING, platformRequired);
+    final graderConnection = _gradersManager.findService(ServiceRole.SERVICE_GRADING, platformRequired);
     bool result = false;
     if (graderConnection != null) {
       if (graderConnection.pushSubmission(submission)) {
@@ -1085,11 +1032,9 @@ values (@id,@data)
         try {
           services.progress?.notifyProblemStatusChanged(submission);
         } catch (e) {
-          log.warning(
-              'cant notify progress service about submission ${submission.id}: $e');
+          log.warning('cant notify progress service about submission ${submission.id}: $e');
         }
-        log.info(
-            'submission ${submission.id} assigned and sent to grader ${graderConnection.properties.name}');
+        log.info('submission ${submission.id} assigned and sent to grader ${graderConnection.properties.name}');
         result = true;
       }
     }
@@ -1111,10 +1056,9 @@ values (@id,@data)
   }
 
   @override
-  Future<Empty> setExternalServiceStatus(
-      ServiceCall call, ConnectedServiceStatus request) async {
-    _gradersManager.setServiceStatus(request.properties.role,
-        request.properties.name, request.status, request.capacity);
+  Future<Empty> setExternalServiceStatus(ServiceCall call, ConnectedServiceStatus request) async {
+    _gradersManager.setServiceStatus(
+        request.properties.role, request.properties.name, request.status, request.capacity);
     return Empty();
   }
 
@@ -1124,8 +1068,7 @@ values (@id,@data)
     final key = call.session;
     final currentUser = call.getSessionUser(secretKey);
     if (key.isEmpty || currentUser == null) {
-      throw GrpcError.unauthenticated(
-          'requires session and user in call request');
+      throw GrpcError.unauthenticated('requires session and user in call request');
     }
 
     Future cancelExistingSubscription() async {
@@ -1136,16 +1079,14 @@ values (@id,@data)
         if (!existingController.isClosed) {
           await existingController.close();
         }
-        log.fine(
-            'canceled and forgot list notification subscription for client $key');
+        log.fine('canceled and forgot list notification subscription for client $key');
       }
     }
 
     await cancelExistingSubscription();
 
     final controller = StreamController<SubmissionListEntry>();
-    final listener =
-        SubmissionListNotificationsEntry(currentUser, request, controller);
+    final listener = SubmissionListNotificationsEntry(currentUser, request, controller);
     _submissionListListeners[key] = listener;
 
     const maxInactivityTime = Duration(minutes: 15);
@@ -1172,8 +1113,7 @@ values (@id,@data)
       }
     }
     if (minId > 0 && maxId > 0) {
-      log.fine(
-          'subscribed to list [$minId...$maxId] notification by client $key');
+      log.fine('subscribed to list [$minId...$maxId] notification by client $key');
     } else {
       log.fine('subscribed to list notification by client $key');
     }
@@ -1182,8 +1122,7 @@ values (@id,@data)
   }
 
   @override
-  Future<DiffViewResponse> getSubmissionsToDiff(
-      ServiceCall call, DiffViewRequest request) async {
+  Future<DiffViewResponse> getSubmissionsToDiff(ServiceCall call, DiffViewRequest request) async {
     if (services.users == null) {
       final message = 'service users offline while GetSubmissionsToDiff';
       log.severe(message);
@@ -1195,24 +1134,17 @@ values (@id,@data)
     if (firstSource.hasExternal() || secondSource.hasExternal()) {
       throw UnimplementedError();
     }
-    final firstSubmission =
-        await getSubmissionInfo(call, firstSource.submission);
-    firstSubmission.user = await services.users!.getProfileById(
-        firstSubmission.user,
-        options: CallOptions(metadata: call.clientMetadata));
+    final firstSubmission = await getSubmissionInfo(call, firstSource.submission);
+    firstSubmission.user =
+        await services.users!.getProfileById(firstSubmission.user, options: CallOptions(metadata: call.clientMetadata));
     request.first.submission = firstSubmission;
-    final firstFiles =
-        FileSet(files: await getSubmissionFiles(firstSubmission.id.toInt()));
-    final secondSubmission =
-        await getSubmissionInfo(call, secondSource.submission);
-    secondSubmission.user = await services.users!.getProfileById(
-        secondSubmission.user,
-        options: CallOptions(metadata: call.clientMetadata));
+    final firstFiles = FileSet(files: await getSubmissionFiles(firstSubmission.id.toInt()));
+    final secondSubmission = await getSubmissionInfo(call, secondSource.submission);
+    secondSubmission.user = await services.users!
+        .getProfileById(secondSubmission.user, options: CallOptions(metadata: call.clientMetadata));
     request.second.submission = secondSubmission;
-    final secondFiles =
-        FileSet(files: await getSubmissionFiles(secondSubmission.id.toInt()));
-    final tempDirPath =
-        '${io.Directory.systemTemp.path}/yajudge-master-${io.pid}/diffview';
+    final secondFiles = FileSet(files: await getSubmissionFiles(secondSubmission.id.toInt()));
+    final tempDirPath = '${io.Directory.systemTemp.path}/yajudge-master-${io.pid}/diffview';
     final firstDirPath = '$tempDirPath/submission${firstSubmission.id}';
     final secondDirPath = '$tempDirPath/submission${secondSubmission.id}';
     io.Directory(firstDirPath).createSync(recursive: true);
@@ -1229,8 +1161,7 @@ values (@id,@data)
       io.File(firstFilePath).writeAsBytesSync(firstFile.data, flush: true);
       io.File(secondFilePath).writeAsBytesSync(secondFile.data, flush: true);
       final diffArguments = diffOptions + [firstFilePath, secondFilePath];
-      final diffCommandResult = io.Process.runSync('diff', diffArguments,
-          stdoutEncoding: Encoding.getByName('utf-8'));
+      final diffCommandResult = io.Process.runSync('diff', diffArguments, stdoutEncoding: Encoding.getByName('utf-8'));
       final diffOutput = diffCommandResult.stdout as String;
       final firstText = utf8.decode(firstFile.data, allowMalformed: true);
       final secondText = utf8.decode(secondFile.data, allowMalformed: true);
@@ -1290,8 +1221,7 @@ values (@id,@data)
       final rangeFirst = parseLineRange(rangeFirstText);
       final rangeSecond = parseLineRange(rangeSecondText);
       final operationType = parseDiffOperation(opText);
-      final operation = DiffOperation(
-          from: rangeFirst, to: rangeSecond, operation: operationType);
+      final operation = DiffOperation(from: rangeFirst, to: rangeSecond, operation: operationType);
       result.add(operation);
       switch (operationType) {
         case DiffOperationType.LINE_INSERTED:

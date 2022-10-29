@@ -314,6 +314,7 @@ message Submission {
 
   SubmissionProcessStatus grading_status = 100;
   SubmissionProcessStatus cheat_check_status = 101;
+  int64               sent_to_grader = 201; // timestamp to be used for repeat sending in case of error
 
   // not to be stored directly in database
   int64               soft_deadline = 300;
