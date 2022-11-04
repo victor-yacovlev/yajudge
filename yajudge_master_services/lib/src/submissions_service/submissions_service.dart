@@ -513,7 +513,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase with C
     final assignTimestamp = DateTime.now().toUtc();
     await connection.query('''
       update submissions
-      set grading_status=@grading_status, grader_name=@grader_name
+      set grading_status=@grading_status, 
+      grader_name=@grader_name, 
+      sent_to_grader=@sent_to_grader
       where id=@id
       ''', substitutionValues: {
       'id': submission.id.toInt(),
@@ -566,8 +568,8 @@ values (@id,@data)
     });
   }
 
-  Future deleteSubmissionResultsFromSQL(Submission submission) {
-    return connection
+  Future deleteSubmissionResultsFromSQL(Submission submission) async {
+    await connection
         .execute('delete from submission_results where id=@id', substitutionValues: {'id': submission.id.toInt()});
   }
 
