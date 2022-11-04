@@ -559,9 +559,10 @@ class SubmissionManagementService extends SubmissionManagementServiceBase with C
     final submissionProtobuf = submission.writeToBuffer();
     final submissionProtobufGzipped = io.gzip.encode(submissionProtobuf);
     final submissionProtobufGzippedBase64 = base64Encode(submissionProtobufGzipped);
-    await connection.query('''
+    await connection.execute('''
+delete from submission_results where id=@id;
 insert into submission_results(id,submission_protobuf_gzipped_base64)
-values (@id,@data)
+values (@id,@data);
         ''', substitutionValues: {
       'id': submission.id.toInt(),
       'data': submissionProtobufGzippedBase64,
