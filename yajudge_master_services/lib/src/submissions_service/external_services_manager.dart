@@ -41,7 +41,7 @@ class ExternalServiceConnection {
       return false;
     }
     if (submission.solutionFiles.files.isEmpty) {
-      log.severe("Trying to push submission ${submission.id} with no solution files");
+      log.severe("trying to push submission ${submission.id} with no solution files");
     }
     sink.add(submission);
     capacity--;

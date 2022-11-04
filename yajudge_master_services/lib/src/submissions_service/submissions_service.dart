@@ -451,7 +451,7 @@ class SubmissionManagementService extends SubmissionManagementServiceBase with C
     }
     if (request.solutionFiles.files.isEmpty) {
       final message = 'solution has not files';
-      log.warning('got submission ${request.id} with no solution files');
+      log.severe('got submission ${request.id} with no solution files');
       throw GrpcError.dataLoss(message);
     }
     User? currentUser = call.getSessionUser(secretKey);
@@ -505,6 +505,9 @@ class SubmissionManagementService extends SubmissionManagementServiceBase with C
       log.warning('cant notify progress service about submission ${request.id}: $e');
     }
     await _notifySubmissionResultChanged(request);
+    if (request.solutionFiles.files.isEmpty) {
+      log.severe('pushing empty submission $submissionId to grader from API');
+    }
     await pushSubmissionToGrader(request);
     return Submission(id: Int64(submissionId));
   }
@@ -684,6 +687,9 @@ values (@id,@data);
       String content = fields[1];
       return File(name: fileName, data: utf8.encode(content));
     });
+    if (result.isEmpty) {
+      log.severe('got empty solution files from database for submission $submissionId');
+    }
     return List.from(result);
   }
 
@@ -722,6 +728,9 @@ values (@id,@data);
       String problemId = fields[3];
       String courseData = fields[4];
       List<File> files = await getSubmissionFiles(id);
+      if (files.isEmpty) {
+        log.severe('got empty solution files while populationg submission $id to queue');
+      }
       result.add(Submission(
         id: Int64(id),
         user: User(id: Int64(usersId)),
