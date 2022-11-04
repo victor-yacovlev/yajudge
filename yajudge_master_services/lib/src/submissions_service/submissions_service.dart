@@ -695,7 +695,7 @@ values (@id,@data)
           grading_status=@queued_status
           or
           (
-            grading_status==@done_status
+            grading_status=@done_status
             and
             status=@check_error
             and
@@ -707,8 +707,8 @@ values (@id,@data)
       ''', substitutionValues: {
       'queued_status': SubmissionProcessStatus.PROCESS_QUEUED.value,
       'done_status': SubmissionProcessStatus.PROCESS_DONE.value,
-      'check_error': SolutionStatus.CHECK_FAILED,
-      'sent_to_grader': retryTimestamp,
+      'check_error': SolutionStatus.CHECK_FAILED.value,
+      'retry_timestamp': retryTimestamp,
     });
     List<Submission> result = [];
     for (final e in rows) {
