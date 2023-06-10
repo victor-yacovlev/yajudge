@@ -1,2 +1,5 @@
 ---
-BasedOnStyle: WebKit
+Language:       Cpp
+BasedOnStyle:   WebKit
+ColumnLimit:    140
+IndentWidth:    4

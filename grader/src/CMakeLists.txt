@@ -9,16 +9,21 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(Poco REQUIRED Foundation Util)
 find_package(yaml-cpp REQUIRED)
 find_package(Protobuf REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GRPC REQUIRED grpc++)
 
 include_directories(${Protobuf_INCLUDE_DIRS})
 include_directories(${YAML_CPP_INCLUDE_DIR})
+include_directories(${GRPC_INCLUDE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 set(SOURCES
     main.cpp
     
+    RPC.cpp
     Grader.cpp
     Properties.cpp    
+    Util.cpp
 )
 
 set(PROTOS
@@ -30,5 +35,13 @@ set(PROTOS
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTOS})
 
 add_executable(grader ${SOURCES} ${PROTO_SRCS} ${PROTO_HDRS})
-target_link_libraries(grader Poco::Foundation Poco::Util ${YAML_CPP_LIBRARIES} ${Protobuf_LIBRARIES})
+target_link_libraries(
+    grader
+
+    Poco::Foundation
+    Poco::Util
+    ${YAML_CPP_LIBRARIES}
+    ${Protobuf_LIBRARIES}
+    ${GRPC_LIBRARIES}
+)
 
