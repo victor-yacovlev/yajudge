@@ -26,8 +26,7 @@ class ExpandableFab extends StatefulWidget {
   _ExpandableFabState createState() => _ExpandableFabState();
 }
 
-class _ExpandableFabState extends State<ExpandableFab>
-    with SingleTickerProviderStateMixin {
+class _ExpandableFabState extends State<ExpandableFab> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _expandAnimation;
   bool _open = false;
@@ -102,9 +101,7 @@ class _ExpandableFabState extends State<ExpandableFab>
               padding: const EdgeInsets.all(8.0),
               child: Icon(
                 Icons.close,
-                color: widget.isPrimary
-                  ? Theme.of(context).primaryColor
-                  : Theme.of(context).accentColor,
+                color: widget.isPrimary ? Theme.of(context).primaryColor : Theme.of(context).colorScheme.secondary,
               ),
             ),
           ),
@@ -117,9 +114,7 @@ class _ExpandableFabState extends State<ExpandableFab>
     final children = <Widget>[];
     final count = widget.children.length;
     final step = 90.0 / (count - 1);
-    for (var i = 0, angleInDegrees = 0.0;
-    i < count;
-    i++, angleInDegrees += step) {
+    for (var i = 0, angleInDegrees = 0.0; i < count; i++, angleInDegrees += step) {
       widget.children[i].closeExpanded = _close;
       children.add(
         _ExpandingActionButton(
@@ -153,9 +148,8 @@ class _ExpandableFabState extends State<ExpandableFab>
             onPressed: _toggle,
             icon: widget.mainIcon,
             label: Text(widget.title),
-            backgroundColor: widget.isPrimary
-                ? Theme.of(context).primaryColor
-                : Theme.of(context).accentColor,
+            backgroundColor:
+                widget.isPrimary ? Theme.of(context).primaryColor : Theme.of(context).colorScheme.secondary,
           ),
         ),
       ),
@@ -226,34 +220,34 @@ class ActionButton extends StatelessWidget {
     return Material(
       shape: const StadiumBorder(),
       clipBehavior: Clip.antiAlias,
-      color: isPrimary
-          ? theme.primaryColor : theme.accentColor,
+      color: isPrimary ? theme.primaryColor : theme.colorScheme.secondary,
       elevation: 4.0,
       child: IconTheme.merge(
-        data: theme.accentIconTheme,
-        child: InkWell(
-          onTap: () {
-            if (closeExpanded != null) {
-              closeExpanded!();
-            }
-            if (onPressed != null) {
-              onPressed!();
-            }
-          },
-          child: Row(
-            children: [
-              Padding(
-                child: icon, 
-                padding: EdgeInsets.all(10),
-              ),
-              Padding(
-                  child: Text(title, style: TextStyle(color: theme.accentIconTheme.color),),
-                  padding: EdgeInsets.fromLTRB(0, 0, 12, 0)
-              ),
-            ],
-          )
-        )
-      ),
+          data: theme.iconTheme,
+          // data: theme.accentIconTheme,
+          child: InkWell(
+              onTap: () {
+                if (closeExpanded != null) {
+                  closeExpanded!();
+                }
+                if (onPressed != null) {
+                  onPressed!();
+                }
+              },
+              child: Row(
+                children: [
+                  Padding(
+                    child: icon,
+                    padding: EdgeInsets.all(10),
+                  ),
+                  Padding(
+                      child: Text(
+                        title,
+                        // style: TextStyle(color: theme.accentIconTheme.color),
+                      ),
+                      padding: EdgeInsets.fromLTRB(0, 0, 12, 0)),
+                ],
+              ))),
     );
   }
 }
