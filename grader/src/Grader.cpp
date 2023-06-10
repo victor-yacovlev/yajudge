@@ -1,4 +1,5 @@
 #include "Grader.h"
+#include "RPC.h"
 
 #include <Poco/AutoPtr.h>
 #include <Poco/Channel.h>
@@ -6,6 +7,7 @@
 #include <Poco/FileChannel.h>
 #include <Poco/Logger.h>
 #include <Poco/NullChannel.h>
+#include <Poco/ThreadPool.h>
 #include <Poco/Util/HelpFormatter.h>
 #include <Poco/Util/JSONConfiguration.h>
 #include <Poco/Util/Option.h>
@@ -22,7 +24,8 @@ void Grader::Application::initialize(Poco::Util::Application& self)
 
     try {
         setupLogger();
-        setupRPCProperties();
+        setupThreadPool();
+        setupGRPCFetcherTask();
     } catch (Poco::Exception& e) {
         Poco::Logger::root().fatal("Grader initialization failed: " + e.message());
         std::exit(1);
@@ -48,6 +51,8 @@ void Grader::Application::defineOptions(Poco::Util::OptionSet& options)
                           .argument("file")
                           .callback(OptionCallback<Grader::Application>(this, &Grader::Application::handleConfigOption)));
 
+    options.addOption(Option("name", "N", "Instance name").required(false).repeatable(false).argument("string").binding("instance.name"));
+
     options.addOption(
         Option("log-path", "L", "Logger output file name").required(false).repeatable(false).argument("out").binding("log.path"));
 
@@ -60,7 +65,12 @@ void Grader::Application::defineOptions(Poco::Util::OptionSet& options)
                                                                      "information|debug|trace")));
 }
 
-int Grader::Application::main(const std::vector<std::string>& args) { return 0; }
+int Grader::Application::main(const std::vector<std::string>& args)
+{
+    _taskManager.start(_gRPCFetcher);
+    _taskManager.joinAll();
+    return 0;
+}
 
 void Grader::Application::handleHelpOption(const std::string& name, const std::string& value)
 {
@@ -88,7 +98,7 @@ void Grader::Application::handleConfigOption(const std::string& name, const std:
 void Grader::Application::setupLogger()
 {
     const std::string logLevel = config().getString("log.level", "information");
-    const std::string logPath = config().getString("log.path");
+    const std::string logPath = config().getString("log.path", "stdout");
 
     Poco::Logger& root = Poco::Logger::root();
 
@@ -98,7 +108,7 @@ void Grader::Application::setupLogger()
 
     if ("none" == logLevel) {
         pChannel = new Poco::NullChannel;
-    } else if (logPath.empty() || "stdout" == logPath) {
+    } else if ("stdout" == logPath) {
         pChannel = new Poco::ConsoleChannel(std::cout);
     } else if ("stderr" == logPath) {
         pChannel = new Poco::ConsoleChannel(std::cerr);
@@ -109,9 +119,24 @@ void Grader::Application::setupLogger()
     root.setChannel(pChannel);
 }
 
-void Grader::Application::setupRPCProperties()
+void Grader::Application::setupThreadPool()
 {
-    const Poco::Path configFilePath(config().getString("config.path"));
-    _rpcProperties = RPC::RPCProperties::fromConfig(configFilePath, config().createView("rpc"));
-    _rpcProperties.validate();
+    const int workersCount = config().getInt("jobs.workers", 0);
+    // thread pool size must have +1 slot for gRPC task
+    const int threadPoolSize = workersCount > 0 ? workersCount + 1 : _threadPool.capacity();
+    const int capacityDiff = threadPoolSize - _threadPool.capacity();
+    _threadPool.addCapacity(capacityDiff);
+}
+
+void Grader::Application::setupGRPCFetcherTask()
+{
+    // prepare fetcher task that will be started on application run
+    // NOTE: do not use smart pointers or manual delete. Task manager will free memory for us
+    _gRPCFetcher = new RPC::GRPCFetcherTask(config(), _threadPool, _taskManager);
+}
+
+Grader::Application::Application()
+    : ServerApplication()
+    , _taskManager(_threadPool)
+{
 }

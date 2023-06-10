@@ -1,15 +1,21 @@
 #pragma once
 
+#include <Poco/AutoPtr.h>
 #include <Poco/Logger.h>
+#include <Poco/TaskManager.h>
+#include <Poco/ThreadPool.h>
 #include <Poco/Util/Application.h>
 #include <Poco/Util/ServerApplication.h>
 
-#include "RPC.h"
+#include <memory>
+#include <string>
 
 namespace Grader {
 
 class Application : public Poco::Util::ServerApplication {
-    RPC::RPCProperties _rpcProperties;
+    Poco::ThreadPool _threadPool;
+    Poco::TaskManager _taskManager;
+    Poco::Task* _gRPCFetcher; // do not use smart pointer here
 
     void initialize(Poco::Util::Application& self);
     int main(const std::vector<std::string>& args);
@@ -19,7 +25,11 @@ class Application : public Poco::Util::ServerApplication {
     void handleConfigOption(const std::string& name, const std::string& value);
 
     void setupLogger();
-    void setupRPCProperties();
+    void setupThreadPool();
+    void setupGRPCFetcherTask();
+
+public:
+    explicit Application();
 };
 
 } // namespace Grader

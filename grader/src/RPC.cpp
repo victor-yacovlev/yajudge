@@ -1,93 +1,173 @@
 #include "RPC.h"
 
+#include <Poco/Environment.h>
 #include <Poco/FileStream.h>
+#include <Poco/Foundation.h>
+#include <Poco/Logger.h>
 #include <Poco/Path.h>
 #include <Poco/StreamCopier.h>
 #include <Poco/String.h>
+#include <Poco/Timestamp.h>
 
-namespace posix {
-#include <sys/stat.h>
+#include <cinttypes>
+
+RPC::GRPCFetcherTask::GRPCFetcherTask(
+    Poco::Util::AbstractConfiguration& config, Poco::ThreadPool& threadPool, Poco::TaskManager& taskManager)
+    : Poco::Task("gRPC Fetcher")
+    , _rpcProperties(createRPCProperties(config))
+    , _locationsProperties(createLocationsProperties(config))
+    , _log(Poco::Logger::root().get("gRPC Fetcher"))
+    , _greetingProperties(createGreetingProperties(config, threadPool))
+    , _threadPool(threadPool)
+    , _taskManager(taskManager)
+{
 }
 
-RPC::EndpointsProperties RPC::EndpointsProperties::fromConfig(
-    const Poco::Path& confPath, const Poco::Util::AbstractConfiguration::Ptr& config)
+static double estimatePerformanceRating()
 {
-    EndpointsProperties result;
-    result.courseContentProvider = Poco::URI(config->getString("courses_content"));
-    resolveFullURI(result.courseContentProvider, confPath);
-    result.submissionManagement = Poco::URI(config->getString("submissions"));
-    resolveFullURI(result.submissionManagement, confPath);
+    return 1.0;
+    // calculate maxPrimesCount prime numbers and measure a time in milliseconds
+    // returns 1_000_000/time (higher is better performance)
+    const auto maxPrimesCount = 20000;
+    int currentPrime = 2;
+    int primesFound = 0;
+    const auto timestamp = Poco::Timestamp();
+    while (primesFound < maxPrimesCount) {
+        bool isPrime = true;
+        for (int divider = 2; divider < currentPrime; divider++) {
+            isPrime = (currentPrime % divider) > 0;
+            if (!isPrime) {
+                break;
+            }
+        }
+        if (isPrime) {
+            primesFound++;
+        }
+        currentPrime++;
+    }
+    const auto milliseconds = timestamp.elapsed();
+    double result = 1000000.0 / milliseconds;
     return result;
 }
 
-void RPC::EndpointsProperties::validate()
+yajudge::ConnectedServiceProperties RPC::GRPCFetcherTask::createGreetingProperties(
+    const Poco::Util::AbstractConfiguration& config, const Poco::ThreadPool& threadPool)
 {
-    validateURI(courseContentProvider);
-    validateURI(submissionManagement);
+    const std::string instanceName = config.getString("instance.name", "default");
+    const std::string name = instanceName + "@" + Poco::Environment::nodeName();
+    const bool archSpecificOnly = config.getBool("jobs.arch_specific_only", false);
+    const int numberOfWorkers = threadPool.capacity() - 1;
+
+    yajudge::ConnectedServiceProperties result;
+    result.set_performance_rating(estimatePerformanceRating());
+    result.set_role(yajudge::ServiceRole::SERVICE_GRADING);
+    result.set_name(name);
+    result.set_arch_specific_only_jobs(archSpecificOnly);
+    result.set_number_of_workers(numberOfWorkers);
+
+    yajudge::GradingPlatform* platform = result.mutable_platform();
+#ifdef POCO_ARCH_AARCH64
+    platform->set_arch(yajudge::Arch::ARCH_AARCH64);
+#endif
+#ifdef POCO_ARCH_ARM
+    platform->set_arch(yajudge::Arch::ARCH_ARMV7);
+#endif
+#ifdef POCO_ARCH_IA32
+    platform->set_arch(yajudge::Arch::ARCH_X86);
+#endif
+#ifdef POCO_ARCH_AMD64
+    platform->set_arch(yajudge::Arch::ARCH_X86_64);
+#endif
+
+    return result;
 }
 
-void RPC::EndpointsProperties::resolveFullURI(Poco::URI& uri, const Poco::Path& confPath)
+Properties::RPC RPC::GRPCFetcherTask::createRPCProperties(const Poco::Util::AbstractConfiguration& config)
 {
-    if (uri.getScheme() == "unix") {
-        // full URI provided, so path is absolute and do nothing in this case
-    } else if (uri.getScheme() == "http" && uri.getPort() == 0) {
-        uri.setPort(80);
-    } else if (uri.getScheme() == "https" && uri.getPort() == 0) {
-        uri.setPort(443);
-    } else if (uri.getScheme().empty()) {
-        // possible local file name
-        Poco::Path path = uri.getPath();
-        if (path.isAbsolute()) {
-            return; // nothing to resolve
-        }
-        path = confPath.parent().resolve(uri.getPath());
-        uri.setPath(path.toString());
-        uri.setScheme("unix");
+    const Poco::Path configFilePath(config.getString("config.path"));
+    const auto rpcProperties = Properties::RPC::fromConfig(configFilePath, config.createView("rpc"));
+    rpcProperties.validate();
+    return rpcProperties;
+}
+
+Properties::Locations RPC::GRPCFetcherTask::createLocationsProperties(const Poco::Util::AbstractConfiguration& config)
+{
+    const Poco::Path configFilePath(config.getString("config.path"));
+    const auto locationsProperties = Properties::Locations::fromConfig(configFilePath, config.createView("locations"));
+    locationsProperties.validate();
+    return locationsProperties;
+}
+
+void RPC::GRPCFetcherTask::runTask()
+{
+    connectToServer();
+    pushGraderStatus();
+
+    grpc::ClientContext ctx;
+    ctx.AddMetadata("token", _rpcProperties.privateToken);
+    _masterStream = _submissionManagementService->ReceiveSubmissionsToProcess(&ctx, _greetingProperties);
+
+    yajudge::Submission submission;
+    while (_masterStream->Read(&submission)) {
+        const auto logMessage = std::string("Got submission to process: ") + std::to_string((int)submission.id());
+        _log.information(logMessage);
     }
 }
 
-void RPC::EndpointsProperties::validateURI(const Poco::URI& uri)
+void RPC::GRPCFetcherTask::connectToServer()
 {
-    if (uri.getScheme() == "unix") {
-        struct posix::stat st;
-        if (-1 == posix::stat(uri.getPath().c_str(), &st)) {
-            throw Poco::PathNotFoundException("Unix socket file not found", uri.getPath());
-        }
-        if (!S_ISSOCK(st.st_mode)) {
-            throw Poco::PathNotFoundException("Not a unix socket file %s", uri.getPath());
-        }
+    auto submissionChannel = makeGRPCChannel(_rpcProperties.endpoints.submissionManagement);
+    auto contentChannel = makeGRPCChannel(_rpcProperties.endpoints.submissionManagement);
+
+    _submissionManagementService = yajudge::SubmissionManagement::NewStub(submissionChannel);
+    _contentProviderService = yajudge::CourseContentProvider::NewStub(contentChannel);
+}
+
+std::shared_ptr<grpc::Channel> RPC::GRPCFetcherTask::makeGRPCChannel(const Poco::URI& endpointURI)
+{
+    std::shared_ptr<grpc::ChannelCredentials> credentials;
+    std::string target;
+
+    if (endpointURI.getScheme() == "https") {
+        credentials = grpc::SslCredentials(grpc::SslCredentialsOptions());
     } else {
-        if (uri.getHost().empty()) {
-            throw Poco::DataException("No host name set for endpoint");
-        }
+        credentials = grpc::InsecureChannelCredentials();
+    }
+
+    if (endpointURI.getScheme() == "unix") {
+        target = "unix://" + endpointURI.getPath();
+    } else {
+        target = endpointURI.getHost() + ":" + std::to_string(endpointURI.getPort());
+    }
+
+    return grpc::CreateChannel(target, credentials);
+}
+
+void RPC::GRPCFetcherTask::pushGraderStatus()
+{
+    yajudge::ConnectedServiceStatus statusMessage;
+
+    const int capacity = _greetingProperties.number_of_workers();
+    const int used = _taskManager.count() - 1;
+    const int freeSlots = capacity - used;
+    auto status = canAcceptNewSubmission() ? yajudge::ServiceStatus::SERVICE_STATUS_IDLE : yajudge::ServiceStatus::SERVICE_STATUS_BUSY;
+    statusMessage.set_status(status);
+    statusMessage.set_capacity(freeSlots);
+    statusMessage.set_allocated_properties(new yajudge::ConnectedServiceProperties(_greetingProperties));
+
+    grpc::ClientContext ctx;
+    ctx.AddMetadata("token", _rpcProperties.privateToken);
+    yajudge::Empty response;
+    auto grpcStatus = _submissionManagementService->SetExternalServiceStatus(&ctx, statusMessage, &response);
+    if (!grpcStatus.ok()) {
+        _log.error("Can't push status to master: " + grpcStatus.error_message());
     }
 }
 
-RPC::RPCProperties RPC::RPCProperties::fromConfig(const Poco::Path& confPath, const Poco::Util::AbstractConfiguration::Ptr& config)
+bool RPC::GRPCFetcherTask::canAcceptNewSubmission() const
 {
-    RPCProperties result;
-    result.endpoints = EndpointsProperties::fromConfig(confPath, config->createView("endpoints"));
-    if (config->has("private_token_file")) {
-        const std::string privateTokenPathString = config->getString("private_token_file");
-        Poco::Path path(privateTokenPathString);
-        if (path.isRelative()) {
-            path = confPath.parent();
-            path.resolve(privateTokenPathString);
-        }
-        Poco::FileStream ifs(path.toString());
-        Poco::StreamCopier::copyToString(ifs, result.privateToken);
-    } else if (config->has("private_token")) {
-        const std::string privateToken = config->getString("private_token");
-        result.privateToken = privateToken;
-    }
-    Poco::trimInPlace(result.privateToken);
-    return result;
-}
-
-void RPC::RPCProperties::validate()
-{
-    endpoints.validate();
-    if (privateToken.empty()) {
-        throw Poco::DataException("No private toket set in RPC configuration");
-    }
+    const int capacity = _greetingProperties.number_of_workers();
+    const int used = _taskManager.count() - 1;
+    const int freeSlots = capacity - used;
+    return freeSlots > 0;
 }

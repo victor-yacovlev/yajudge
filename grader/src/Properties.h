@@ -3,6 +3,7 @@
 #include <Poco/Exception.h>
 #include <Poco/Path.h>
 #include <Poco/URI.h>
+#include <Poco/Util/ConfigurationView.h>
 
 #include <map>
 #include <string>
@@ -15,6 +16,9 @@ struct Locations {
     Poco::Path systemRoot;
     Poco::Path workDirectory;
     Poco::Path cacheDirectory;
+
+    static Locations fromConfig(const Poco::Path& confPath, const Poco::Util::AbstractConfiguration::Ptr& config);
+    void validate() const;
 };
 
 struct Jobs {
@@ -35,6 +39,26 @@ struct Limits {
 
     static Limits fromProtobuf(const yajudge::GradingLimits* proto);
     Limits& updateFrom(const Limits& other);
+};
+
+struct Endpoints {
+    Poco::URI courseContentProvider;
+    Poco::URI submissionManagement;
+
+    static Endpoints fromConfig(const Poco::Path& confPath, const Poco::Util::AbstractConfiguration::Ptr& config);
+    void validate() const;
+
+private:
+    static void resolveFullURI(Poco::URI& uri, const Poco::Path& confPath);
+    static void validateURI(const Poco::URI& uri);
+};
+
+struct RPC {
+    Endpoints endpoints;
+    std::string privateToken;
+
+    static RPC fromConfig(const Poco::Path& confPath, const Poco::Util::AbstractConfiguration::Ptr& config);
+    void validate() const;
 };
 
 } // namespace Properties

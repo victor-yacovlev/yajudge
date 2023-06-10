@@ -1,10 +1,30 @@
 #include "Util.h"
 
+#include <Poco/File.h>
 #include <Poco/StreamCopier.h>
 
 #include <fstream>
 #include <iostream>
 #include <stack>
+
+Poco::Path Util::expandRelativePath(const Poco::Path& rootFilePath, const std::string& relPath)
+{
+    if (relPath.empty()) {
+        return Poco::Path();
+    }
+    if (relPath[0] == '/') {
+        return Poco::Path(relPath); // path is absolute
+    }
+    Poco::Path parent = rootFilePath.absolute();
+    parent.makeParent();
+    return parent.resolve(relPath);
+}
+
+bool Util::isWritableDirectory(const Poco::Path& path)
+{
+    const Poco::File file(path);
+    return file.exists() && file.isDirectory() && file.canWrite();
+}
 
 void Util::YAMLConfiguration::load(const std::string& path)
 {

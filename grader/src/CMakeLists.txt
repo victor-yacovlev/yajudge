@@ -19,22 +19,50 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 set(SOURCES
     main.cpp
-    
+
     RPC.cpp
     Grader.cpp
-    Properties.cpp    
+    Properties.cpp
     Util.cpp
 )
 
+set(PROTO_DIR "../../yajudge_common/proto")
 set(PROTOS
-    ../../yajudge_common/proto/yajudge_common.proto
-    ../../yajudge_common/proto/yajudge_courses_content.proto
-    ../../yajudge_common/proto/yajudge_submissions.proto
+    "${PROTO_DIR}/yajudge_common.proto"
+    "${PROTO_DIR}/yajudge_courses_content.proto"
+    "${PROTO_DIR}/yajudge_submissions.proto"
 )
 
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTOS})
+set(PROTO_GENERATED
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_common.pb.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_courses_content.pb.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_submissions.pb.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_common.grpc.pb.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_courses_content.grpc.pb.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_submissions.grpc.pb.h"
 
-add_executable(grader ${SOURCES} ${PROTO_SRCS} ${PROTO_HDRS})
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_common.pb.cc"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_courses_content.pb.cc"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_submissions.pb.cc"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_common.grpc.pb.cc"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_courses_content.grpc.pb.cc"
+    "${CMAKE_CURRENT_BINARY_DIR}/yajudge_submissions.grpc.pb.cc"
+)
+
+find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin)
+add_custom_command(
+    OUTPUT ${PROTO_GENERATED}
+    COMMAND ${Protobuf_PROTOC_EXECUTABLE}
+    ARGS
+    --grpc_out "${CMAKE_CURRENT_BINARY_DIR}"
+    --cpp_out "${CMAKE_CURRENT_BINARY_DIR}"
+    -I "${PROTO_DIR}"
+    --plugin=protoc-gen-grpc="${GRPC_CPP_PLUGIN}"
+    ${PROTOS}
+    DEPENDS ${PROTOS}
+)
+
+add_executable(grader ${SOURCES} ${PROTO_GENERATED})
 target_link_libraries(
     grader
 
@@ -44,4 +72,3 @@ target_link_libraries(
     ${Protobuf_LIBRARIES}
     ${GRPC_LIBRARIES}
 )
-
