@@ -33,6 +33,7 @@ class GRPCFetcherTask : public Poco::Task {
     static Properties::RPC createRPCProperties(const Poco::Util::AbstractConfiguration& config);
     static Properties::Locations createLocationsProperties(const Poco::Util::AbstractConfiguration& config);
     void runTask() override;
+    void serveConnection();
     void connectToServer();
     static std::shared_ptr<grpc::Channel> makeGRPCChannel(const Poco::URI& endpointURI);
     void pushGraderStatus();

@@ -25,7 +25,6 @@ RPC::GRPCFetcherTask::GRPCFetcherTask(
 
 static double estimatePerformanceRating()
 {
-    return 1.0;
     // calculate maxPrimesCount prime numbers and measure a time in milliseconds
     // returns 1_000_000/time (higher is better performance)
     const auto maxPrimesCount = 20000;
@@ -99,6 +98,19 @@ Properties::Locations RPC::GRPCFetcherTask::createLocationsProperties(const Poco
 }
 
 void RPC::GRPCFetcherTask::runTask()
+{
+    while (!isCancelled()) {
+        // master server or more likely nginx proxy will close connection
+        // by timeout, so make automatic reconnect to master server
+        // until not stop requested
+        serveConnection();
+        if (!isCancelled()) {
+            sleep(1000);
+        }
+    }
+}
+
+void RPC::GRPCFetcherTask::serveConnection()
 {
     connectToServer();
     pushGraderStatus();

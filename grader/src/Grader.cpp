@@ -4,7 +4,9 @@
 #include <Poco/AutoPtr.h>
 #include <Poco/Channel.h>
 #include <Poco/ConsoleChannel.h>
+#include <Poco/Environment.h>
 #include <Poco/FileChannel.h>
+#include <Poco/Foundation.h>
 #include <Poco/Logger.h>
 #include <Poco/NullChannel.h>
 #include <Poco/ThreadPool.h>
@@ -14,6 +16,11 @@
 #include <Poco/Util/RegExpValidator.h>
 
 #include <cstdlib>
+#ifdef POCO_OS_FAMILY_UNIX
+namespace posix {
+#include <unistd.h>
+}
+#endif
 
 #include "Util.h"
 
@@ -67,6 +74,8 @@ void Grader::Application::defineOptions(Poco::Util::OptionSet& options)
 
 int Grader::Application::main(const std::vector<std::string>& args)
 {
+    const std::string message = std::string("Started grader service at pid=") + std::to_string(posix::getpid());
+    Poco::Logger::root().information(message);
     _taskManager.start(_gRPCFetcher);
     _taskManager.joinAll();
     return 0;
@@ -116,6 +125,7 @@ void Grader::Application::setupLogger()
         pChannel = new Poco::FileChannel(logPath);
     }
 
+    root.information("Logger configured, next messages will be in %s", logPath);
     root.setChannel(pChannel);
 }
 
