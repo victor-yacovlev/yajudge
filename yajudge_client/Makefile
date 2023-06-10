@@ -29,7 +29,7 @@ macos/Podfile.lock:
 web-client: deps build/web/main.dart.js
 build/web/main.dart.js:
 	$(FLUTTER) build web --release
-	bash fix-issue-70101.sh
+	# bash fix-issue-70101.sh
 
 
 deps: .packages
