@@ -5,35 +5,47 @@ use slog::Level;
 use std::{
     fs::read_to_string,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 use uris::Uri;
 use yaml_rust::{yaml, Yaml, YamlLoader};
 
+#[derive(Clone)]
 pub struct LogConfig {
     pub path: std::path::PathBuf,
     pub level: Level,
 }
 
+#[derive(Clone)]
 pub struct JobsConfig {
     pub workers: usize,
     pub arch_specific_only: bool,
+    pub name: String,
 }
 
+#[derive(Clone)]
 pub struct EndpointsConfig {
     pub courses_content_uri: Uri,
     pub submissions_uri: Uri,
 }
 
+#[derive(Clone)]
 pub struct RpcConfig {
     pub endpoints: EndpointsConfig,
     pub private_token: String,
 }
 
+#[derive(Clone)]
+pub struct LocationsConfig {
+    pub working_directory: PathBuf,
+    pub cache_directory: PathBuf,
+}
+
+#[derive(Clone)]
 pub struct GraderConfig {
     pub log: LogConfig,
     pub rpc: RpcConfig,
     pub jobs: JobsConfig,
+    pub locations: LocationsConfig,
 }
 
 impl EndpointsConfig {
@@ -60,6 +72,7 @@ impl JobsConfig {
         JobsConfig {
             workers: num_cpus::get(),
             arch_specific_only: false,
+            name: "default".to_string(),
         }
     }
 
@@ -83,6 +96,7 @@ impl JobsConfig {
         return JobsConfig {
             workers,
             arch_specific_only: arch,
+            name: "default".to_string(),
         };
     }
 }
@@ -95,20 +109,17 @@ impl RpcConfig {
         let private_token_file_key = &Yaml::String("private_token_file".to_string());
         let private_token_key = &Yaml::String("private_token".to_string());
         let private_token = if root.contains_key(private_token_file_key) {
-            let path_value =
-                PathBuf::from_str(root[private_token_file_key].as_str().unwrap()).unwrap();
-            let file_path = if path_value.is_absolute() {
-                path_value
-            } else {
-                conf_file_dir.join(path_value)
-            };
+            let file_path = resolve_relative(
+                &conf_file_dir,
+                root[private_token_file_key].as_str().unwrap(),
+            );
             Self::read_private_token_file(&file_path)
         } else {
             root[private_token_key].as_str().unwrap().to_string()
         };
         RpcConfig {
             endpoints: EndpointsConfig::from_yaml(&endpoints_node),
-            private_token: private_token,
+            private_token,
         }
     }
 
@@ -117,6 +128,29 @@ impl RpcConfig {
             .expect("Can't read RPC private token file ")
             .trim()
             .to_string()
+    }
+}
+
+impl LocationsConfig {
+    pub fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> LocationsConfig {
+        let working_directory_key = &Yaml::String("working_directory".to_string());
+        let cache_directory_key = &Yaml::String("cache_directory".to_string());
+        let working_directory = resolve_relative(
+            &conf_file_dir,
+            root[working_directory_key]
+                .as_str()
+                .expect("Required location->working_directory path"),
+        );
+        let cache_directory = resolve_relative(
+            &conf_file_dir,
+            root[cache_directory_key]
+                .as_str()
+                .expect("Required location->cache_directory path"),
+        );
+        LocationsConfig {
+            working_directory,
+            cache_directory,
+        }
     }
 }
 
@@ -160,10 +194,15 @@ impl GraderConfig {
         let log_key = &Yaml::String("log".to_string());
         let rpc_key = &Yaml::String("rpc".to_string());
         let jobs_key = &Yaml::String("jobs".to_string());
+        let locations_key = &Yaml::String("locations".to_string());
         let mut config = GraderConfig {
             log: LogConfig::default_value(),
             rpc: RpcConfig::from_yaml(conf_file_dir, root[rpc_key].as_hash().unwrap()),
             jobs: JobsConfig::default_value(),
+            locations: LocationsConfig::from_yaml(
+                conf_file_dir,
+                root[locations_key].as_hash().unwrap(),
+            ),
         };
         if root.contains_key(log_key) {
             config.log = LogConfig::from_yaml(root[log_key].as_hash().unwrap());
@@ -192,6 +231,20 @@ impl GraderConfig {
         if let Some(s) = args.get_one::<String>("log-level") {
             config.log.level = log_level_from_string(s)
         }
+        if let Some(s) = args.get_one::<String>("name") {
+            config.jobs.name = s.to_string();
+        }
         return config;
     }
+}
+
+fn resolve_relative<P>(base_path: &Path, part: &P) -> PathBuf
+where
+    P: ToString + ?Sized,
+{
+    if Path::new(&part.to_string()).is_absolute() {
+        return PathBuf::from(part.to_string());
+    }
+    let joined = base_path.join(part.to_string());
+    return joined;
 }
