@@ -9,6 +9,14 @@ use std::{
 use uris::Uri;
 use yaml_rust::{yaml, Yaml, YamlLoader};
 
+pub trait FromYaml {
+    fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> Self;
+}
+
+pub trait ToYaml {
+    fn to_yaml(data: &Self) -> yaml::Hash;
+}
+
 #[derive(Clone)]
 pub struct LogConfig {
     pub path: std::path::PathBuf,
@@ -48,8 +56,8 @@ pub struct GraderConfig {
     pub locations: LocationsConfig,
 }
 
-impl EndpointsConfig {
-    pub fn from_yaml(root: &yaml::Hash) -> EndpointsConfig {
+impl FromYaml for EndpointsConfig {
+    fn from_yaml(_conf_file_dir: &Path, root: &yaml::Hash) -> EndpointsConfig {
         EndpointsConfig {
             courses_content_uri: Uri::parse(
                 root[&Yaml::String("courses_content".to_string())]
@@ -67,16 +75,18 @@ impl EndpointsConfig {
     }
 }
 
-impl JobsConfig {
-    pub fn default_value() -> JobsConfig {
+impl Default for JobsConfig {
+    fn default() -> Self {
         JobsConfig {
             workers: num_cpus::get(),
             arch_specific_only: false,
             name: "default".to_string(),
         }
     }
+}
 
-    pub fn from_yaml(root: &yaml::Hash) -> JobsConfig {
+impl FromYaml for JobsConfig {
+    fn from_yaml(_conf_file_dir: &Path, root: &yaml::Hash) -> JobsConfig {
         let workers_key = &Yaml::String("workers".to_string());
         let arch_key = &Yaml::String("arch_specific_only".to_string());
         let mut workers = if root.contains_key(workers_key) {
@@ -101,8 +111,8 @@ impl JobsConfig {
     }
 }
 
-impl RpcConfig {
-    pub fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> RpcConfig {
+impl FromYaml for RpcConfig {
+    fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> RpcConfig {
         let endpoints_node = root[&Yaml::String("endpoints".to_string())]
             .as_hash()
             .expect("No RPC in config file");
@@ -118,11 +128,13 @@ impl RpcConfig {
             root[private_token_key].as_str().unwrap().to_string()
         };
         RpcConfig {
-            endpoints: EndpointsConfig::from_yaml(&endpoints_node),
+            endpoints: EndpointsConfig::from_yaml(&conf_file_dir, &endpoints_node),
             private_token,
         }
     }
+}
 
+impl RpcConfig {
     fn read_private_token_file(file_path: &Path) -> String {
         std::fs::read_to_string(file_path)
             .expect("Can't read RPC private token file ")
@@ -131,8 +143,8 @@ impl RpcConfig {
     }
 }
 
-impl LocationsConfig {
-    pub fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> LocationsConfig {
+impl FromYaml for LocationsConfig {
+    fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> LocationsConfig {
         let working_directory_key = &Yaml::String("working_directory".to_string());
         let cache_directory_key = &Yaml::String("cache_directory".to_string());
         let working_directory = resolve_relative(
@@ -154,15 +166,18 @@ impl LocationsConfig {
     }
 }
 
-impl LogConfig {
-    pub fn default_value() -> LogConfig {
+impl Default for LogConfig {
+    fn default() -> LogConfig {
         LogConfig {
             path: PathBuf::new(),
             level: Level::Info,
         }
     }
-    pub fn from_yaml(root: &yaml::Hash) -> LogConfig {
-        let mut config = LogConfig::default_value();
+}
+
+impl FromYaml for LogConfig {
+    fn from_yaml(_config_file_dir: &Path, root: &yaml::Hash) -> LogConfig {
+        let mut config = LogConfig::default();
         let path_key = &Yaml::String("path".to_string());
         let level_key = &Yaml::String("level".to_string());
         if root.contains_key(path_key) {
@@ -189,30 +204,32 @@ fn log_level_from_string(s: &String) -> Level {
     }
 }
 
-impl GraderConfig {
-    pub fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> GraderConfig {
+impl FromYaml for GraderConfig {
+    fn from_yaml(conf_file_dir: &Path, root: &yaml::Hash) -> GraderConfig {
         let log_key = &Yaml::String("log".to_string());
         let rpc_key = &Yaml::String("rpc".to_string());
         let jobs_key = &Yaml::String("jobs".to_string());
         let locations_key = &Yaml::String("locations".to_string());
         let mut config = GraderConfig {
-            log: LogConfig::default_value(),
+            log: LogConfig::default(),
             rpc: RpcConfig::from_yaml(conf_file_dir, root[rpc_key].as_hash().unwrap()),
-            jobs: JobsConfig::default_value(),
+            jobs: JobsConfig::default(),
             locations: LocationsConfig::from_yaml(
                 conf_file_dir,
                 root[locations_key].as_hash().unwrap(),
             ),
         };
         if root.contains_key(log_key) {
-            config.log = LogConfig::from_yaml(root[log_key].as_hash().unwrap());
+            config.log = LogConfig::from_yaml(&conf_file_dir, root[log_key].as_hash().unwrap());
         }
         if root.contains_key(jobs_key) {
-            config.jobs = JobsConfig::from_yaml(root[jobs_key].as_hash().unwrap());
+            config.jobs = JobsConfig::from_yaml(&conf_file_dir, root[jobs_key].as_hash().unwrap());
         }
         return config;
     }
+}
 
+impl GraderConfig {
     pub fn from_yaml_file(path: &PathBuf) -> GraderConfig {
         let yaml_data = read_to_string(&path).unwrap();
         let docs = YamlLoader::load_from_str(yaml_data.as_str()).unwrap();

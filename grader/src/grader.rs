@@ -8,7 +8,7 @@ use slog_term;
 use std::error::Error;
 use std::io::Write;
 use tokio::spawn;
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc;
 
 use tokio::{select, signal::unix::signal, signal::unix::SignalKind};
 use tokio_util::sync::CancellationToken;

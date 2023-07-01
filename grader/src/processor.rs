@@ -4,12 +4,13 @@ use slog::Logger;
 use string_error::into_err;
 
 use crate::{
-    generated::yajudge::{SolutionStatus, Submission, SubmissionProcessStatus},
+    generated::yajudge::{SolutionStatus, Submission},
     properties::GraderConfig,
     storage::StorageManager,
 };
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SubmissionProcessor {
     pub logger: Logger,
     pub submission: Submission,
