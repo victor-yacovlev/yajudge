@@ -1,4 +1,6 @@
 pub mod grader;
+pub mod jobs;
+pub mod processor;
 pub mod properties;
 pub mod rpc;
 pub mod storage;

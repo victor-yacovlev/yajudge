@@ -11,6 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Clone)]
 pub struct StorageManager {
     pub config: LocationsConfig,
 }
@@ -83,9 +84,9 @@ impl StorageManager {
         let mut test_number = 1;
         let mut tests_count = 0;
         for test_case in tests_cases {
-            Self::store_file_to(&tests_dir, &test_case.stdin_data, true)?;
-            Self::store_file_to(&tests_dir, &test_case.stdout_reference, true)?;
-            Self::store_file_to(&tests_dir, &test_case.stderr_reference, true)?;
+            Self::store_file_to(&tests_dir, &test_case.stdin_data.as_ref(), true)?;
+            Self::store_file_to(&tests_dir, &test_case.stdout_reference.as_ref(), true)?;
+            Self::store_file_to(&tests_dir, &test_case.stderr_reference.as_ref(), true)?;
             if !test_case.command_line_arguments.is_empty() {
                 let file_name = tests_dir.join(format!("{:03}.args", test_number));
                 Self::store_plain_text(&file_name, &test_case.command_line_arguments)?;
@@ -105,18 +106,18 @@ impl StorageManager {
         Ok(())
     }
 
-    pub fn store_submission(&self, submission: Submission) -> Result<i64, Box<dyn Error>> {
+    pub fn store_submission(&self, submission: &Submission) -> Result<i64, Box<dyn Error>> {
         let submission_root = self.get_submission_root(submission.id);
-        let course_id = submission.course.unwrap().data_id;
+        let course_id = &submission.course.as_ref().unwrap().data_id;
         let problem_id = submission.problem_id.replace(":", "/");
         Self::store_plain_text(
             &submission_root.join(".problem"),
             &format!("{}/{}", course_id, problem_id),
         )?;
 
-        let files = submission.solution_files.unwrap();
+        let files = &submission.solution_files.as_ref().unwrap();
         let mut files_list = String::new();
-        for file in files.files {
+        for file in &files.files {
             files_list.push_str(&format!("{}\n", file.name));
             Self::store_file_to(&submission_root, &Some(file), false)?;
         }
@@ -126,7 +127,7 @@ impl StorageManager {
 
     fn store_file_to(
         dir_path: &Path,
-        file: &Option<File>,
+        file: &Option<&File>,
         gzipped: bool,
     ) -> Result<(), Box<dyn Error>> {
         match file {

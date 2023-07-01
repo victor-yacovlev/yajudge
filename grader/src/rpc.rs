@@ -10,7 +10,12 @@ use crate::{
 };
 use slog::Logger;
 use std::{error::Error, str::FromStr, time::Duration};
-use tokio::{select, time::sleep};
+use string_error::into_err;
+use tokio::{
+    select,
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    time::sleep,
+};
 use tokio_util::sync::CancellationToken;
 use tonic::{
     codegen::InterceptedService,
@@ -33,6 +38,7 @@ pub struct RpcConnection {
     service_properties: ConnectedServiceProperties,
     cancellation_token: CancellationToken,
 
+    storage: StorageManager,
     logger: Logger,
 }
 
@@ -42,6 +48,7 @@ impl RpcConnection {
         logger: Logger,
         jobs_config: &JobsConfig,
         cancellation_token: CancellationToken,
+        storage: StorageManager,
     ) -> RpcConnection {
         let (submissions_client, content_client) = Self::make_client(rpc_config);
         let service_properties =
@@ -52,6 +59,7 @@ impl RpcConnection {
             submissions_client,
             content_client,
             cancellation_token,
+            storage,
         };
     }
 
@@ -153,18 +161,11 @@ impl RpcConnection {
 
     pub async fn serve_until_disconnected(
         &mut self,
-        storage: &StorageManager,
+        status_stream: &mut UnboundedReceiver<usize>,
+        finished_stream: &mut UnboundedReceiver<Submission>,
+        processor_sink: &mut UnboundedSender<Submission>,
     ) -> Result<(), Box<dyn Error>> {
-        let status = ConnectedServiceStatus {
-            properties: Some(self.service_properties.clone()),
-            status: ServiceStatus::Idle as i32,
-            capacity: 16,
-        };
-        self.submissions_client
-            .set_external_service_status(status)
-            .await?;
-
-        let mut stream = self
+        let mut rpc_stream = self
             .submissions_client
             .receive_submissions_to_process(self.service_properties.clone())
             .await?
@@ -172,7 +173,7 @@ impl RpcConnection {
 
         loop {
             select! {
-                message = stream.message() => {
+                message = rpc_stream.message() => {
                     if message.is_err() {
                         return Result::Err(Box::new(message.unwrap_err()));
                     }
@@ -181,18 +182,50 @@ impl RpcConnection {
                         self.logger,
                         "Got submission {} {}", submission.id, submission.problem_id
                     );
-                    match self.fetch_submission(submission, storage).await {
+                    match self.fetch_submission_problem(&submission).await {
                         Err(err) => {
-                            error!(self.logger, "Failed to fetch submission: {}", err)
+                            error!(self.logger, "Failed to fetch submission problem: {}", err)
                         },
-                        Ok(id) => {
-                            self.enque_submission_to_process(id)
+                        Ok(()) => {
+                            let enqued = Self::enque_submission_to_process(processor_sink, submission);
+                            if enqued.is_err() {
+                                error!(self.logger, "Failed to enque submission: {}", enqued.unwrap_err());
+                            }
                         }
                     }
                 }
 
                 _ = self.cancellation_token.cancelled() => {
+                    debug!(self.logger, "RPC shutting down");
                     break;
+                }
+
+                free_workers_or_none = status_stream.recv() => {
+                    if let Some(free_workers) = free_workers_or_none {
+                        let service_status = if free_workers > 0 { ServiceStatus::Idle } else { ServiceStatus::Busy };
+                        let connected_service_status = ConnectedServiceStatus {
+                            properties: Some(self.service_properties.clone()),
+                            status: service_status as i32,
+                            capacity: free_workers as i32,
+                        };
+                        self.submissions_client
+                            .set_external_service_status(connected_service_status)
+                            .await?;
+                        continue;
+                    }
+                }
+
+                finished_submission_or_none = finished_stream.recv() => {
+                    if let Some(finished_submission) = finished_submission_or_none {
+                        let submission_id = &finished_submission.id.clone();
+                        let send_status = self.submissions_client.update_grader_output(finished_submission).await;
+                        if send_status.is_err() {
+                            error!(self.logger, "Can't send submission {} result to server: {}", submission_id, send_status.unwrap_err());
+                        }
+                        else {
+                            debug!(self.logger, "Sent submission {} result to server", submission_id);
+                        }
+                    }
                 }
             }
         }
@@ -200,9 +233,16 @@ impl RpcConnection {
         Ok(())
     }
 
-    pub async fn serve(&mut self, storage: &StorageManager) -> Result<(), Box<dyn Error>> {
+    pub async fn serve(
+        &mut self,
+        status_stream: &mut UnboundedReceiver<usize>,
+        finished_stream: &mut UnboundedReceiver<Submission>,
+        processor_sink: &mut UnboundedSender<Submission>,
+    ) -> Result<(), Box<dyn Error>> {
         loop {
-            let serve_result = self.serve_until_disconnected(storage).await;
+            let serve_result = self
+                .serve_until_disconnected(status_stream, finished_stream, processor_sink)
+                .await;
             if serve_result.is_ok() {
                 return Ok(()); // graceful shutdown from 'serve_until_disconnected'
             }
@@ -233,21 +273,21 @@ impl RpcConnection {
         }
     }
 
-    async fn fetch_submission(
+    async fn fetch_submission_problem(
         &mut self,
-        submission: Submission,
-        storage: &StorageManager,
-    ) -> Result<i64, Box<dyn Error>> {
+        submission: &Submission,
+    ) -> Result<(), Box<dyn Error>> {
         let soltion_files = &submission.solution_files;
         if soltion_files.clone().unwrap().files.is_empty() {
-            return Err(string_error::into_err(format!(
+            return Err(into_err(format!(
                 "Submission {} has no solution files",
                 submission.id
             )));
         }
         let course_id = submission.course.clone().unwrap().data_id;
         let problem_id = submission.problem_id.clone();
-        let timestamp = storage
+        let timestamp = self
+            .storage
             .get_problem_timestamp(&course_id, &problem_id)
             .unwrap_or(0);
         let content_request = ProblemContentRequest {
@@ -261,13 +301,22 @@ impl RpcConnection {
             .await?
             .into_inner();
         if content_response.status == ContentStatus::HasData as i32 {
-            storage.store_problem(content_response)?;
+            self.storage.store_problem(content_response)?;
         }
 
-        storage.store_submission(submission)
+        Ok(())
     }
 
-    fn enque_submission_to_process(&mut self, id: i64) {}
+    fn enque_submission_to_process(
+        processor_sink: &mut UnboundedSender<Submission>,
+        submission: Submission,
+    ) -> Result<(), Box<dyn Error>> {
+        let send_status = processor_sink.send(submission);
+        match send_status {
+            Ok(()) => Ok(()),
+            Err(err) => Err(Box::new(err)),
+        }
+    }
 }
 
 impl Interceptor for YajudgeInterceptor {

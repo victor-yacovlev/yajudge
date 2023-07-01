@@ -1,11 +1,14 @@
-use crate::properties::JobsConfig;
-use crate::properties::{GraderConfig, LogConfig, RpcConfig};
+use crate::generated::yajudge::Submission;
+use crate::jobs::JobsManager;
+use crate::properties::{GraderConfig, JobsConfig, LogConfig, RpcConfig};
 use crate::rpc::RpcConnection;
 use crate::storage::StorageManager;
 use slog::{Drain, Level, Logger};
 use slog_term;
 use std::error::Error;
 use std::io::Write;
+use tokio::spawn;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 use tokio::{select, signal::unix::signal, signal::unix::SignalKind};
 use tokio_util::sync::CancellationToken;
@@ -23,16 +26,17 @@ pub struct Grader {
 impl Grader {
     pub fn new(config: GraderConfig) -> Result<Grader, Box<dyn Error>> {
         let logger = Self::setup_logger(&config.log);
-        // max tasks = workers + gRPC fetcher + gRPC pusher + signal handler
-        let _max_tasks = &config.jobs.workers + 3;
         let cancellation_token = Self::setup_signals_handler(&logger);
         let storage_manager = StorageManager::new(config.locations.clone())?;
+
         let rpc = Self::setup_rpc(
             &config.rpc,
             &config.jobs,
             &logger,
             cancellation_token.child_token(),
+            storage_manager.clone(),
         );
+
         let grader = Grader {
             config,
             logger,
@@ -86,10 +90,11 @@ impl Grader {
         jobs_config: &JobsConfig,
         root_logger: &Logger,
         cancellation_token: CancellationToken,
+        storage: StorageManager,
     ) -> RpcConnection {
         let logger = root_logger.new(o!("name" => "rpc_connection"));
         let rpc_connection =
-            RpcConnection::new(rpc_config, logger, jobs_config, cancellation_token);
+            RpcConnection::new(rpc_config, logger, jobs_config, cancellation_token, storage);
         return rpc_connection;
     }
 
@@ -119,6 +124,31 @@ impl Grader {
         let pid = std::process::id();
         info!(self.logger, "Started grader serving at PID = {}", pid);
         let rpc = &mut self.rpc;
-        rpc.serve(&self.storage_manager).await
+        let (status_sink, mut status_stream) = mpsc::unbounded_channel::<usize>();
+        let (finished_sink, mut finished_stream) = mpsc::unbounded_channel::<Submission>();
+        let (mut processor_sink, processor_stream) = mpsc::unbounded_channel::<Submission>();
+
+        let grader_config = self.config.clone();
+        let storage_manager = self.storage_manager.clone();
+        let jobs_manager_logger = self.logger.new(o!("name" => "jobs_manager"));
+        let jobs_manager_cancellation_token = self.cancellation_token.child_token();
+        spawn(async {
+            let mut jobs_manager = JobsManager::new(
+                grader_config,
+                storage_manager,
+                jobs_manager_logger,
+                jobs_manager_cancellation_token,
+            );
+            jobs_manager
+                .serve(status_sink, finished_sink, processor_stream)
+                .await
+        });
+
+        rpc.serve(
+            &mut status_stream,
+            &mut finished_stream,
+            &mut processor_sink,
+        )
+        .await
     }
 }
