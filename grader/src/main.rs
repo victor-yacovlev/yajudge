@@ -1,8 +1,10 @@
+pub mod builders;
 pub mod grader;
 pub mod jobs;
 pub mod processor;
 pub mod properties;
 pub mod rpc;
+pub mod runner;
 pub mod storage;
 pub mod generated {
     pub mod yajudge;
@@ -10,16 +12,17 @@ pub mod generated {
 
 #[macro_use]
 extern crate slog;
+#[macro_use]
+extern crate anyhow;
 
-use std::error::Error;
-
+use anyhow::Result;
 use clap::{Arg, Command};
 use grader::Grader;
 
 use crate::properties::GraderConfig;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     let arg_matches = Command::new("Yajudge Grader")
         .about("Starts Yajudge grader service")
         .arg_required_else_help(true)
@@ -46,5 +49,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
     let config = GraderConfig::from_args(arg_matches);
     let mut grader = Grader::new(config)?;
+
     grader.main().await
 }

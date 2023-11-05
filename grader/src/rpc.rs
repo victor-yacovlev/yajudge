@@ -8,9 +8,10 @@ use crate::{
     properties::{JobsConfig, RpcConfig},
     storage::StorageManager,
 };
+
+use anyhow::Result;
 use slog::Logger;
-use std::{error::Error, str::FromStr, time::Duration};
-use string_error::into_err;
+use std::{str::FromStr, time::Duration};
 use tokio::{
     select,
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
@@ -34,7 +35,9 @@ pub struct YajudgeInterceptor {
 
 pub struct RpcConnection {
     submissions_client: SubmissionManagementClient<InterceptedService<Channel, YajudgeInterceptor>>,
+    submissions_uri: Uri,
     content_client: CourseContentProviderClient<InterceptedService<Channel, YajudgeInterceptor>>,
+    content_uri: Uri,
     service_properties: ConnectedServiceProperties,
     cancellation_token: CancellationToken,
 
@@ -51,13 +54,17 @@ impl RpcConnection {
         storage: StorageManager,
     ) -> RpcConnection {
         let (submissions_client, content_client) = Self::make_client(rpc_config);
+        let submissions_uri = rpc_config.endpoints.submissions_uri.clone();
+        let content_uri = rpc_config.endpoints.courses_content_uri.clone();
         let service_properties =
             Self::make_service_properties(jobs_config.arch_specific_only, jobs_config.name.clone());
         return RpcConnection {
             logger,
             service_properties,
             submissions_client,
+            submissions_uri,
             content_client,
+            content_uri,
             cancellation_token,
             storage,
         };
@@ -71,7 +78,7 @@ impl RpcConnection {
     ) {
         let endpoints = &rpc.endpoints;
         let submissions_channel = Self::make_channel(&endpoints.submissions_uri);
-        let courses_channel = Self::make_channel(&endpoints.submissions_uri);
+        let courses_channel = Self::make_channel(&endpoints.courses_content_uri);
         let submissions_interceptor = YajudgeInterceptor {
             private_token: rpc.private_token.clone(),
         };
@@ -85,18 +92,6 @@ impl RpcConnection {
         let courses_client =
             CourseContentProviderClient::with_interceptor(courses_channel, courses_interceptor);
         return (submissions_client, courses_client);
-    }
-
-    pub fn error_can_be_recovered(err: &Box<dyn Error>) -> bool {
-        if let Some(&ref status) = err.downcast_ref::<Status>() {
-            let code = status.code();
-            return match code {
-                Code::Internal => true, // nginx timeout shutdown causes to 'h2 protocol error' internal error
-                _ => false,
-            };
-        }
-
-        return false;
     }
 
     fn make_channel(uri: &Uri) -> Channel {
@@ -159,12 +154,12 @@ impl RpcConnection {
         GradingPlatform { arch: arch as i32 }
     }
 
-    pub async fn serve_until_disconnected(
+    pub async fn serve(
         &mut self,
         status_stream: &mut UnboundedReceiver<usize>,
         finished_stream: &mut UnboundedReceiver<Submission>,
         processor_sink: &mut UnboundedSender<Submission>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         let mut rpc_stream = self
             .submissions_client
             .receive_submissions_to_process(self.service_properties.clone())
@@ -175,7 +170,27 @@ impl RpcConnection {
             select! {
                 message = rpc_stream.message() => {
                     if message.is_err() {
-                        return Result::Err(Box::new(message.unwrap_err()));
+                        let error_status = message.unwrap_err();
+                        let error_code = error_status.code();
+                        match error_code {
+                            // nginx timeout shutdown causes to 'h2 protocol error' internal error
+                            // so this error is recoverable -> just wait and reconnect
+                            Code::Internal => {
+                                debug!(
+                                    self.logger,
+                                    "Got gRPC error that can be recovered after {} secs: {}",
+                                    RECONNECT_TIMEOUT,
+                                    error_status,
+                                );
+                                _ = sleep(Duration::from_secs(RECONNECT_TIMEOUT));
+                                continue;
+                            }
+                            _ => bail!(
+                                    "RPC Stream error while accessing {}: {}",
+                                    self.submissions_uri,
+                                    error_status,
+                                )
+                        }
                     }
                     let submission = message.unwrap().unwrap();
                     debug!(
@@ -233,56 +248,10 @@ impl RpcConnection {
         Ok(())
     }
 
-    pub async fn serve(
-        &mut self,
-        status_stream: &mut UnboundedReceiver<usize>,
-        finished_stream: &mut UnboundedReceiver<Submission>,
-        processor_sink: &mut UnboundedSender<Submission>,
-    ) -> Result<(), Box<dyn Error>> {
-        loop {
-            let serve_result = self
-                .serve_until_disconnected(status_stream, finished_stream, processor_sink)
-                .await;
-            if serve_result.is_ok() {
-                return Ok(()); // graceful shutdown from 'serve_until_disconnected'
-            }
-            if serve_result.is_err() {
-                let err = serve_result.unwrap_err();
-                if !Self::error_can_be_recovered(&err) {
-                    error!(self.logger, "Connection error: {}", err);
-                    return Result::Err(err);
-                }
-                debug!(
-                    self.logger,
-                    "Got gRPC error that can be recovered after {} secs: {}",
-                    RECONNECT_TIMEOUT,
-                    err
-                );
-            }
-            let must_stop = select! {
-                _ = sleep(Duration::from_secs(RECONNECT_TIMEOUT)) => {
-                    false
-                }
-                _ = self.cancellation_token.cancelled() => {
-                    true
-                }
-            };
-            if must_stop {
-                return Ok(());
-            }
-        }
-    }
-
-    async fn fetch_submission_problem(
-        &mut self,
-        submission: &Submission,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn fetch_submission_problem(&mut self, submission: &Submission) -> Result<()> {
         let soltion_files = &submission.solution_files;
         if soltion_files.clone().unwrap().files.is_empty() {
-            return Err(into_err(format!(
-                "Submission {} has no solution files",
-                submission.id
-            )));
+            bail!("Submission {} has no solution files", submission.id);
         }
         let course_id = submission.course.clone().unwrap().data_id;
         let problem_id = submission.problem_id.clone();
@@ -310,12 +279,10 @@ impl RpcConnection {
     fn enque_submission_to_process(
         processor_sink: &mut UnboundedSender<Submission>,
         submission: Submission,
-    ) -> Result<(), Box<dyn Error>> {
-        let send_status = processor_sink.send(submission);
-        match send_status {
-            Ok(()) => Ok(()),
-            Err(err) => Err(Box::new(err)),
-        }
+    ) -> Result<()> {
+        processor_sink.send(submission)?;
+
+        Ok(())
     }
 }
 

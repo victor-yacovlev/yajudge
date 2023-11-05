@@ -3,13 +3,12 @@ use crate::jobs::JobsManager;
 use crate::properties::{GraderConfig, JobsConfig, LogConfig, RpcConfig};
 use crate::rpc::RpcConnection;
 use crate::storage::StorageManager;
+use anyhow::Result;
 use slog::{Drain, Level, Logger};
 use slog_term;
-use std::error::Error;
 use std::io::Write;
 use tokio::spawn;
 use tokio::sync::mpsc;
-
 use tokio::{select, signal::unix::signal, signal::unix::SignalKind};
 use tokio_util::sync::CancellationToken;
 
@@ -24,7 +23,7 @@ pub struct Grader {
 }
 
 impl Grader {
-    pub fn new(config: GraderConfig) -> Result<Grader, Box<dyn Error>> {
+    pub fn new(config: GraderConfig) -> Result<Grader> {
         let logger = Self::setup_logger(&config.log);
         let cancellation_token = Self::setup_signals_handler(&logger);
         let storage_manager = StorageManager::new(config.locations.clone())?;
@@ -45,6 +44,7 @@ impl Grader {
             storage_manager,
         };
         info!(grader.logger, "Grader initialized");
+
         Ok(grader)
     }
 
@@ -120,7 +120,7 @@ impl Grader {
         return token;
     }
 
-    pub async fn main(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn main(&mut self) -> Result<()> {
         let pid = std::process::id();
         info!(self.logger, "Started grader serving at PID = {}", pid);
         let rpc = &mut self.rpc;

@@ -102,6 +102,8 @@ impl JobsManager {
     }
 
     fn launch_task(&mut self, submission: Submission) {
+        let submission_id = submission.id;
+        self.submissions_in_progress.insert(submission_id);
         let mut processor = SubmissionProcessor::new(
             self.config.clone(),
             self.logger
