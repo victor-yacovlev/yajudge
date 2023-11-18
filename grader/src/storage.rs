@@ -137,7 +137,7 @@ impl StorageManager {
         Ok(submission.id)
     }
 
-    fn store_file_to(dir_path: &Path, file: &Option<&File>, gzipped: bool) -> Result<()> {
+    pub fn store_file_to(dir_path: &Path, file: &Option<&File>, gzipped: bool) -> Result<()> {
         match file {
             None => Ok(()),
             Some(file) => {
@@ -164,7 +164,7 @@ impl StorageManager {
         Self::store_binary(path, &data.to_string().as_bytes(), false)
     }
 
-    fn store_binary(path: &Path, data: &[u8], gzipped: bool) -> Result<()> {
+    pub fn store_binary(path: &Path, data: &[u8], gzipped: bool) -> Result<()> {
         let dir_path = path.parent().unwrap();
         Self::mkdir(&dir_path)?;
 

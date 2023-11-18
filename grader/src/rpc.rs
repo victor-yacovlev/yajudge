@@ -192,19 +192,20 @@ impl RpcConnection {
                                 )
                         }
                     }
-                    let submission = message.unwrap().unwrap();
-                    debug!(
-                        self.logger,
-                        "Got submission {} {}", submission.id, submission.problem_id
-                    );
-                    match self.fetch_submission_problem(&submission).await {
-                        Err(err) => {
-                            error!(self.logger, "Failed to fetch submission problem: {}", err)
-                        },
-                        Ok(()) => {
-                            let enqued = Self::enque_submission_to_process(processor_sink, submission);
-                            if enqued.is_err() {
-                                error!(self.logger, "Failed to enque submission: {}", enqued.unwrap_err());
+                    else if let Some(submission) = message.unwrap() {
+                        debug!(
+                            self.logger,
+                            "Got submission {} {}", submission.id, submission.problem_id
+                        );
+                        match self.fetch_submission_problem(&submission).await {
+                            Err(err) => {
+                                error!(self.logger, "Failed to fetch submission problem: {}", err)
+                            },
+                            Ok(()) => {
+                                let enqued = Self::enque_submission_to_process(processor_sink, submission);
+                                if enqued.is_err() {
+                                    error!(self.logger, "Failed to enque submission: {}", enqued.unwrap_err());
+                                }
                             }
                         }
                     }

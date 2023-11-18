@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
+async-trait = "0.1.74"
 clap = "4.2.1"
 yaml-rust = "0.4.5"
 slog = "2.7.0"
@@ -24,12 +25,14 @@ tonic = { version = "0.9.2", features = ["tls", "tls-roots", "gzip"] }
 tokio-util = "0.7.8"
 string-error = "0.1.0"
 libflate = "1.4.0"
-libc = "0.2.146"
-nix = { version = "0.26.2", features = [
+libc = "0.2.150"
+nix = { version = "0.27.1", features = [
     "sched",
     "user",
     "mount",
     "fs",
+    "signal",
+    "event",
     "process",
     "resource",
 ] }
