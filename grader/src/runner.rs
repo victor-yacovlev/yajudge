@@ -44,6 +44,18 @@ impl ExitResult {
     }
 }
 
+impl ToString for ExitResult {
+    fn to_string(&self) -> String {
+        match self {
+            ExitResult::Finished(status) => format!("Exited with code {}", status),
+            ExitResult::Killed(signum) => format!("Killed by signal {}", signum),
+            ExitResult::Timeout => format!("Killed by timeout"),
+            ExitResult::StdoutLimit => format!("Reached stdout limit"),
+            ExitResult::StderrLimit => format!("Reached stderr limit"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct CommandOutput {
     pub exit_status: ExitResult,
@@ -78,13 +90,7 @@ impl CommandOutput {
                     let message = if !stderr.is_empty() {
                         stderr
                     } else {
-                        match r.exit_status {
-                            ExitResult::Finished(st) => format!("Exited with status {}", st),
-                            ExitResult::Killed(sig) => format!("Killed by signal {}", sig),
-                            ExitResult::Timeout => format!("Killed by timeout"),
-                            ExitResult::StdoutLimit => format!("Stdout limit"),
-                            ExitResult::StderrLimit => format!("Stderr limit"),
-                        }
+                        r.exit_status.to_string()
                     };
                     Some(message)
                 }
