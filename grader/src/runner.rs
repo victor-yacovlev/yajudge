@@ -1,17 +1,13 @@
 use anyhow::Result;
+use nix::{self, fcntl, mount, sched, sys, unistd};
 use std::{
-    ffi::{CStr, CString},
+    ffi::CString,
+    os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
     path::{Path, PathBuf},
     process::Command,
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-use nix::{
-    mount::{mount, MsFlags},
-    sched::{unshare, CloneFlags},
-    sys::resource::{setrlimit, Resource},
-    unistd::{chdir, chroot},
-};
 use slog::Logger;
 
 use crate::{generated::yajudge::GradingLimits, storage::StorageManager};
@@ -98,11 +94,11 @@ struct LaunchCmd {
 }
 
 struct ProcessMonitor {
-    pid: i32,
-    epoll: i32,
-    stdin: i32,
-    stdout: i32,
-    stderr: i32,
+    pid: unistd::Pid,
+    epoll: sys::epoll::Epoll,
+    stdin: Option<OwnedFd>,
+    stdout: Option<OwnedFd>,
+    stderr: Option<OwnedFd>,
     real_time_ms: u64,
     stdout_limit: u64,
     stderr_limit: u64,
@@ -122,154 +118,139 @@ enum ProcessEvent {
 
 impl ProcessMonitor {
     pub fn new(
-        stdin: i32,
-        stdout: i32,
-        stderr: i32,
-        pid: i32,
+        stdin: OwnedFd,
+        stdout: OwnedFd,
+        stderr: OwnedFd,
+        pid: unistd::Pid,
         real_time_limit_sec: i32,
         stdout_limit_mb: i32,
         stderr_limit_mb: i32,
-    ) -> ProcessMonitor {
-        let epoll = unsafe {
-            let epoll_fd = libc::epoll_create(1);
-            let mut event_stdout = libc::epoll_event {
-                events: libc::EPOLLIN as u32,
-                u64: stdout as u64,
-            };
-            let mut event_stderr = libc::epoll_event {
-                events: libc::EPOLLIN as u32,
-                u64: stderr as u64,
-            };
-            libc::epoll_ctl(epoll_fd, libc::EPOLL_CTL_ADD, stdout, &mut event_stdout);
-            libc::epoll_ctl(epoll_fd, libc::EPOLL_CTL_ADD, stderr, &mut event_stderr);
+    ) -> Result<ProcessMonitor> {
+        let epoll = sys::epoll::Epoll::new(sys::epoll::EpollCreateFlags::empty())?;
+        epoll.add(
+            &stdout,
+            sys::epoll::EpollEvent::new(sys::epoll::EpollFlags::EPOLLIN, stdout.as_raw_fd() as u64),
+        )?;
+        epoll.add(
+            &stderr,
+            sys::epoll::EpollEvent::new(sys::epoll::EpollFlags::EPOLLIN, stderr.as_raw_fd() as u64),
+        )?;
 
-            epoll_fd
-        };
-
-        ProcessMonitor {
+        let result = ProcessMonitor {
             pid,
             epoll,
-            stdin,
-            stdout,
-            stderr,
+            stdin: Some(stdin),
+            stdout: Some(stdout),
+            stderr: Some(stderr),
             stdout_limit: stdout_limit_mb as u64 * 1024 * 1024,
             stderr_limit: stderr_limit_mb as u64 * 1024 * 1024,
             real_time_limit_ms: real_time_limit_sec as u64 * 1000,
             real_time_ms: 0,
             stdout_written: 0,
             stderr_written: 0,
-        }
+        };
+
+        Ok(result)
     }
 
     fn stop_event_processing(&mut self) {
-        unsafe {
-            libc::close(self.epoll);
-            libc::close(self.stdin);
-            libc::close(self.stdout);
-            libc::close(self.stderr);
-        }
+        self.stdin = None;
+        self.stdout = None;
+        self.stderr = None;
     }
 
     fn kill(&mut self) {
-        unsafe {
-            libc::kill(self.pid, libc::SIGKILL);
-        }
+        let _ = sys::signal::kill(self.pid, sys::signal::SIGKILL);
         self.stop_event_processing();
     }
 
     fn read_all_from_fd(fd: i32) -> Option<Vec<u8>> {
         let mut buf = Vec::<u8>::with_capacity(4096);
         buf.resize(4096, 0);
-        let mut eagain = false;
         let mut result = Vec::<u8>::new();
         loop {
-            let bytes_read = unsafe {
-                libc::read(
-                    fd,
-                    buf.as_mut_ptr() as *mut libc::c_void,
-                    buf.len() as libc::size_t,
-                )
-            };
-            if bytes_read < 0 {
-                // TODO check for error other than EAGAIN
-                eagain = true;
-                break;
+            let read_result = unistd::read(fd, buf.as_mut_slice());
+            match read_result {
+                Ok(bytes_read) => {
+                    if bytes_read == 0 {
+                        break;
+                    } else {
+                        let mut chunk = buf.clone();
+                        chunk.truncate(bytes_read);
+                        result.append(&mut chunk);
+                    }
+                }
+                Err(_) => {
+                    break;
+                }
             }
-            if bytes_read == 0 {
-                break;
-            }
-            let mut chunk = buf.clone();
-            chunk.truncate(bytes_read as usize);
-            result.append(&mut chunk);
         }
 
-        if result.len() == 0 && !eagain {
+        if result.len() == 0 {
             None
         } else {
             Some(result)
         }
     }
 
-    pub fn next_event(&mut self) -> Option<ProcessEvent> {
-        let mut epoll_event = libc::epoll_event { events: 0, u64: 0 };
-        let events_count = unsafe { libc::epoll_wait(self.epoll, &mut epoll_event, 1, 1000) };
-        if -1 == events_count {
-            panic!("epoll_wait failed");
-        }
+    pub fn next_event(&mut self) -> Result<Option<ProcessEvent>> {
+        let mut epoll_events = [sys::epoll::EpollEvent::empty()];
+        let events_count = self.epoll.wait(&mut epoll_events, 1000)?;
         self.real_time_ms += 1000;
         if self.real_time_ms >= self.real_time_limit_ms && self.real_time_limit_ms > 0 {
             self.kill();
-            return Some(ProcessEvent::Timeout);
+            return Ok(Some(ProcessEvent::Timeout));
         }
         if 0 == events_count {
-            let mut wait_status: i32 = 0;
-            unsafe {
-                let waitpid_status = libc::waitpid(self.pid, &mut wait_status, libc::WNOHANG);
-                if waitpid_status != self.pid {
-                    return None;
-                }
-                let exit_result = if libc::WIFSIGNALED(wait_status) {
-                    let signum = libc::WTERMSIG(wait_status);
-                    ExitResult::Killed(signum as u8)
-                } else {
-                    let status = libc::WEXITSTATUS(wait_status);
-                    ExitResult::Finished(status as u8)
-                };
-                self.stop_event_processing();
-                return Some(ProcessEvent::Finished(exit_result));
+            let mut wait_flags = sys::wait::WaitPidFlag::empty();
+            wait_flags.insert(sys::wait::WaitPidFlag::WNOHANG);
+            let wait_status = sys::wait::waitpid(self.pid, Some(wait_flags))?;
+            if wait_status.pid() != Some(self.pid) {
+                return Ok(None);
             }
-        }
-        let fd = epoll_event.u64 as i32;
-        if fd == self.stdout {
-            let data = Self::read_all_from_fd(fd);
-            if data.is_none() {
-                unsafe {
-                    libc::close(self.stdout);
-                    return None;
+            let exit_event = match wait_status {
+                sys::wait::WaitStatus::Exited(_, status) => {
+                    Some(ProcessEvent::Finished(ExitResult::Finished(status as u8)))
                 }
+                sys::wait::WaitStatus::Signaled(_, signal, _) => {
+                    Some(ProcessEvent::Finished(ExitResult::Killed(signal as u8)))
+                }
+                _ => None,
+            };
+            self.stop_event_processing();
+            return Ok(exit_event);
+        }
+        let raw_fd = epoll_events[0].data() as RawFd;
+        if self.stdout.is_some()
+            && raw_fd == self.stdout.as_ref().expect("stdout closed").as_raw_fd()
+        {
+            let data = Self::read_all_from_fd(raw_fd);
+            if data.is_none() {
+                self.stdout = None;
+                return Ok(None);
             }
             self.stdout_written += data.as_ref().unwrap().len() as u64;
             if self.stdout_written <= self.stdout_limit || self.stdout_limit == 0 {
-                return Some(ProcessEvent::StdoutData(data.unwrap()));
+                return Ok(Some(ProcessEvent::StdoutData(data.unwrap())));
             } else {
                 self.kill();
-                return Some(ProcessEvent::StdoutLimit);
+                return Ok(Some(ProcessEvent::StdoutLimit));
             }
         }
-        if fd == self.stderr {
-            let data = Self::read_all_from_fd(fd);
+        if self.stderr.is_some()
+            && raw_fd == self.stderr.as_ref().expect("stderr closed").as_raw_fd()
+        {
+            let data = Self::read_all_from_fd(raw_fd);
             if data.is_none() {
-                unsafe {
-                    libc::close(self.stderr);
-                    return None;
-                }
+                self.stderr = None;
+                return Ok(None);
             }
             self.stderr_written += data.as_ref().unwrap().len() as u64;
             if self.stderr_written <= self.stderr_limit || self.stderr_limit == 0 {
-                return Some(ProcessEvent::StderrData(data.unwrap()));
+                return Ok(Some(ProcessEvent::StderrData(data.unwrap())));
             } else {
                 self.kill();
-                return Some(ProcessEvent::StderrLimit);
+                return Ok(Some(ProcessEvent::StderrLimit));
             }
         }
 
@@ -323,20 +304,20 @@ impl Runner {
     }
 
     unsafe fn enter_initial_namespace(allow_network: bool) -> Result<()> {
-        let uid = libc::getuid();
-        let gid = libc::getgid();
+        let uid = unistd::getuid();
+        let gid = unistd::getgid();
         let uid_map_line = format!("0 {} 1", uid);
         let gid_map_line = format!("0 {} 1", gid);
 
-        let mut unshare_flags = CloneFlags::empty();
-        unshare_flags.insert(CloneFlags::CLONE_NEWUSER);
-        unshare_flags.insert(CloneFlags::CLONE_NEWNS);
-        unshare_flags.insert(CloneFlags::CLONE_NEWIPC);
+        let mut unshare_flags = sched::CloneFlags::empty();
+        unshare_flags.insert(sched::CloneFlags::CLONE_NEWUSER);
+        unshare_flags.insert(sched::CloneFlags::CLONE_NEWNS);
+        unshare_flags.insert(sched::CloneFlags::CLONE_NEWIPC);
         if !allow_network {
-            unshare_flags.insert(CloneFlags::CLONE_NEWNET);
-            unshare_flags.insert(CloneFlags::CLONE_NEWUTS);
+            unshare_flags.insert(sched::CloneFlags::CLONE_NEWNET);
+            unshare_flags.insert(sched::CloneFlags::CLONE_NEWUTS);
         }
-        unshare(unshare_flags)?;
+        sched::unshare(unshare_flags)?;
 
         std::fs::write("/proc/self/uid_map", &uid_map_line)?;
         std::fs::write("/proc/self/setgroups", "deny")?;
@@ -371,40 +352,40 @@ impl Runner {
         overlay_mergedir: &Path,
         initial_cwd: &Path,
     ) -> Result<()> {
-        let mount_flags = MsFlags::empty();
-        mount(
+        let mount_flags = mount::MsFlags::empty();
+        mount::mount(
             Some("overlay"),
             overlay_mergedir,
             Some("overlay"),
             mount_flags,
             Some(mount_overlay_options.as_str()),
         )?;
-        chroot(overlay_mergedir)?;
+        unistd::chroot(overlay_mergedir)?;
         std::fs::create_dir_all("/tmp")?;
         std::fs::create_dir_all("/proc")?;
-        mount(
+        mount::mount(
             Some("tmpfs"),
             "/tmp",
             Some("tmpfs"),
             mount_flags,
             None::<&str>,
         )?;
-        chdir(initial_cwd)?;
+        unistd::chdir(initial_cwd)?;
 
         Ok(())
     }
 
     fn unshare_pid_namespace() -> Result<()> {
-        let mut unshare_flags = CloneFlags::empty();
-        unshare_flags.insert(CloneFlags::CLONE_NEWPID);
-        unshare(unshare_flags)?;
+        let mut unshare_flags = sched::CloneFlags::empty();
+        unshare_flags.insert(sched::CloneFlags::CLONE_NEWPID);
+        sched::unshare(unshare_flags)?;
 
         Ok(())
     }
 
     fn mount_proc_fs() -> Result<()> {
-        let mount_flags = MsFlags::empty();
-        mount(
+        let mount_flags = mount::MsFlags::empty();
+        mount::mount(
             Some("proc"),
             "/proc",
             Some("proc"),
@@ -420,27 +401,33 @@ impl Runner {
         Ok(())
     }
 
-    fn set_rlim_value(key: Resource, value: i32) -> Result<()> {
-        setrlimit(key, value as u64, value as u64)?;
+    fn set_rlim_value(key: sys::resource::Resource, value: i32) -> Result<()> {
+        sys::resource::setrlimit(key, value as u64, value as u64)?;
 
         Ok(())
     }
 
     fn setup_posix_limits(limits: &GradingLimits) -> Result<()> {
         if limits.cpu_time_limit_sec != 0 {
-            Self::set_rlim_value(Resource::RLIMIT_CPU, limits.cpu_time_limit_sec)?;
+            Self::set_rlim_value(
+                sys::resource::Resource::RLIMIT_CPU,
+                limits.cpu_time_limit_sec,
+            )?;
         }
         if limits.stack_size_limit_mb != 0 {
             Self::set_rlim_value(
-                Resource::RLIMIT_STACK,
+                sys::resource::Resource::RLIMIT_STACK,
                 limits.stack_size_limit_mb * 1024 * 1024,
             )?;
         }
         if limits.fd_count_limit != 0 {
-            Self::set_rlim_value(Resource::RLIMIT_NOFILE, limits.fd_count_limit)?;
+            Self::set_rlim_value(
+                sys::resource::Resource::RLIMIT_NOFILE,
+                limits.fd_count_limit,
+            )?;
         }
         // to prevent fork-bombs in case if croup-limits not set
-        Self::set_rlim_value(Resource::RLIMIT_NPROC, 5000)?;
+        Self::set_rlim_value(sys::resource::Resource::RLIMIT_NPROC, 5000)?;
 
         Ok(())
     }
@@ -476,28 +463,19 @@ impl Runner {
         coprocesses: Vec<LaunchCmd>,
     ) -> anyhow::Result<()> {
         Self::unshare_pid_namespace()?;
-        let fork_result = libc::fork();
+        let fork_result = unistd::fork()?;
         match fork_result {
-            -1 => panic!("Can't start root process"),
-            0 => {
+            unistd::ForkResult::Child => {
                 Self::mount_proc_fs()?;
                 Self::start_child_processes_in_new_pid_namespace(main, coprocesses)?;
             }
-            child_pid => {
-                let exit_result = Self::wait_for_finished_or_killed(child_pid);
+            unistd::ForkResult::Parent { child } => {
+                let exit_result = Self::wait_for_finished_or_killed(child)?;
                 Self::rethrow_exit_result(exit_result);
             }
         };
 
         Ok(())
-    }
-
-    fn to_exec_array<S: AsRef<CStr>>(args: &[S]) -> Vec<*const libc::c_char> {
-        use std::iter::once;
-        args.iter()
-            .map(|s| s.as_ref().as_ptr())
-            .chain(once(std::ptr::null()))
-            .collect()
     }
 
     unsafe fn start_child_processes_in_new_pid_namespace(
@@ -513,15 +491,14 @@ impl Runner {
             let arg_cstring = CString::new(argument).unwrap();
             arg_strings.push(arg_cstring);
         }
-        let fork_result = libc::fork();
+        let fork_result = unistd::fork()?;
         match fork_result {
-            0 => {
-                let args_p = Self::to_exec_array(&arg_strings);
-                unsafe { libc::execvp(filename.as_ptr(), args_p.as_ptr()) };
+            unistd::ForkResult::Child => {
+                unistd::execvp(filename.as_c_str(), &arg_strings)?;
                 panic!("execvp failed");
             }
-            child_pid => {
-                let exit_result = Self::wait_for_finished_or_killed(child_pid);
+            unistd::ForkResult::Parent { child } => {
+                let exit_result = Self::wait_for_finished_or_killed(child)?;
                 Self::rethrow_exit_result(exit_result);
             }
         }
@@ -552,32 +529,30 @@ impl Runner {
         Ok((options_string, mergedir.to_owned()))
     }
 
-    unsafe fn wait_for_finished_or_killed(pid: i32) -> ExitResult {
+    unsafe fn wait_for_finished_or_killed(pid: unistd::Pid) -> Result<ExitResult> {
         let result = loop {
-            let mut wait_status: i32 = 0;
-            let _ = libc::waitpid(pid, &mut wait_status, 0);
-            if libc::WIFEXITED(wait_status) {
-                let exit_status = libc::WEXITSTATUS(wait_status);
-                break ExitResult::Finished(exit_status as u8);
-            }
-            if libc::WIFSIGNALED(wait_status) {
-                let signal = libc::WTERMSIG(wait_status);
-                break ExitResult::Killed(signal as u8);
+            let wait_status = sys::wait::waitpid(pid, None)?;
+            match wait_status {
+                sys::wait::WaitStatus::Exited(_, exit_status) => {
+                    break ExitResult::Finished(exit_status as u8)
+                }
+                sys::wait::WaitStatus::Signaled(_, signal, _) => {
+                    break ExitResult::Killed(signal as u8);
+                }
+                _ => continue,
             }
         };
-        return result;
+        return Ok(result);
     }
 
     // This function must be called only from child process!
     fn rethrow_exit_result(exit_result: ExitResult) {
-        unsafe {
-            match exit_result {
-                ExitResult::Finished(status) => libc::_exit(status as i32),
-                ExitResult::Killed(signum) => {
-                    let _ = libc::raise(signum as i32);
-                }
-                _ => panic!("This case must not appear in child process"),
+        match exit_result {
+            ExitResult::Finished(status) => std::process::exit(status as i32),
+            ExitResult::Killed(signum) => {
+                let _ = sys::signal::raise(sys::signal::Signal::try_from(signum as i32).unwrap());
             }
+            _ => panic!("This case must not appear in child process"),
         }
     }
 
@@ -631,13 +606,9 @@ impl Runner {
         let (mount_overlay_options, overlay_mergedir) = self.prepare_overlay_to_mount()?;
         let initial_cwd = self.relative_workdir.clone();
 
-        let mut stdin_pipe = vec![-1, -1];
-        let mut stdout_pipe = vec![-1, -1];
-        let mut stderr_pipe = vec![-1, -1];
-
-        unsafe { libc::pipe(stdin_pipe.as_mut_ptr()) };
-        unsafe { libc::pipe2(stdout_pipe.as_mut_ptr(), libc::O_NONBLOCK) };
-        unsafe { libc::pipe2(stderr_pipe.as_mut_ptr(), libc::O_NONBLOCK) };
+        let (stdin_pipe_0, stdin_pipe_1) = unistd::pipe()?;
+        let (stdout_pipe_0, stdout_pipe_1) = unistd::pipe2(fcntl::OFlag::O_NONBLOCK)?;
+        let (stderr_pipe_0, stderr_pipe_1) = unistd::pipe2(fcntl::OFlag::O_NONBLOCK)?;
 
         let (stdout_sender, stdout_receiver) = unbounded_channel();
         let (stderr_sender, stderr_receiver) = unbounded_channel();
@@ -646,22 +617,15 @@ impl Runner {
         self.stdout_receiver = Some(stdout_receiver);
         self.stderr_receiver = Some(stderr_receiver);
 
-        let fork_result = unsafe { libc::fork() };
+        let fork_result = unsafe { unistd::fork()? };
         match fork_result {
-            -1 => {
-                return Err(anyhow!(
-                    "Can' create new process for {} {}",
-                    program,
-                    arguments.join(" "),
-                ))
-            }
-            0 => unsafe {
-                libc::dup2(stdin_pipe[0], 0);
-                libc::dup2(stdout_pipe[1], 1);
-                libc::dup2(stderr_pipe[1], 2);
-                libc::close(stdin_pipe[0]);
-                libc::close(stdout_pipe[1]);
-                libc::close(stderr_pipe[1]);
+            unistd::ForkResult::Child => unsafe {
+                let _ = unistd::dup2(stdin_pipe_0, 0);
+                let _ = unistd::dup2(stdout_pipe_1, 1);
+                let _ = unistd::dup2(stderr_pipe_1, 2);
+                let _ = unistd::close(stdin_pipe_0);
+                let _ = unistd::close(stdout_pipe_1);
+                let _ = unistd::close(stderr_pipe_1);
 
                 Self::tune_new_process(
                     limits,
@@ -672,12 +636,10 @@ impl Runner {
 
                 Self::start_root_process_then_start_childs(main_process, vec![])?;
             },
-            child_pid => {
-                unsafe {
-                    libc::close(stdin_pipe[0]);
-                    libc::close(stdout_pipe[1]);
-                    libc::close(stderr_pipe[1]);
-                }
+            unistd::ForkResult::Parent { child } => {
+                let _ = unistd::close(stdin_pipe_0);
+                let _ = unistd::close(stdout_pipe_1);
+                let _ = unistd::close(stderr_pipe_1);
                 let (real_time_limit_sec, stdout_limit_mb, stderr_limit_mb) = match limits {
                     None => (0, 0, 0),
                     Some(lim) => (
@@ -686,15 +648,18 @@ impl Runner {
                         lim.stderr_size_limit_mb,
                     ),
                 };
+                let stdin = unsafe { OwnedFd::from_raw_fd(stdin_pipe_1) };
+                let stdout = unsafe { OwnedFd::from_raw_fd(stdout_pipe_0) };
+                let stderr = unsafe { OwnedFd::from_raw_fd(stderr_pipe_0) };
                 let child_process = ProcessMonitor::new(
-                    stdin_pipe[1],
-                    stdout_pipe[0],
-                    stderr_pipe[0],
-                    child_pid,
+                    stdin,
+                    stdout,
+                    stderr,
+                    child,
                     real_time_limit_sec,
                     stdout_limit_mb,
                     stderr_limit_mb,
-                );
+                )?;
                 self.child = Some(child_process);
             }
         };
@@ -710,7 +675,7 @@ impl Runner {
         let child = self.child.as_mut().unwrap();
 
         loop {
-            let event_option = child.next_event();
+            let event_option = child.next_event()?;
             if event_option.is_none() {
                 continue;
             }
