@@ -221,8 +221,14 @@ impl Runner {
         let fork_result = unistd::fork()?;
         match fork_result {
             unistd::ForkResult::Child => {
-                Self::mount_proc_fs(log_pipe)?;
-                Self::start_child_processes_in_new_pid_namespace(log_pipe, main, coprocesses)?;
+                if let Err(error) = Self::mount_proc_fs(log_pipe) {
+                    Self::fatal_error(log_pipe, error);
+                }
+                if let Err(error) =
+                    Self::start_child_processes_in_new_pid_namespace(log_pipe, main, coprocesses)
+                {
+                    Self::fatal_error(log_pipe, error);
+                }
             }
             unistd::ForkResult::Parent { child } => {
                 let exit_result = Self::wait_for_finished_or_killed(log_pipe, child)?;
@@ -240,18 +246,25 @@ impl Runner {
     ) -> Result<()> {
         // TODO launch coprocesses
 
-        let filename = CString::new(main.program).unwrap();
+        let filename = CString::new(main.program.clone()).unwrap();
         let mut arg_strings = Vec::<CString>::with_capacity(main.arguments.len() + 1);
         arg_strings.push(filename.clone());
-        for argument in main.arguments {
-            let arg_cstring = CString::new(argument).unwrap();
+        for argument in &main.arguments {
+            let arg_cstring = CString::new(argument.clone()).unwrap();
             arg_strings.push(arg_cstring);
         }
         let fork_result = unistd::fork()?;
         match fork_result {
             unistd::ForkResult::Child => {
                 unistd::execvp(filename.as_c_str(), &arg_strings)?;
-                Self::fatal_error(log_pipe, anyhow!("execvp failed"));
+                Self::fatal_error(
+                    log_pipe,
+                    anyhow!(
+                        "execvp({}, {}) failed",
+                        main.program,
+                        main.arguments.join(" ")
+                    ),
+                );
             }
             unistd::ForkResult::Parent { child } => {
                 let exit_result = Self::wait_for_finished_or_killed(log_pipe, child)?;
