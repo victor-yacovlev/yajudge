@@ -1,5 +1,4 @@
 use anyhow::Result;
-use prost::encoding::message;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
 use nix::{sys, unistd};

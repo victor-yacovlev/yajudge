@@ -493,7 +493,7 @@ impl ToYaml for GradingOptions {
             result.insert(k("limits"), Yaml::Hash(GradingLimits::to_yaml(&limits)));
         }
         let build_system =
-            BuildSystem::from_i32(self.build_system).expect("Unknown build_system value");
+            BuildSystem::try_from(self.build_system).expect("Unknown build_system value");
         result.insert(
             k("build_system"),
             Yaml::String(build_system.as_str_name().to_string()),

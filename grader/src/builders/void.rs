@@ -9,11 +9,11 @@ use crate::generated::yajudge::{ExecutableTarget, Submission};
 use super::{BuildResult, Builder, BuilderDetection, StyleCheckResult};
 
 pub struct VoidToolchain {
-    logger: Logger,
+    _logger: Logger,
 }
 impl VoidToolchain {
     pub fn new(logger: Logger) -> VoidToolchain {
-        VoidToolchain { logger }
+        VoidToolchain { _logger: logger }
     }
 }
 

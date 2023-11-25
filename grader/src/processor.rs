@@ -47,11 +47,11 @@ impl SubmissionProcessor {
             Ok(submission) => {
                 self.submission = submission;
                 let status_code = self.submission.status;
-                let status = match SolutionStatus::from_i32(status_code) {
-                    Some(known_status) => {
+                let status = match SolutionStatus::try_from(status_code) {
+                    Ok(known_status) => {
                         format!("{} ({})", status_code, known_status.as_str_name())
                     }
-                    None => format!("{}", status_code),
+                    Err(_) => format!("{}", status_code),
                 };
                 info!(
                     self.logger,

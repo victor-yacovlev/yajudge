@@ -63,11 +63,11 @@ impl BuilderFactory {
         submission: &Submission,
         options: &GradingOptions,
     ) -> Result<Box<dyn Builder>> {
-        let build_system = BuildSystem::from_i32(options.build_system);
-        if build_system.is_none() {
+        let build_system = BuildSystem::try_from(options.build_system);
+        if build_system.is_err() {
             bail!("Wrong build system enum value {}", options.build_system);
         }
-        match build_system.unwrap() {
+        match build_system.clone().unwrap() {
             BuildSystem::AutodetectBuild => self.detect_builder(submission),
             BuildSystem::ClangToolchain => Ok(Box::new(CLangToolchain::new(
                 self.logger.new(o!("name" => "clang_toolchain")),

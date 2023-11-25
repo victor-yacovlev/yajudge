@@ -37,7 +37,6 @@ pub struct RpcConnection {
     submissions_client: SubmissionManagementClient<InterceptedService<Channel, YajudgeInterceptor>>,
     submissions_uri: Uri,
     content_client: CourseContentProviderClient<InterceptedService<Channel, YajudgeInterceptor>>,
-    content_uri: Uri,
     service_properties: ConnectedServiceProperties,
     cancellation_token: CancellationToken,
 
@@ -55,7 +54,6 @@ impl RpcConnection {
     ) -> RpcConnection {
         let (submissions_client, content_client) = Self::make_client(rpc_config);
         let submissions_uri = rpc_config.endpoints.submissions_uri.clone();
-        let content_uri = rpc_config.endpoints.courses_content_uri.clone();
         let service_properties =
             Self::make_service_properties(jobs_config.arch_specific_only, jobs_config.name.clone());
         return RpcConnection {
@@ -64,7 +62,6 @@ impl RpcConnection {
             submissions_client,
             submissions_uri,
             content_client,
-            content_uri,
             cancellation_token,
             storage,
         };
