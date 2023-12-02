@@ -5,7 +5,7 @@ use crate::{
         ConnectedServiceStatus, ContentStatus, GradingPlatform, ProblemContentRequest, ServiceRole,
         ServiceStatus, Submission,
     },
-    properties::{JobsConfig, RpcConfig},
+    properties::{jobs_conf::JobsConfig, rpc_conf::RpcConfig},
     storage::StorageManager,
 };
 

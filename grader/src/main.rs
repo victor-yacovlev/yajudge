@@ -19,7 +19,7 @@ use anyhow::Result;
 use clap::{Arg, Command};
 use grader::Grader;
 
-use crate::properties::GraderConfig;
+use crate::properties::grader_conf::GraderConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,6 +1,9 @@
 use crate::generated::yajudge::Submission;
 use crate::jobs::JobsManager;
-use crate::properties::{GraderConfig, JobsConfig, LogConfig, RpcConfig};
+use crate::properties::grader_conf::GraderConfig;
+use crate::properties::jobs_conf::JobsConfig;
+use crate::properties::log_conf::LogConfig;
+use crate::properties::rpc_conf::RpcConfig;
 use crate::rpc::RpcConnection;
 use crate::storage::StorageManager;
 use anyhow::Result;

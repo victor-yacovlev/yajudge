@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::{
     builders::BuilderFactory,
     generated::yajudge::{SolutionStatus, Submission},
-    properties::GraderConfig,
+    properties::grader_conf::GraderConfig,
     storage::StorageManager,
 };
 

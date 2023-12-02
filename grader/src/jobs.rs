@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use crate::{
-    generated::yajudge::Submission, processor::SubmissionProcessor, properties::GraderConfig,
-    storage::StorageManager,
+    generated::yajudge::Submission, processor::SubmissionProcessor,
+    properties::grader_conf::GraderConfig, storage::StorageManager,
 };
 use slog::Logger;
 use threadpool::ThreadPool;

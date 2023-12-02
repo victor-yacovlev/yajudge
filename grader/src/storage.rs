@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
 use crate::{
     generated::yajudge::{File, GradingOptions, ProblemContentResponse, Submission},
-    properties::{FromYaml, LocationsConfig, ToYaml},
+    properties::{locations_conf::LocationsConfig, FromYaml, ToYaml},
 };
 use anyhow::Result;
 use libflate::gzip;
