@@ -65,36 +65,38 @@ impl SubmissionProcessor {
         self.storage.store_submission(&self.submission)?;
         let submission_root = self.storage.get_submission_root(self.submission.id);
 
-        Self::process_stored_submission(&self.logger, &self.storage, &submission_root)
+        self.process_stored_submission(&submission_root)
     }
 
-    fn process_stored_submission(
-        logger: &Logger,
-        storage: &StorageManager,
-        submission_root: &Path,
-    ) -> Result<Submission> {
-        let mut submission = storage.get_submission(submission_root);
+    fn process_stored_submission(&self, submission_root: &Path) -> Result<Submission> {
+        let mut submission = self.storage.get_submission(submission_root);
+        let builder_logger = self.logger.new(o!("part" => "builder_factory"));
+        let default_build_properties = &self.config.default_build_properties;
         let builder_factory =
-            BuilderFactory::new(logger.new(o!("part" => "builder_factory")), storage.clone());
-        let problem_root = storage.get_problem_root(
+            BuilderFactory::new(builder_logger, &self.storage, default_build_properties);
+        let problem_root = self.storage.get_problem_root(
             &submission.course.as_ref().unwrap().data_id,
             &submission.problem_id,
         );
-        let grading_options = storage.get_problem_grading_options(&problem_root)?;
+        let grading_options = self.storage.get_problem_grading_options(&problem_root)?;
         let builder = builder_factory.create_builder(&submission, &grading_options)?;
         let _build_relative_path = submission_root.join("build");
-        let style_check_errors = builder.check_style(&submission)?;
-        if style_check_errors.len() > 0 {
-            submission.status = SolutionStatus::StyleCheckError.into();
-            let error_message = style_check_errors
-                .iter()
-                .fold(String::new(), |a, b| a + "\n\n" + &b.to_string());
-            submission.style_error_log = error_message.trim().into();
-
+        let style_check_result = builder.check_style(&submission);
+        if style_check_result.is_ok() {
             return Ok(submission);
         }
+        let style_check_error = style_check_result.expect_err("Must have error");
+        match style_check_error {
+            crate::builders::BuilderError::SystemError(error) => return Err(error),
+            crate::builders::BuilderError::UserError(user_errors) => {
+                submission.status = SolutionStatus::StyleCheckError.into();
+                let error_message = user_errors
+                    .iter()
+                    .fold(String::new(), |a, b| a + "\n\n" + &b.to_string());
+                submission.style_error_log = error_message.trim().into();
 
-        Err(anyhow!("Not all functionality implemented yet"))
-        // Ok(())
+                return Ok(submission);
+            }
+        }
     }
 }

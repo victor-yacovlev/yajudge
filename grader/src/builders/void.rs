@@ -6,7 +6,7 @@ use slog::Logger;
 
 use crate::generated::yajudge::{ExecutableTarget, Submission};
 
-use super::{BuildResult, Builder, BuilderDetection, StyleCheckResult};
+use super::{BuildArtifact, Builder, BuilderDetection, BuilderError};
 
 pub struct VoidToolchain {
     _logger: Logger,
@@ -23,12 +23,12 @@ impl Builder for VoidToolchain {
         _submission: &Submission,
         _build_relative_path: &Path,
         _target: &ExecutableTarget,
-    ) -> BuildResult {
+    ) -> Result<Vec<BuildArtifact>, BuilderError> {
         todo!()
     }
 
-    fn check_style(&self, _submission: &Submission) -> Result<StyleCheckResult> {
-        Ok(vec![])
+    fn check_style(&self, _submission: &Submission) -> Result<(), BuilderError> {
+        Ok(())
     }
 }
 

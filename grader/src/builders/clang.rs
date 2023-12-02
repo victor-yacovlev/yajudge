@@ -5,22 +5,29 @@ use slog::Logger;
 
 use crate::{
     generated::yajudge::{ExecutableTarget, FileSet, Submission},
+    properties::build_props::BuildProperties,
     runner::Runner,
     storage::StorageManager,
 };
 
-use super::{BuildResult, Builder, BuilderDetection, StyleCheckError, StyleCheckResult};
+use super::{BuildArtifact, Builder, BuilderDetection, BuilderError, SourceProcessError};
 
 pub struct CLangToolchain {
     logger: Logger,
     storage: StorageManager,
+    default_build_properties: BuildProperties,
 }
 
 impl CLangToolchain {
-    pub fn new(logger: Logger, storage: StorageManager) -> CLangToolchain {
+    pub fn new(
+        logger: Logger,
+        storage: StorageManager,
+        default_build_properties: BuildProperties,
+    ) -> CLangToolchain {
         CLangToolchain {
             logger,
-            storage: storage.clone(),
+            storage,
+            default_build_properties,
         }
     }
 }
@@ -31,11 +38,11 @@ impl Builder for CLangToolchain {
         _submission: &Submission,
         _build_relative_path: &Path,
         _target: &ExecutableTarget,
-    ) -> BuildResult {
+    ) -> Result<Vec<BuildArtifact>, BuilderError> {
         todo!()
     }
 
-    fn check_style(&self, submission: &Submission) -> Result<StyleCheckResult> {
+    fn check_style(&self, submission: &Submission) -> Result<(), BuilderError> {
         let course_id = &submission.course.as_ref().unwrap().data_id;
         let problem_id = &submission.problem_id;
         let problem_root = self.storage.get_problem_root(course_id, problem_id);
@@ -54,7 +61,7 @@ impl Builder for CLangToolchain {
             &submission_root,
         );
         runner.set_relative_workdir(&PathBuf::from("/build"));
-        let mut errors = Vec::<StyleCheckError>::new();
+        let mut user_errors = Vec::<SourceProcessError>::new();
         for source in &submission.solution_files.as_ref().unwrap().files {
             let file_name = &source.name;
             let source_path = PathBuf::from(&file_name);
@@ -75,13 +82,17 @@ impl Builder for CLangToolchain {
             if !can_check {
                 continue;
             }
-            let clang_format =
-                runner.run_command("clang-format", vec!["-style=file", file_name.as_str()])?;
+            let clang_format_result =
+                runner.run_command("clang-format", vec!["-style=file", file_name.as_str()]);
+            if let Err(error) = clang_format_result {
+                return Err(BuilderError::SystemError(error));
+            }
+            let clang_format = clang_format_result.expect("Error already processed");
             if !clang_format.exit_status.is_success() {
-                return Err(anyhow!(
+                return Err(BuilderError::SystemError(anyhow!(
                     "clang-format failed: {}",
                     clang_format.exit_status.to_string()
-                ));
+                )));
             }
             let formatted_bytes = clang_format.stdout;
             let formatted_file_name = format!("{}.formatted", &file_name);
@@ -89,28 +100,40 @@ impl Builder for CLangToolchain {
                 .join("upperdir")
                 .join("build")
                 .join(&formatted_file_name);
-            StorageManager::store_binary(&formatted_file_path, &formatted_bytes, false)?;
-            let diff = runner.run_command(
+            if let Err(error) =
+                StorageManager::store_binary(&formatted_file_path, &formatted_bytes, false)
+            {
+                return Err(BuilderError::SystemError(error));
+            }
+            let diff_result = runner.run_command(
                 "diff",
                 vec![file_name.as_str(), formatted_file_name.as_str()],
-            )?;
+            );
+            if let Err(error) = diff_result {
+                return Err(BuilderError::SystemError(error));
+            }
+            let diff = diff_result.expect("Error already processed");
             if !diff.exit_status.is_success() {
                 let stdout_string = String::from_utf8(diff.stdout)
                     .unwrap_or("Can't convert utf-8 output from diff stdout".into());
                 let stderr_string = String::from_utf8(diff.stderr)
                     .unwrap_or("Can't convert utf-8 output from diff stderr".into());
                 let message = stdout_string + "\n" + &stderr_string;
-                let style_check_error = StyleCheckError {
+                let style_check_error = SourceProcessError {
                     file_name: file_name.clone(),
                     message,
                 };
-                errors.insert(errors.len(), style_check_error);
+                user_errors.insert(user_errors.len(), style_check_error);
                 continue;
             }
             runner.reset();
         }
 
-        Ok(errors)
+        if user_errors.len() == 0 {
+            Ok(())
+        } else {
+            Err(BuilderError::UserError(user_errors))
+        }
     }
 }
 

@@ -10,6 +10,7 @@ use self::void::VoidToolchain;
 
 use crate::{
     generated::yajudge::{BuildSystem, ExecutableTarget, GradingOptions, Submission},
+    properties::build_props::BuildProperties,
     storage::StorageManager,
 };
 
@@ -18,19 +19,20 @@ pub struct BuildArtifact {
     pub file_names: Vec<String>,
 }
 
-pub type BuildResult = Result<Vec<BuildArtifact>, String>;
-
-pub struct StyleCheckError {
+pub struct SourceProcessError {
     pub file_name: String,
     pub message: String,
 }
 
-type StyleCheckResult = Vec<StyleCheckError>;
-
-impl ToString for StyleCheckError {
+impl ToString for SourceProcessError {
     fn to_string(&self) -> String {
         self.file_name.clone() + &String::from("\n") + &self.message
     }
+}
+
+pub enum BuilderError {
+    SystemError(anyhow::Error),
+    UserError(Vec<SourceProcessError>),
 }
 
 pub trait Builder {
@@ -39,9 +41,9 @@ pub trait Builder {
         submission: &Submission,
         build_relative_path: &Path,
         target: &ExecutableTarget,
-    ) -> BuildResult;
+    ) -> Result<Vec<BuildArtifact>, BuilderError>;
 
-    fn check_style(&self, submission: &Submission) -> Result<StyleCheckResult>;
+    fn check_style(&self, submission: &Submission) -> Result<(), BuilderError>;
 }
 
 trait BuilderDetection {
@@ -51,11 +53,20 @@ trait BuilderDetection {
 pub struct BuilderFactory {
     logger: Logger,
     storage: StorageManager,
+    default_build_properties: BuildProperties,
 }
 
 impl BuilderFactory {
-    pub fn new(logger: Logger, storage: StorageManager) -> BuilderFactory {
-        BuilderFactory { logger, storage }
+    pub fn new(
+        logger: Logger,
+        storage: &StorageManager,
+        default_build_properties: &BuildProperties,
+    ) -> BuilderFactory {
+        BuilderFactory {
+            logger,
+            storage: storage.clone(),
+            default_build_properties: default_build_properties.clone(),
+        }
     }
 
     pub fn create_builder(
@@ -72,6 +83,7 @@ impl BuilderFactory {
             BuildSystem::ClangToolchain => Ok(Box::new(CLangToolchain::new(
                 self.logger.new(o!("name" => "clang_toolchain")),
                 self.storage.clone(),
+                self.default_build_properties.clone(),
             ))),
             BuildSystem::SkipBuild => Ok(Box::new(VoidToolchain::new(
                 self.logger.new(o!("name" => "void_toolchain")),
@@ -89,6 +101,7 @@ impl BuilderFactory {
                 self.logger
                     .new(o!("name" => "clang_toolchain_autodetected")),
                 self.storage.clone(),
+                self.default_build_properties.clone(),
             )));
         }
         if VoidToolchain::can_build(submission) {
