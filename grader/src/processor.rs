@@ -80,23 +80,57 @@ impl SubmissionProcessor {
         );
         let grading_options = self.storage.get_problem_grading_options(&problem_root)?;
         let builder = builder_factory.create_builder(&submission, &grading_options)?;
-        let _build_relative_path = submission_root.join("build");
-        let style_check_result = builder.check_style(&submission);
-        if style_check_result.is_ok() {
-            return Ok(submission);
-        }
-        let style_check_error = style_check_result.expect_err("Must have error");
-        match style_check_error {
-            crate::builders::BuilderError::SystemError(error) => return Err(error),
-            crate::builders::BuilderError::UserError(user_errors) => {
-                submission.status = SolutionStatus::StyleCheckError.into();
-                let error_message = user_errors
-                    .iter()
-                    .fold(String::new(), |a, b| a + "\n\n" + &b.to_string());
-                submission.style_error_log = error_message.trim().into();
+        let style_check_log_path = submission_root.join("build/stylecheck.log");
+        let build_log_path = submission_root.join("build/build.log");
 
-                return Ok(submission);
+        let style_check_result = builder.check_style(&submission);
+        if let Err(style_check_error) = style_check_result {
+            match style_check_error {
+                crate::builders::BuilderError::SystemError(error) => {
+                    let message = &error.to_string();
+                    let message_bytes = message.as_bytes();
+                    let _ =
+                        StorageManager::store_binary(&style_check_log_path, message_bytes, false);
+                    return Err(error);
+                }
+                crate::builders::BuilderError::UserError(user_errors) => {
+                    submission.status = SolutionStatus::StyleCheckError.into();
+                    let error_message = user_errors
+                        .iter()
+                        .fold(String::new(), |a, b| a + "\n\n" + &b.to_string());
+                    submission.style_error_log = error_message.trim().into();
+                    let message_bytes = error_message.as_bytes();
+                    let _ =
+                        StorageManager::store_binary(&style_check_log_path, message_bytes, false);
+
+                    return Ok(submission);
+                }
             }
         }
+
+        let build_result = builder.build(&submission);
+        if let Err(build_error) = build_result {
+            match build_error {
+                crate::builders::BuilderError::SystemError(error) => {
+                    let message = &error.to_string();
+                    let message_bytes = message.as_bytes();
+                    let _ = StorageManager::store_binary(&build_log_path, message_bytes, false);
+                    return Err(error);
+                }
+                crate::builders::BuilderError::UserError(user_errors) => {
+                    submission.status = SolutionStatus::CompilationError.into();
+                    let error_message = user_errors
+                        .iter()
+                        .fold(String::new(), |a, b| a + "\n\n" + &b.to_string());
+                    submission.build_error_log = error_message.trim().into();
+                    let message_bytes = error_message.as_bytes();
+                    let _ = StorageManager::store_binary(&build_log_path, message_bytes, false);
+
+                    return Ok(submission);
+                }
+            }
+        }
+
+        Ok(submission)
     }
 }

@@ -3,13 +3,12 @@ mod void;
 
 use anyhow::Result;
 use slog::Logger;
-use std::path::Path;
 
 use self::clang::CLangToolchain;
 use self::void::VoidToolchain;
 
 use crate::{
-    generated::yajudge::{BuildSystem, ExecutableTarget, GradingOptions, Submission},
+    generated::yajudge::{BuildSystem, ExecutableTarget, FileSet, GradingOptions, Submission},
     properties::build_props::BuildProperties,
     storage::StorageManager,
 };
@@ -19,6 +18,7 @@ pub struct BuildArtifact {
     pub file_names: Vec<String>,
 }
 
+#[derive(Debug)]
 pub struct SourceProcessError {
     pub file_name: String,
     pub message: String,
@@ -30,19 +30,14 @@ impl ToString for SourceProcessError {
     }
 }
 
+#[derive(Debug)]
 pub enum BuilderError {
     SystemError(anyhow::Error),
     UserError(Vec<SourceProcessError>),
 }
 
 pub trait Builder {
-    fn build(
-        &self,
-        submission: &Submission,
-        build_relative_path: &Path,
-        target: &ExecutableTarget,
-    ) -> Result<Vec<BuildArtifact>, BuilderError>;
-
+    fn build(&self, submission: &Submission) -> Result<Vec<BuildArtifact>, BuilderError>;
     fn check_style(&self, submission: &Submission) -> Result<(), BuilderError>;
 }
 
@@ -111,4 +106,15 @@ impl BuilderFactory {
         }
         bail!("Can't detect build system by provided solition files set")
     }
+}
+
+pub fn has_file_by_pattern(file_set: &FileSet, pattern: &str) -> bool {
+    let files = file_set.files.as_slice();
+    for file in files {
+        if file.name.ends_with(pattern) {
+            return true;
+        }
+    }
+
+    false
 }

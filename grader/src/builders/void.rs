@@ -1,10 +1,8 @@
 use anyhow::Result;
 
-use std::path::Path;
-
 use slog::Logger;
 
-use crate::generated::yajudge::{ExecutableTarget, Submission};
+use crate::generated::yajudge::Submission;
 
 use super::{BuildArtifact, Builder, BuilderDetection, BuilderError};
 
@@ -18,13 +16,8 @@ impl VoidToolchain {
 }
 
 impl Builder for VoidToolchain {
-    fn build(
-        &self,
-        _submission: &Submission,
-        _build_relative_path: &Path,
-        _target: &ExecutableTarget,
-    ) -> Result<Vec<BuildArtifact>, BuilderError> {
-        todo!()
+    fn build(&self, _submission: &Submission) -> Result<Vec<BuildArtifact>, BuilderError> {
+        Ok(vec![])
     }
 
     fn check_style(&self, _submission: &Submission) -> Result<(), BuilderError> {

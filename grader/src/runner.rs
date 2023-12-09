@@ -92,6 +92,17 @@ struct LaunchCmd {
     arguments: Vec<String>,
 }
 
+impl ToString for LaunchCmd {
+    fn to_string(&self) -> String {
+        let mut result = self.program.clone();
+        for arg in &self.arguments {
+            result += " ";
+            result += arg;
+        }
+        return result;
+    }
+}
+
 pub struct Runner {
     logger: Logger,
     limits: Option<GradingLimits>,

@@ -13,7 +13,10 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use serde::{Deserialize, Serialize};
 use slog::Logger;
 
-use crate::{generated::yajudge::GradingLimits, storage::StorageManager};
+use crate::{
+    generated::yajudge::GradingLimits, properties::log_conf::log_level_from_string,
+    storage::StorageManager,
+};
 
 use super::{CommandOutput, ExitResult, LaunchCmd, Runner};
 
@@ -73,7 +76,7 @@ impl Runner {
         Ok(())
     }
 
-    fn setup_localhost(_log_pipe: RawFd) -> Result<()> {
+    fn setup_localhost(log_pipe: RawFd) -> Result<()> {
         // TODO implement interface up without using external command
         let ip_status_result = Command::new("ip")
             .args(["link", "set", "dev", "lo", "up"])
@@ -91,35 +94,45 @@ impl Runner {
             return Err(anyhow::Error::msg("setup localhost failed"));
         }
 
+        Self::debug_message(log_pipe, "Successfully set up local host for isolate");
         Ok(())
     }
 
     fn create_and_enter_new_root_dir(
-        _log_pipe: RawFd,
+        log_pipe: RawFd,
         mount_overlay_options: String,
         overlay_mergedir: &Path,
         initial_cwd: &Path,
     ) -> Result<()> {
         let mount_flags = mount::MsFlags::empty();
-        mount::mount(
+        if let Err(error) = mount::mount(
             Some("overlay"),
             overlay_mergedir,
             Some("overlay"),
             mount_flags,
             Some(mount_overlay_options.as_str()),
-        )?;
-        unistd::chroot(overlay_mergedir)?;
+        ) {
+            Self::fatal_error(log_pipe, anyhow!("Mount overlay failed: {}", error));
+        }
+        if let Err(error) = unistd::chroot(overlay_mergedir) {
+            Self::fatal_error(log_pipe, anyhow!("Chroot to new root failed: {}", error));
+        }
         std::fs::create_dir_all("/tmp")?;
         std::fs::create_dir_all("/proc")?;
-        mount::mount(
+        if let Err(error) = mount::mount(
             Some("tmpfs"),
             "/tmp",
             Some("tmpfs"),
             mount_flags,
             None::<&str>,
-        )?;
-        unistd::chdir(initial_cwd)?;
+        ) {
+            Self::fatal_error(log_pipe, anyhow!("Mount /tmp failed: {}", error));
+        }
+        if let Err(error) = unistd::chdir(initial_cwd) {
+            Self::fatal_error(log_pipe, anyhow!("Chdir failed: {}", error));
+        }
 
+        Self::debug_message(log_pipe, "Successfully entered new root");
         Ok(())
     }
 
@@ -131,7 +144,7 @@ impl Runner {
         Ok(())
     }
 
-    fn mount_proc_fs(_log_pipe: RawFd) -> Result<()> {
+    fn mount_proc_fs(log_pipe: RawFd) -> Result<()> {
         let mount_flags = mount::MsFlags::empty();
         mount::mount(
             Some("proc"),
@@ -141,6 +154,7 @@ impl Runner {
             None::<&str>,
         )?;
 
+        Self::debug_message(log_pipe, "Successfully mounted /proc in isolate");
         Ok(())
     }
 
@@ -192,7 +206,12 @@ impl Runner {
         } else {
             false
         };
-        Self::enter_initial_namespace(log_pipe, allow_network)?;
+        if let Err(error) = Self::enter_initial_namespace(log_pipe, allow_network) {
+            Self::fatal_error(
+                log_pipe,
+                anyhow!("Can't enter initial namespace: {}", error),
+            )
+        }
         if !allow_network {
             Self::setup_localhost(log_pipe)?;
         }
@@ -253,16 +272,18 @@ impl Runner {
             let arg_cstring = CString::new(argument.clone()).unwrap();
             arg_strings.push(arg_cstring);
         }
+        Self::debug_message(log_pipe, format!("Starting {}", main.to_string()).as_str());
         let fork_result = unistd::fork()?;
         match fork_result {
             unistd::ForkResult::Child => {
-                unistd::execvp(filename.as_c_str(), &arg_strings)?;
+                let exec_err = unistd::execvp(filename.as_c_str(), &arg_strings);
                 Self::fatal_error(
                     log_pipe,
                     anyhow!(
-                        "execvp({}, {}) failed",
+                        "execvp({}, {}) failed: {}",
                         main.program,
-                        main.arguments.join(" ")
+                        main.arguments.join(" "),
+                        exec_err.unwrap_err().to_string()
                     ),
                 );
             }
